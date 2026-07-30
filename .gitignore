@@ -1,0 +1,62 @@
+# Logs
+logs/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.codebase-memory/
+
+# App state
+app_state.json
+
+# Other projects in parent directory
+../microsoft-teams-bot-project/
+../microsoft-teams-bot-project-backup-20260409-120739/
+powershell_full_history.txt
+
+# Kiro spec config (auto-generated, không cần track)
+.kiro/specs/**/.config.kiro
+
+# Windsurf settings
+# .windsurf/

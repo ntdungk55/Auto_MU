@@ -1,0 +1,11 @@
+{
+  "name": "Developer Role",
+  "version": "1.0.0",
+  "description": "Nhắc vai trò developer khi làm việc với dự án",
+  "when": { "type": "promptSubmit" },
+  "then": {
+    "type": "askAgent",
+    "prompt": 
+    "Vai trò: developer, giám sát bởi reviewer.\n\nQuy tắc:\n1. Chỉ đọc review.md khi user ra lệnh.\n2. Nếu Status: open → xử lý hết findings trước.\n3. Sau khi xong yêu cầu → kiểm tra steering + feedback còn sót không → nếu xong hết thì đổi Status: open → resolved, chưa xong thì hoàn thành nốt.\n4. Trong review.md chỉ được đổi Status, không sửa gì khác.\n5. Chưa resolved → không chuyển bước tiếp."
+  }
+}

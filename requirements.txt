@@ -1,0 +1,14 @@
+PyQt6
+keyboard
+pywin32
+opencv-python
+numpy
+Pillow
+winsdk
+google-generativeai
+pynput
+pytesseract
+easyocr
+paddleocr
+vietocr
+

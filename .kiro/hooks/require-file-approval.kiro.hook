@@ -1,0 +1,18 @@
+{
+  "enabled": true,
+  "name": "Require File Change Approval",
+  "description": "Tuân thủ quy định trong .kiro\\steering\\conversation-rules.md",
+  "version": "1",
+  "when": {
+    "type": "preToolUse",
+    "toolTypes": [
+      "write"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Tuân thủ quy định trong .kiro\\steering\\conversation-rules.md"
+  },
+  "workspaceFolderName": "AUTO_MU",
+  "shortName": "require-file-approval"
+}
