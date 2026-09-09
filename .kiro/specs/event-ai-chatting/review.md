@@ -161,3 +161,45 @@ The first event rule and the required AI response format have not yet been speci
 ### Request
 
 Do not claim AI communication readiness until F-001 through F-004 are resolved.
+
+## REVIEW 2026-09-09 14:12:01
+
+- Review ID: REV-20260909-141201
+- Reviewer: Codex
+- Scope: AI communication object implementation
+- Target Diff: `samples/ai_game_controller/` AI contract, Gemini adapter, prompt builder, scenario engine, controller composition
+- Status: open
+
+### Conclusion
+
+The AI communication boundary is now implemented: a typed `AIAgent` contract, Gemini adapter, provider factory registration, prompt construction, active-scenario routing, and AI-response listeners are present. The controller can submit a detected event to Gemini when an event rule becomes available.
+
+### Findings
+
+#### F-003
+
+- Severity: Major
+- Status: open
+- Location: `samples/ai_game_controller/application/event_detector.py`
+- Steering Source: User intent
+- Issue: `EventDetector.detect()` still returns an empty list because no event rule has been specified.
+- Impact: No AI request can be triggered during normal runtime.
+- Required Update: Specify and implement the first event rule.
+
+#### F-004
+
+- Severity: Minor
+- Status: open
+- Location: `samples/ai_game_controller/application/scenario_engine.py`
+- Steering Source: `.kiro/steering/00-MASTER-RULES.md`, thread-safe UI updates
+- Issue: Event and AI-response listeners run on the reader worker thread. No Gemini Chat Qt bridge converts them to queued UI signals yet.
+- Impact: Future direct QWidget updates would be unsafe.
+- Required Update: During Gemini Chat integration, bridge both callbacks through Qt signals connected with `QueuedConnection`.
+
+### Open Questions
+
+The first event rule and event type remain unspecified.
+
+### Request
+
+Specify the first event rule before expecting runtime AI messages. Keep the future Gemini Chat bridge queued-thread-safe.

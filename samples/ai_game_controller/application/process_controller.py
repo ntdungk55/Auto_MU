@@ -11,7 +11,7 @@ from ..infrastructure.game_state_reader import GameStateReader
 from ..infrastructure.game_state_store import GameStateStore
 from ..infrastructure.process_selector import ProcessSelector
 from .event_detector import EventDetector
-from .scenario_engine import EventListener, ScenarioEngine
+from .scenario_engine import AIResponseListener, EventListener, ScenarioEngine
 
 
 class AIProcessController:
@@ -76,6 +76,14 @@ class AIProcessController:
         """Remove a previously registered event listener."""
         self.scenario_engine.unsubscribe(listener)
 
+    def subscribe_ai_response(self, listener: AIResponseListener) -> None:
+        """Register a future listener for AI responses derived from game events."""
+        self.scenario_engine.subscribe_response(listener)
+
+    def unsubscribe_ai_response(self, listener: AIResponseListener) -> None:
+        """Remove one AI-response listener."""
+        self.scenario_engine.unsubscribe_response(listener)
+
     def start(self) -> None:
         """Start one reader worker for the selected target."""
         with self._lock:
@@ -120,7 +128,12 @@ class AIProcessController:
                 if state is not None:
                     previous_state = self.game_state_store.get(state.target_id)
                     self.game_state_store.put(state)
-                    self.scenario_engine.publish(self.event_detector.detect(previous_state, state))
+                    with self._lock:
+                        scenario = self._scenario
+                    self.scenario_engine.handle_events(
+                        scenario,
+                        self.event_detector.detect(previous_state, state),
+                    )
                 elif self.game_state_reader.last_error:
                     self.last_error = self.game_state_reader.last_error
                 elapsed_ms = (monotonic() - started_at) * 1000
