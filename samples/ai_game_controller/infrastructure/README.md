@@ -8,6 +8,10 @@ Chứa implementation cụ thể cho các interface mà application yêu cầu.
 
 - `game_state_reader.py` — `GameStateReader`: chụp game window và phát hành OCR snapshot chuẩn hóa.
 - `game_state_store.py` — `GameStateStore`: lưu state mới nhất của từng target theo cách thread-safe.
+- `process_selector.py` — `ProcessSelector`: liệt kê và validate process/window game trên Windows.
+- `window_capture.py` — `GameWindowCapture`: chụp client area của game window.
+- `tesseract_recognizer.py` — `TesseractRecognizer`: OCR text ROI cho teaching JSON hiện tại.
+- `scenario_repository.py` — `ScenarioRepository`: lưu scenario JSON runtime theo từng target.
 - `openvino_recognizer.py` — `OpenVINORecognizer`: recognizer-only OCR trên CPU/Intel GPU.
 - `mcp_gateway.py` — `MCPGateway`: discover và gọi tool qua MCP client hiện có.
 - `ai_agent_factory.py` — `AIAgentFactory`: tạo AI agent theo provider/model.
