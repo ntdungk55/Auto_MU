@@ -1,5 +1,8 @@
 # Logs
 logs/
+!samples/ai_game_controller/logs/
+!samples/ai_game_controller/logs/README.md
+samples/ai_game_controller/logs/*.jsonl
 *.log
 
 # Python
@@ -9,6 +12,7 @@ __pycache__/
 *.so
 .Python
 build/
+build_temp/
 develop-eggs/
 dist/
 downloads/
@@ -46,6 +50,9 @@ Thumbs.db
 .coverage
 htmlcov/
 .codebase-memory/
+debug_output/
+temp_captures/
+test_ground/models/
 
 # App state
 app_state.json

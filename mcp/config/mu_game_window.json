@@ -1,0 +1,201 @@
+{
+  "profile": "mu_gamethuvn_season_21",
+  "window_title_prefix": "MU GamethuVN - Season 21",
+  "client_area": {
+    "width": 800,
+    "height": 600
+  },
+  "coordinate_system": {
+    "origin": "client_top_left",
+    "x_min": 0,
+    "x_max": 799,
+    "y_min": 0,
+    "y_max": 599
+  },
+  "outer_window_reference": {
+    "width": 816,
+    "height": 639,
+    "reference_only": true
+  },
+  "capture": {
+    "area": "client",
+    "require_exact_client_size_before_recognition": true
+  },
+  "mainInfo": {
+    "channel": {
+      "description": "Kênh",
+      "recognitionType": "text",
+      "valuePattern": "CH /xxx",
+      "clickable": true,
+      "roi": {
+        "x1": 8,
+        "y1": 0,
+        "x2": 50,
+        "y2": 20
+      }
+    },
+    "map": {
+      "description": "Bản đồ",
+      "recognitionType": "text",
+      "valuePattern": "/text",
+      "clickable": false,
+      "roi": {
+        "x1": 55,
+        "y1": 0,
+        "x2": 116,
+        "y2": 20
+      }
+    },
+    "position": {
+      "description": "Tọa độ nhân vật",
+      "recognitionType": "text",
+      "valuePattern": "/xxx,/yyy",
+      "clickable": false,
+      "roi": {
+        "x1": 115,
+        "y1": 0,
+        "x2": 162,
+        "y2": 20
+      }
+    },
+    "level": {
+      "description": "Cấp độ",
+      "recognitionType": "text",
+      "valuePattern": "/xxx.lv",
+      "clickable": false,
+      "roi": {
+        "x1": 25,
+        "y1": 21,
+        "x2": 63,
+        "y2": 40
+      }
+    },
+    "masterLevel": {
+      "description": "Master level",
+      "recognitionType": "text",
+      "valuePattern": "/xxx.mt",
+      "clickable": false,
+      "roi": {
+        "x1": 62,
+        "y1": 21,
+        "x2": 91,
+        "y2": 40
+      }
+    },
+    "resetCount": {
+      "description": "Số lần reset",
+      "recognitionType": "text",
+      "valuePattern": "/xxx.rs",
+      "clickable": false,
+      "roi": {
+        "x1": 90,
+        "y1": 21,
+        "x2": 130,
+        "y2": 40
+      }
+    },
+    "pkStatus": {
+      "description": "Trạng thái PK của nhân vật",
+      "recognitionType": "text",
+      "valuePattern": "/text",
+      "clickable": true,
+      "roi": {
+        "x1": 175,
+        "y1": 10,
+        "x2": 236,
+        "y2": 31
+      }
+    },
+    "autoPlayManagement": {
+      "description": "Button AutoPlayManagement",
+      "recognitionType": "image",
+      "clickable": true,
+      "roi": {
+        "x1": 143,
+        "y1": 18,
+        "x2": 174,
+        "y2": 48
+      }
+    },
+    "resetScreenRoom": {
+      "description": "Button reset screen room",
+      "recognitionType": "image",
+      "clickable": true,
+      "roi": {
+        "x1": 291,
+        "y1": 7,
+        "x2": 326,
+        "y2": 36
+      }
+    },
+    "time": {
+      "description": "Thời gian",
+      "recognitionType": "text",
+      "valuePattern": "HH:mm:ss",
+      "clickable": false,
+      "roi": {
+        "x1": 5,
+        "y1": 579,
+        "x2": 55,
+        "y2": 599
+      }
+    },
+    "healthBar": {
+      "description": "Thanh máu (máu hiện tại / máu cố định)",
+      "recognitionType": "text",
+      "valuePattern": "/xxx\n/yyy",
+      "clickable": false,
+      "roi": {
+        "x1": 179,
+        "y1": 541,
+        "x2": 220,
+        "y2": 573
+      }
+    },
+    "chatBox": {
+      "description": "Button ChatBox",
+      "recognitionType": "image",
+      "clickable": true,
+      "roi": {
+        "x1": 348,
+        "y1": 516,
+        "x2": 381,
+        "y2": 550
+      }
+    },
+    "autoSetting": {
+      "description": "Button AutoSetting",
+      "recognitionType": "image",
+      "clickable": true,
+      "roi": {
+        "x1": 383,
+        "y1": 516,
+        "x2": 418,
+        "y2": 550
+      }
+    },
+    "autoState": {
+      "description": "Button AutoState",
+      "recognitionType": "image",
+      "clickable": true,
+      "roi": {
+        "x1": 418,
+        "y1": 516,
+        "x2": 451,
+        "y2": 550
+      }
+    }
+  },
+  "notes": [
+    "Use client-area coordinates for screenshot capture, OCR, and image recognition.",
+    "Do not persist HWND, PID, or window position because they change between game sessions.",
+    "Calculate the outer window size from the current window style instead of relying on the reference size.",
+    "In valuePattern, /xxx, /yyy, and /zzz represent variable numeric values in their appearance order.",
+    "In valuePattern, /text represents variable text.",
+    "Any content in valuePattern that is not a slash placeholder is fixed text used to validate and normalize OCR output.",
+    "The HH:mm:ss valuePattern represents a 24-hour time value.",
+    "For healthBar, the first numeric line is current health and the second numeric line is fixed or maximum health.",
+    "A mainInfo item with recognitionType set to text is detected by OCR and must define valuePattern.",
+    "A mainInfo item with recognitionType set to image is detected by image matching and does not require valuePattern."
+  ]
+}

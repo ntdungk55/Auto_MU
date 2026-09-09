@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "id": "task_a_select_and_press_enter",
+  "name": "Chọn game và nhấn Enter",
+  "description": "Ví dụ cho yêu cầu: Chọn process game main.exe rồi nhấn Enter.",
+  "status": "example_not_connected",
+  "inputs": {
+    "process_name": {
+      "type": "string",
+      "default": "main.exe"
+    },
+    "key": {
+      "type": "string",
+      "default": "enter"
+    }
+  },
+  "limits": {
+    "timeout_seconds": 60,
+    "max_steps": 10,
+    "max_tool_calls": 20
+  },
+  "steps": [
+    {
+      "id": "run_game_key_skill",
+      "type": "skill",
+      "skill": "select_game_and_press_key",
+      "with": {
+        "process_name": "${inputs.process_name}",
+        "key": "${inputs.key}"
+      },
+      "on_success": "complete",
+      "on_failure": "stop"
+    }
+  ],
+  "result": {
+    "success_message": "Đã chọn đúng process game và gửi phím Enter.",
+    "failure_message": "Không thể hoàn thành việc A; xem step_result để biết nguyên nhân."
+  }
+}
+

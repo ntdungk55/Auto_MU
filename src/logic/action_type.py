@@ -30,6 +30,7 @@ class AutoAction:
     action_type: ActionType
     mode: ActionMode
     value: str = ""
+    text_input_enabled: bool = False
     image_path: Optional[str] = None
     enable_post_key_image_check: bool = False
     post_key_check_delay: float = 1.0

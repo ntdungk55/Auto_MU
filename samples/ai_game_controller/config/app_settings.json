@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "ocr": {
+    "clientWidth": 800,
+    "clientHeight": 600,
+    "scale": 4,
+    "grayscale": true,
+    "threshold": 80,
+    "intervalMs": 500,
+    "deviceStrategy": "balanced_cpu_intel_gpu"
+  },
+  "agent": {
+    "provider": "gemini",
+    "model": "gemini-2.5-flash",
+    "maxToolCallsPerEvent": 20
+  },
+  "paths": {
+    "roiConfig": "../../mcp/config/mu_game_window.json",
+    "systemPrompt": "../prompts/system_prompt.md"
+  }
+}

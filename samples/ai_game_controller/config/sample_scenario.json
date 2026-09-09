@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "monitor-selected-game",
+  "name": "Monitor selected MU window",
+  "targetId": "selected-game",
+  "instruction": "Theo dõi game state. Khi có event, chỉ sử dụng các MCP tools được phép và xác minh state sau khi thực thi.",
+  "enabledEvents": [
+    "GAME_STATE_CHANGED",
+    "HEALTH_LOW",
+    "CHARACTER_DEAD"
+  ],
+  "allowedTools": [
+    "get_selected_process_info",
+    "get_game_state",
+    "run_keyboard_action"
+  ],
+  "eventCooldownMs": 3000,
+  "maxToolCallsPerEvent": 20
+}

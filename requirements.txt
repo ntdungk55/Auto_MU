@@ -9,8 +9,7 @@ google-generativeai
 pynput
 pytesseract
 easyocr
+openvino==2026.3.0
 paddleocr
 vietocr
-
-  
-  v
+mcp[cli]==2.0.0
