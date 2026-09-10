@@ -24,7 +24,7 @@ class WindowCapture(Protocol):
 class TextRecognizer(Protocol):
     """Recognize text from one normalized ROI image."""
 
-    def recognize(self, image: np.ndarray) -> str:
+    def recognize(self, image: np.ndarray, timeout_seconds: float | None = None) -> str:
         """Return OCR text for one image."""
 
 
@@ -50,7 +50,7 @@ class GameStateReader:
         self._scale = max(1.0, scale)
         self._grayscale = grayscale
         self._threshold = threshold
-        self._teaching = self._load_teaching()
+        self._main_info_teaching, self._dynamic_texts = self._load_teaching()
         self.last_error: str | None = None
 
     def read(self, target: GameTarget) -> GameState | None:
@@ -72,17 +72,57 @@ class GameStateReader:
             self.last_error = str(error)
             return None
 
-    def _load_teaching(self) -> dict[str, object]:
+    def verify_dynamic_text(
+        self,
+        target: GameTarget,
+        event_type: str,
+        timeout_seconds: float | None = None,
+    ) -> str | None:
+        """OCR one configured dynamic-text ROI only when a caller requests it."""
+        definition = self._dynamic_texts.get(event_type)
+        if definition is None:
+            raise ValueError(f"dynamic text is not configured for event: {event_type}")
+        expected_text = str(definition.get("text", "") or "")
+        roi = definition.get("roi")
+        if not expected_text or not isinstance(roi, dict):
+            raise ValueError(f"dynamic text configuration is invalid for event: {event_type}")
+
+        try:
+            image = self._capture.capture(target.hwnd)
+            if image is None:
+                self.last_error = "window capture returned no image"
+                return None
+            normalized = cv2.resize(image, (self._width, self._height), interpolation=cv2.INTER_AREA)
+            recognized_text = self._recognizer.recognize(
+                self._prepare_for_ocr(self._crop(normalized, roi)),
+                timeout_seconds=timeout_seconds,
+            )
+            if self._normalize_text(expected_text) in self._normalize_text(recognized_text):
+                return recognized_text
+            return None
+        except Exception as error:
+            self.last_error = str(error)
+            return None
+
+    def _load_teaching(self) -> tuple[dict[str, object], dict[str, dict[str, object]]]:
         with self._teaching_path.open("r", encoding="utf-8-sig") as stream:
             payload = json.load(stream)
         main_info = payload.get("mainInfo")
         if not isinstance(main_info, dict):
             raise ValueError("teaching JSON must contain mainInfo")
-        return main_info
+        raw_dynamic_texts = payload.get("dynamicTexts", {})
+        if not isinstance(raw_dynamic_texts, dict):
+            raise ValueError("teaching JSON dynamicTexts must be an object")
+        dynamic_texts = {
+            str(event_type): definition
+            for event_type, definition in raw_dynamic_texts.items()
+            if isinstance(definition, dict)
+        }
+        return main_info, dynamic_texts
 
     def _read_main_info(self, image: np.ndarray) -> dict[str, object]:
         result: dict[str, object] = {}
-        for name, raw_definition in self._teaching.items():
+        for name, raw_definition in self._main_info_teaching.items():
             if not isinstance(raw_definition, dict):
                 continue
             roi = raw_definition.get("roi")
@@ -119,3 +159,7 @@ class GameStateReader:
         grayscale = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
         _, thresholded = cv2.threshold(grayscale, self._threshold, 255, cv2.THRESH_BINARY)
         return thresholded
+
+    @staticmethod
+    def _normalize_text(value: str) -> str:
+        return " ".join(value.split()).casefold()

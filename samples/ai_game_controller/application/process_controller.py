@@ -39,7 +39,6 @@ class AIProcessController:
         self._stop_event = Event()
         self._worker: Thread | None = None
         self._lock = RLock()
-
     @property
     def target(self) -> GameTarget | None:
         """Return the configured target without exposing mutable runtime data."""
@@ -145,6 +144,5 @@ class AIProcessController:
             with self._lock:
                 self.is_running = False
                 self._worker = None
-
 
 ProcessController = AIProcessController

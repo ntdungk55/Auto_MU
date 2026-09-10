@@ -5,8 +5,8 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 from dataclasses import dataclass
-import os
-from pathlib import Path
+from datetime import timedelta
+from importlib.metadata import version as package_version
 import threading
 from typing import Any, Callable, Coroutine
 
@@ -15,7 +15,15 @@ from mcp.client.stdio import StdioServerParameters, stdio_client
 import mcp.types as mcp_types
 
 from src.ai_control.server_registry import MCPServerSpec, default_server_specs
-from src.logic.app_paths import get_runtime_root
+
+
+def _mcp_read_timeout(seconds: float) -> float | timedelta:
+    """Return the timeout type required by the installed MCP SDK."""
+    try:
+        major_version = int(package_version("mcp").split(".", 1)[0])
+    except (ValueError, ModuleNotFoundError):
+        major_version = 1
+    return seconds if major_version >= 2 else timedelta(seconds=seconds)
 
 
 @dataclass(frozen=True)
@@ -154,7 +162,7 @@ class MCPClientManager:
             result = await session.call_tool(
                 tool_name,
                 arguments=dict(arguments or {}),
-                read_timeout_seconds=request_timeout,
+                read_timeout_seconds=_mcp_read_timeout(request_timeout),
             )
             if hasattr(result, "model_dump"):
                 return result.model_dump(mode="json", by_alias=True, exclude_none=True)
@@ -208,42 +216,30 @@ class MCPClientManager:
                 await asyncio.sleep(1.0)
 
     async def _run_server_connection(self, spec: MCPServerSpec) -> None:
-        env = os.environ.copy()
-        env.update({"PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1"})
         params = StdioServerParameters(
             command=spec.command,
             args=list(spec.args),
             cwd=spec.cwd,
-            env=env,
-            encoding="utf-8",
-            encoding_error_handler="replace",
         )
 
-        log_dir = Path(get_runtime_root()) / "logs"
-        log_dir.mkdir(parents=True, exist_ok=True)
-        with open(log_dir / f"mcp_{spec.name}_server.log", "a", encoding="utf-8") as errlog:
-            async with stdio_client(params, errlog=errlog) as streams:
-                read_stream, write_stream = streams
-                async with ClientSession(
-                    read_stream,
-                    write_stream,
-                    read_timeout_seconds=self._tool_timeout_seconds,
-                ) as session:
-                    await asyncio.wait_for(session.initialize(), timeout=self._startup_timeout_seconds)
-                    tools = await self._list_tools(session, spec.name)
-                    with self._lock:
-                        self._sessions[spec.name] = session
-                        self._server_tools[spec.name] = tools
-                        self._server_errors.pop(spec.name, None)
-                        self._rebuild_tool_index_locked()
-                        self._update_status_locked()
+        async with stdio_client(params) as streams:
+            read_stream, write_stream = streams
+            async with ClientSession(read_stream, write_stream) as session:
+                await session.initialize()
+                tools = await self._list_tools(session, spec.name)
+                with self._lock:
+                    self._sessions[spec.name] = session
+                    self._server_tools[spec.name] = tools
+                    self._server_errors.pop(spec.name, None)
+                    self._rebuild_tool_index_locked()
+                    self._update_status_locked()
 
-                    while not self._stop_requested.is_set():
-                        with self._lock:
-                            reconnect = spec.name in self._reconnect_requested
-                        if reconnect:
-                            break
-                        await asyncio.sleep(0.1)
+                while not self._stop_requested.is_set():
+                    with self._lock:
+                        reconnect = spec.name in self._reconnect_requested
+                    if reconnect:
+                        break
+                    await asyncio.sleep(0.1)
 
     async def _list_tools(self, session: ClientSession, server_name: str) -> list[dict[str, Any]]:
         discovered: list[dict[str, Any]] = []
@@ -255,11 +251,14 @@ class MCPClientManager:
                     {
                         "name": str(tool.name),
                         "description": str(tool.description or ""),
-                        "input_schema": dict(tool.input_schema or {"type": "object"}),
+                        "input_schema": dict(
+                            getattr(tool, "input_schema", getattr(tool, "inputSchema", None))
+                            or {"type": "object"}
+                        ),
                         "server_name": server_name,
                     }
                 )
-            cursor = result.next_cursor
+            cursor = getattr(result, "next_cursor", getattr(result, "nextCursor", None))
             if not cursor:
                 return discovered
             params = mcp_types.PaginatedRequestParams(cursor=cursor)

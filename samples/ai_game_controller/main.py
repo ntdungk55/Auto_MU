@@ -22,7 +22,11 @@ from .infrastructure.tesseract_recognizer import TesseractRecognizer
 from .infrastructure.window_capture import GameWindowCapture
 
 
-def create_ai_process_controller(scenario_path: Path | None = None) -> tuple[AIProcessController, ScenarioManager]:
+def create_ai_process_controller(
+    scenario_path: Path | None = None,
+    api_key: str | None = None,
+    model_name: str | None = None,
+) -> tuple[AIProcessController, ScenarioManager]:
     """Build the UI-independent controller and its scenario-management API."""
     root = Path(__file__).resolve().parent
     settings = SettingsStore().load(root / "config" / "app_settings.json")
@@ -44,8 +48,8 @@ def create_ai_process_controller(scenario_path: Path | None = None) -> tuple[AIP
     agent_factory.register("gemini", GeminiAgent)
     ai_agent = agent_factory.create(
         str(agent_settings.get("provider", "gemini")),
-        api_key=os.environ.get("GEMINI_API_KEY", ""),
-        model_name=str(agent_settings.get("model", "")),
+        api_key=api_key if api_key is not None else os.environ.get("GEMINI_API_KEY", ""),
+        model_name=model_name if model_name is not None else str(agent_settings.get("model", "")),
     )
     system_prompt_path = (root / "config" / str(path_settings.get("systemPrompt", "../prompts/system_prompt.md"))).resolve()
     controller = AIProcessController(

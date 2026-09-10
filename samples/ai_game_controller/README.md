@@ -57,7 +57,7 @@ MCP Server không tự gọi AI. Scenario Engine nhận event rồi chủ độn
 - `main.py`: composition root `create_ai_process_controller()` cho feature controller, không tạo app hoặc UI riêng.
 - `README.md`: giới thiệu tổng thể và dẫn tới tài liệu của từng thư mục con.
 
-Feature hiện dừng tại controller/state pipeline và scenario persistence; EventDetector chưa có rule emit event, AI runtime và UI integration chưa được triển khai.
+Feature hiện có rule đầu tiên `map.changed`: khi OCR map hợp lệ của cùng game window đổi giá trị, controller phát event cho Gemini Chat qua queued Qt bridge. UI chưa có lifecycle Start/Stop hoặc chọn scenario, nên reader chưa được chạy từ tab này.
 
 ## Thư mục con
 

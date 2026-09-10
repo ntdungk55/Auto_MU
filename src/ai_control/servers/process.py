@@ -10,14 +10,17 @@ from pathlib import Path
 import sys
 from typing import Any
 
-from mcp.server import MCPServer
+try:
+    from mcp.server import FastMCP
+except ImportError:  # MCP 2.x
+    from mcp.server import MCPServer as FastMCP
 import win32gui
 import win32process
 
 from src.ai_control.shared.selected_process_store import selected_process_store
 
 
-mcp = MCPServer("Auto_MU Process Selection")
+mcp = FastMCP("Auto_MU Process Selection")
 
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 STILL_ACTIVE = 259
@@ -150,6 +153,8 @@ def resolve_selected_process() -> tuple[dict[str, Any] | None, str | None]:
     if saved_creation is not None and current_creation is not None and int(saved_creation) != int(current_creation):
         return current, "PID đã được process khác sử dụng lại; hãy chọn lại process"
     current["selected_at_utc"] = selection.get("selected_at_utc")
+    current["selected_window_hwnd"] = selection.get("selected_window_hwnd")
+    current["selected_window_title"] = selection.get("selected_window_title")
     return current, None
 
 
@@ -183,6 +188,7 @@ def select_game_process(
     pid: int = 0,
     process_name: str = "",
     window_title: str = "",
+    selected_window_hwnd: int = 0,
 ) -> dict[str, Any]:
     """Select the process used by all game-control MCP tools.
 
@@ -215,16 +221,32 @@ def select_game_process(
         }
 
     selected = matches[0]
+    try:
+        selected_hwnd = int(selected_window_hwnd)
+    except (TypeError, ValueError):
+        selected_hwnd = 0
+    selected_window: dict[str, Any] | None = None
+    if selected_hwnd > 0:
+        selected_window = next(
+            (window for window in selected.get("windows", []) if int(window.get("hwnd", 0)) == selected_hwnd),
+            None,
+        )
+        if selected_window is None:
+            return {"ok": False, "errors": ["Selected window does not belong to the process"]}
     selection = {
-        "version": 1,
+        "version": 2,
         "pid": selected["pid"],
         "process_name": selected.get("process_name", ""),
         "exe_path": selected.get("exe_path", ""),
         "creation_time_100ns": selected.get("creation_time_100ns"),
         "selected_at_utc": datetime.now(timezone.utc).isoformat(),
+        "selected_window_hwnd": selected_hwnd or None,
+        "selected_window_title": (selected_window or {}).get("title", ""),
     }
     selected_process_store.save(selection)
     selected["selected_at_utc"] = selection["selected_at_utc"]
+    selected["selected_window_hwnd"] = selection["selected_window_hwnd"]
+    selected["selected_window_title"] = selection["selected_window_title"]
     return {"ok": True, "selected": True, "process": _public_candidate(selected)}
 
 
@@ -256,4 +278,3 @@ def run_process_mcp_server() -> None:
 
 if __name__ == "__main__":
     run_process_mcp_server()
-

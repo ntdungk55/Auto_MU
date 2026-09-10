@@ -1508,7 +1508,15 @@ class MainWindow(QMainWindow):
             clear_saved_key=self._clear_saved_gemini_key,
             load_saved_model=self._get_saved_gemini_model,
             save_model=self._save_gemini_model,
+            create_ai_process_controller=self._create_ai_process_controller,
         )
+
+    def _create_ai_process_controller(self, api_key: str, model_name: str):
+        """Create the event-AI controller using the active Gemini credentials."""
+        from samples.ai_game_controller.main import create_ai_process_controller
+
+        controller, _ = create_ai_process_controller(api_key=api_key, model_name=model_name)
+        return controller
     
     def _open_telegram_settings_dialog(self):
         """Mở dialog cài đặt Telegram."""

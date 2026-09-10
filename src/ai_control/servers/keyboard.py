@@ -10,16 +10,20 @@ import sys
 import time
 from typing import Any
 
-from mcp.server import MCPServer
+try:
+    from mcp.server import FastMCP
+except ImportError:  # MCP 2.x
+    from mcp.server import MCPServer as FastMCP
 
 from src.ai_control.servers.process import resolve_selected_process
 from src.logic.action_type import ActionMode, ActionType, AutoAction
 
 
-mcp = MCPServer("Auto_MU Keyboard Actions")
+mcp = FastMCP("Auto_MU Keyboard Actions")
 
 MAX_TEXT_LENGTH = 500
 MAX_DELAY_SECONDS = 30.0
+DEFAULT_DIALOG_VERIFY_TIMEOUT_MS = 1000
 SPECIAL_KEYS = {
     "tab", "esc", "escape", "enter", "return", "space", "backspace",
     "delete", "del", "insert", "ins", "home", "end", "page up",
@@ -141,6 +145,8 @@ def keyboard_action_schema() -> dict[str, Any]:
             "delay_seconds": {"type": "number", "minimum": 0, "maximum": MAX_DELAY_SECONDS},
             "goto_step_enabled": {"type": "boolean", "default": False},
             "goto_step_index": {"type": "integer", "minimum": 0, "default": 0},
+            "verify_event_type": {"type": "string", "default": ""},
+            "verify_timeout_ms": {"type": "integer", "minimum": 1, "default": DEFAULT_DIALOG_VERIFY_TIMEOUT_MS},
         },
         "special_keys": sorted(SPECIAL_KEYS),
     }
@@ -194,9 +200,107 @@ def _selected_visible_windows() -> tuple[list[dict[str, Any]], str | None]:
     if error:
         return [], error
     windows = [window for window in (process or {}).get("windows", []) if window.get("visible")]
+    selected_window_hwnd = int((process or {}).get("selected_window_hwnd") or 0)
+    if selected_window_hwnd:
+        windows = [window for window in windows if int(window.get("hwnd", 0)) == selected_window_hwnd]
+        if not windows:
+            return [], "Selected game window is no longer visible; select it again in Gemini Chat"
     if not windows:
         return [], "Process đã chọn không có cửa sổ hiển thị"
     return windows, None
+
+
+def _post_single_key(hwnd: int, key: str) -> bool:
+    """Queue one character key press for a specific window without focusing it."""
+    if len(key) != 1:
+        return False
+
+    import win32api
+    import win32con
+    import win32gui
+
+    key_scan = int(win32api.VkKeyScan(key))
+    if key_scan == -1:
+        return False
+    virtual_key = key_scan & 0xFF
+    scan_code = int(win32api.MapVirtualKey(virtual_key, 0)) & 0xFF
+    down_lparam = 1 | (scan_code << 16)
+    up_lparam = down_lparam | (1 << 30) | (1 << 31)
+    win32gui.PostMessage(int(hwnd), win32con.WM_KEYDOWN, virtual_key, down_lparam)
+    win32gui.PostMessage(int(hwnd), win32con.WM_KEYUP, virtual_key, up_lparam)
+    return True
+
+
+def _await_dynamic_text(hwnd: int, event_type: str, timeout_ms: int) -> dict[str, Any]:
+    """OCR one teaching-configured dialog ROI until it matches or times out."""
+    from samples.ai_game_controller.domain.game_target import GameTarget
+    from samples.ai_game_controller.infrastructure.game_state_reader import GameStateReader
+    from samples.ai_game_controller.infrastructure.tesseract_recognizer import TesseractRecognizer
+    from samples.ai_game_controller.infrastructure.window_capture import GameWindowCapture
+
+    timeout_seconds = max(1, int(timeout_ms)) / 1000.0
+    reader = GameStateReader(
+        capture=GameWindowCapture(),
+        recognizer=TesseractRecognizer(),
+        teaching_path=Path(__file__).resolve().parents[3] / "mcp" / "config" / "mu_game_window.json",
+    )
+    target = GameTarget(target_id=f"mcp:{hwnd}", hwnd=hwnd, process_name="", window_title="")
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0.1:
+            break
+        observed_text = reader.verify_dynamic_text(target, event_type, timeout_seconds=remaining)
+        if observed_text:
+            return {
+                "success": True,
+                "timed_out": False,
+                "event_type": event_type,
+                "observed_text": observed_text,
+            }
+        if reader.last_error:
+            return {
+                "success": False,
+                "timed_out": False,
+                "event_type": event_type,
+                "error": reader.last_error,
+            }
+        time.sleep(min(0.05, remaining))
+    return {
+        "success": False,
+        "timed_out": True,
+        "event_type": event_type,
+        "error": f"dynamic text was not found within {timeout_ms} ms",
+    }
+
+
+def _keyboard_result(
+    *,
+    action: AutoAction,
+    target: dict[str, Any],
+    action_success: bool,
+    delivery: str | None = None,
+    logs: list[str] | None = None,
+    verify_event_type: str = "",
+    verify_timeout_ms: int = DEFAULT_DIALOG_VERIFY_TIMEOUT_MS,
+) -> dict[str, Any]:
+    """Combine an action result with an optional in-tool dialog verification."""
+    result: dict[str, Any] = {
+        "ok": action_success,
+        "action_ok": action_success,
+        "target": target,
+        "action": _action_to_json(action),
+        "logs": logs or [],
+    }
+    if delivery:
+        result["delivery"] = delivery
+    if not action_success or not verify_event_type:
+        return result
+
+    verification = _await_dynamic_text(int(target["hwnd"]), verify_event_type, verify_timeout_ms)
+    result["verification"] = verification
+    result["ok"] = bool(verification["success"])
+    return result
 
 
 @mcp.tool()
@@ -214,8 +318,14 @@ def run_keyboard_action(
     text_input_enabled: bool = False,
     delay_seconds: float = 0.0,
     target_window_title: str = "",
+    verify_event_type: str = "",
+    verify_timeout_ms: int = DEFAULT_DIALOG_VERIFY_TIMEOUT_MS,
 ) -> dict[str, Any]:
-    """Execute a Keyboard action in a window of the selected game process."""
+    """Execute a Keyboard action and optionally verify a teaching-configured dialog in this same call.
+
+    ``verify_event_type`` names an entry in teaching ``dynamicTexts``. Its OCR
+    check runs only after the key action succeeds and has a one-second default.
+    """
     action, errors = _build_keyboard_action(
         name="MCP Keyboard Action",
         value=value,
@@ -227,6 +337,10 @@ def run_keyboard_action(
     )
     if errors:
         return {"ok": False, "errors": errors}
+    try:
+        clean_verify_timeout_ms = max(1, int(verify_timeout_ms))
+    except (TypeError, ValueError):
+        return {"ok": False, "errors": ["verify_timeout_ms must be an integer"]}
 
     windows, selection_error = _selected_visible_windows()
     if selection_error:
@@ -252,6 +366,17 @@ def run_keyboard_action(
         }
 
     target = matches[0]
+    if not text_input_enabled and _post_single_key(int(target["hwnd"]), str(action.value)):
+        return _keyboard_result(
+            action=action,
+            target=target,
+            action_success=True,
+            delivery="window_message",
+            logs=["Queued key message for the selected window without focusing it."],
+            verify_event_type=str(verify_event_type or "").strip(),
+            verify_timeout_ms=clean_verify_timeout_ms,
+        )
+
     logs: list[str] = []
     captured_stdout = io.StringIO()
     with contextlib.redirect_stdout(captured_stdout):
@@ -262,12 +387,14 @@ def run_keyboard_action(
     if success and action.delay > 0:
         time.sleep(action.delay)
     engine_output = [line for line in captured_stdout.getvalue().splitlines() if line.strip()]
-    return {
-        "ok": success,
-        "target": target,
-        "action": _action_to_json(action),
-        "logs": (logs + engine_output)[-20:],
-    }
+    return _keyboard_result(
+        action=action,
+        target=target,
+        action_success=success,
+        logs=(logs + engine_output)[-20:],
+        verify_event_type=str(verify_event_type or "").strip(),
+        verify_timeout_ms=clean_verify_timeout_ms,
+    )
 
 
 def run_keyboard_mcp_server() -> None:
@@ -283,4 +410,3 @@ def run_keyboard_mcp_server() -> None:
 
 if __name__ == "__main__":
     run_keyboard_mcp_server()
-

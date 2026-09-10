@@ -16,6 +16,186 @@ The requirements document follows the required Step 1 structure and preserves th
 
 None.
 
+## REVIEW 2026-09-09 21:14:22
+
+- Review ID: REV-20260909-211422
+- Reviewer: Codex
+- Scope: Gemini Chat selected-target context
+- Target File: `src/ui/gemini_chat_widget.py`
+- Status: resolved
+
+### Conclusion
+
+The selected target is now stored before Gemini is connected. Its identifier and window title are injected into the system prompt as authoritative runtime context, so a scenario input named `target_window_title` can be fulfilled without asking the user again.
+
+### Findings
+
+None.
+
+### Verification
+
+`python -m compileall -q src/ui/gemini_chat_widget.py` passed. A direct prompt construction check confirmed that the selected title and the no-reprompt instruction are present.
+
+## REVIEW 2026-09-10 08:34:05
+
+- Review ID: REV-20260910-083405
+- Reviewer: Codex
+- Scope: Selected-window ownership for Advanced dialog scenario
+- Target Diff: `scenario_engine/scenarios/test_open_advanced_dialog.json`, `src/ai_control/scenario_tool_client.py`, `src/ai_control/servers/process.py`, `src/ai_control/servers/keyboard.py`, `src/ui/gemini_chat_widget.py`
+- Status: resolved
+
+### Conclusion
+
+The scenario no longer exposes `target_window_title` as an AI input. Gemini Chat synchronizes the selected PID and HWND directly to Process MCP; the persisted selection makes Keyboard MCP target that window only. Dynamic text verification remains scoped to the target already held by `AIProcessController`.
+
+### Findings
+
+None.
+
+### Verification
+
+Compilation passed for all changed Python modules. A direct synchronization check confirmed the Process MCP receives `pid` and `selected_window_hwnd`; JSON validation confirmed the scenario no longer contains a title input and allows its two tool calls.
+
+## REVIEW 2026-09-10 08:54:29
+
+- Review ID: REV-20260910-085429
+- Reviewer: Codex
+- Scope: Keyboard MCP delivery to selected game window
+- Target File: `src/ai_control/servers/keyboard.py`
+- Status: resolved
+
+### Conclusion
+
+For a single non-text key, `run_keyboard_action` now posts key-down and key-up messages directly to the selected HWND without focusing it or constructing `SystemExecutor`. This removes the observed blocking execution path while preserving the existing fallback for unsupported input shapes.
+
+### Findings
+
+None.
+
+### Verification
+
+The actual MCP flow resolved `NTD0103`, persisted its PID and HWND, and called `run_keyboard_action(value="s")`. It returned `ok=true`, `delivery="window_message"`, and the expected target HWND `856116`.
+
+## REVIEW 2026-09-10 09:06:20
+
+- Review ID: REV-20260910-090620
+- Reviewer: Codex
+- Scope: MCP SDK compatibility in the application virtual environment
+- Target File: `src/ai_control/servers/keyboard.py`, `src/ai_control/servers/process.py`
+- Status: resolved
+
+### Conclusion
+
+Both MCP servers now use `FastMCP` when available and fall back to MCP 2.x `MCPServer`. This preserves the same tool registration and stdio run contract across the global and virtual-environment SDK versions.
+
+### Findings
+
+None.
+
+### Verification
+
+Using `.venv\\Scripts\\python.exe`, both servers connected and exposed all seven expected Keyboard and Process tools.
+
+## REVIEW 2026-09-10 09:09:58
+
+- Review ID: REV-20260910-090958
+- Reviewer: Codex
+- Scope: MCP client timeout compatibility
+- Target File: `src/ai_control/mcp_client_manager.py`
+- Status: resolved
+
+### Conclusion
+
+The client now selects a float timeout for MCP 2.x and a `timedelta` timeout for MCP 1.x. This prevents the SDK-internal float-plus-timedelta exception while keeping support for the newer SDK used outside the virtual environment.
+
+### Findings
+
+None.
+
+### Verification
+
+With `.venv\\Scripts\\python.exe`, MCP connected successfully and a real `keyboard_action_schema` call returned content.
+
+## REVIEW 2026-09-10 09:14:34
+
+- Review ID: REV-20260910-091434
+- Reviewer: Codex
+- Scope: Scenario AI tool-result normalization
+- Target File: `src/ai_control/scenario_tool_client.py`
+- Status: resolved
+
+### Conclusion
+
+Remote MCP JSON text payloads are now unwrapped before they are returned to Gemini. The model receives the actual `ok` result required to decide whether to call `begin_dynamic_text_tracking` after the keyboard step.
+
+### Findings
+
+None.
+
+### Verification
+
+Using `.venv\\Scripts\\python.exe`, a real `get_selected_process_info` response was normalized to a top-level boolean `ok` field with no `content` envelope.
+
+## REVIEW 2026-09-10 10:14:04
+
+- Review ID: REV-20260910-101404
+- Reviewer: Codex
+- Scope: Remove dialog verification from passive EventDetector flow
+- Target Diff: `samples/ai_game_controller/application/event_detector.py`, `samples/ai_game_controller/application/process_controller.py`, `scenario_engine/scenarios/test_open_advanced_dialog.json`
+- Status: resolved
+
+### Conclusion
+
+Dynamic dialog-text verification no longer creates a `GameEvent`, enters `ScenarioEngine`, or reaches the UI. It now returns only an explicit verification result. Passive state transitions, beginning with `map.changed`, remain the sole EventDetector responsibility.
+
+### Findings
+
+None.
+
+### Verification
+
+Changed Python modules compiled, the scenario JSON parsed, and no remaining dynamic-dialog event publisher or expected emitted-event field was found in the scoped source and scenario files.
+
+## REVIEW 2026-09-10 10:20:24
+
+- Review ID: REV-20260910-102024
+- Reviewer: Codex
+- Scope: Single MCP action-and-verification call
+- Target Diff: `src/ai_control/servers/keyboard.py`, `src/ai_control/scenario_tool_client.py`, `samples/ai_game_controller/application/process_controller.py`, `scenario_engine/scenarios/test_open_advanced_dialog.json`
+- Status: resolved
+
+### Conclusion
+
+Gemini now has no `begin_dynamic_text_tracking` tool. `run_keyboard_action` optionally receives a configured dynamic-text event key and performs its OCR await internally, returning one combined action-and-verification result. The Advanced dialog scenario has one MCP step and one permitted tool call.
+
+### Findings
+
+None.
+
+### Verification
+
+All changed Python modules compiled, the scenario JSON parsed, discovery confirmed the removed tool is absent, and the Keyboard tool schema exposes `verify_event_type` and `verify_timeout_ms`.
+
+## REVIEW 2026-09-10 10:22:24
+
+- Review ID: REV-20260910-102224
+- Reviewer: Codex
+- Scope: Daily Events dialog scenario
+- Target File: `scenario_engine/scenarios/test_open_advanced_dialog.json`
+- Status: resolved
+
+### Conclusion
+
+The scenario now defines `open_daily_events_dialog` as a one-step, one-tool-call flow. It sends `S`, requests `dialog.advanced.opened` verification within the same MCP tool, and relies on the OCR layer's default timeout.
+
+### Findings
+
+None.
+
+### Verification
+
+The scenario JSON parsed successfully. Validation confirmed one step, one permitted tool call, the expected verification key, and no explicit timeout override.
+
 ### Open Questions
 
 Event-detection rules are intentionally deferred. A later requirement update is required before `EventDetector` can emit any `GameEvent`.
@@ -203,3 +383,51 @@ The first event rule and event type remain unspecified.
 ### Request
 
 Specify the first event rule before expecting runtime AI messages. Keep the future Gemini Chat bridge queued-thread-safe.
+
+## REVIEW 2026-09-09 14:35:00
+
+- Review ID: REV-20260909-143500
+- Reviewer: Codex
+- Scope: Gemini Chat process-selection integration
+- Target Diff: `src/ui/gemini_chat_widget.py`, `main.py`, `samples/ai_game_controller/main.py`
+- Status: open
+
+### Conclusion
+
+Gemini Chat now lists selectable windows, keeps its chat controls hidden until a target is selected and Gemini validates successfully, and passes the selected target to a controller built with the active saved Gemini credential and model. Controller event and AI-response callbacks are bridged through the widget's existing queued Qt signals, so they do not update Qt widgets from the reader worker.
+
+### Findings
+
+#### F-003
+
+- Severity: Major
+- Status: open
+- Location: `samples/ai_game_controller/application/event_detector.py`
+- Steering Source: User intent
+- Issue: `EventDetector.detect()` still returns an empty list because no event rule has been specified.
+- Impact: No runtime detector event or controller AI request can occur yet.
+- Required Update: Specify and implement the first event rule.
+
+### Open Questions
+
+The first event rule and event type remain unspecified.
+
+### Request
+
+Specify the first event rule before expecting runtime event messages in Gemini Chat.
+
+## REVIEW 2026-09-09 14:50:00
+
+- Review ID: REV-20260909-145000
+- Reviewer: Codex
+- Scope: First EventDetector rule
+- Target Diff: `samples/ai_game_controller/application/event_detector.py`
+- Status: resolved
+
+### Conclusion
+
+`EventDetector` now emits one `map.changed` event when a non-empty OCR map name changes between consecutive states for the same target. It ignores the initial state, missing map values, and target mismatches, preventing a startup or invalid-OCR event. The event contains the source states and marks `map` as the changed field.
+
+### Findings
+
+None.

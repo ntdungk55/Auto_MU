@@ -71,7 +71,7 @@ def run_ai_mcp_turn(
                     result = mcp_client.call_tool(name, arguments)
                     if not isinstance(result, dict):
                         result = {"result": result}
-                    phase = "success"
+                    phase = "error" if result.get("ok") is False else "success"
                 except Exception as exc:
                     result = {"ok": False, "error": str(exc)}
                     phase = "error"
@@ -101,4 +101,3 @@ def _emit_tool_event(callback: Callable[[dict[str, Any]], None] | None, event: d
         callback(event)
     except Exception:
         pass
-

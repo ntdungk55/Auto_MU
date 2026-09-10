@@ -186,6 +186,17 @@
       }
     }
   },
+  "dynamicTexts": {
+    "dialog.advanced.opened": {
+      "text": "Daily Events",
+      "roi": {
+        "x1": 200,
+        "y1": 0,
+        "x2": 600,
+        "y2": 200
+      }
+    }
+  },
   "notes": [
     "Use client-area coordinates for screenshot capture, OCR, and image recognition.",
     "Do not persist HWND, PID, or window position because they change between game sessions.",
@@ -196,6 +207,7 @@
     "The HH:mm:ss valuePattern represents a 24-hour time value.",
     "For healthBar, the first numeric line is current health and the second numeric line is fixed or maximum health.",
     "A mainInfo item with recognitionType set to text is detected by OCR and must define valuePattern.",
-    "A mainInfo item with recognitionType set to image is detected by image matching and does not require valuePattern."
+    "A mainInfo item with recognitionType set to image is detected by image matching and does not require valuePattern.",
+    "dynamicTexts are OCR checks used only when their corresponding tool-result verification is requested; they are not read during normal state polling."
   ]
 }
