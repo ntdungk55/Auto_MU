@@ -23,7 +23,7 @@ mcp = FastMCP("Auto_MU Keyboard Actions")
 
 MAX_TEXT_LENGTH = 500
 MAX_DELAY_SECONDS = 30.0
-DEFAULT_DIALOG_VERIFY_TIMEOUT_MS = 1000
+DEFAULT_DIALOG_VERIFY_TIMEOUT_MS = 10000
 SPECIAL_KEYS = {
     "tab", "esc", "escape", "enter", "return", "space", "backspace",
     "delete", "del", "insert", "ins", "home", "end", "page up",
@@ -235,14 +235,17 @@ def _await_dynamic_text(hwnd: int, event_type: str, timeout_ms: int) -> dict[str
     """OCR one teaching-configured dialog ROI until it matches or times out."""
     from samples.ai_game_controller.domain.game_target import GameTarget
     from samples.ai_game_controller.infrastructure.game_state_reader import GameStateReader
-    from samples.ai_game_controller.infrastructure.tesseract_recognizer import TesseractRecognizer
+    from samples.ai_game_controller.infrastructure.easyocr_recognizer import EasyOCRRecognizer
     from samples.ai_game_controller.infrastructure.window_capture import GameWindowCapture
 
     timeout_seconds = max(1, int(timeout_ms)) / 1000.0
     reader = GameStateReader(
         capture=GameWindowCapture(),
-        recognizer=TesseractRecognizer(),
+        recognizer=EasyOCRRecognizer(),
         teaching_path=Path(__file__).resolve().parents[3] / "mcp" / "config" / "mu_game_window.json",
+        scale=1.0,
+        grayscale=True,
+        threshold=80,
     )
     target = GameTarget(target_id=f"mcp:{hwnd}", hwnd=hwnd, process_name="", window_title="")
     deadline = time.monotonic() + timeout_seconds
@@ -312,8 +315,7 @@ def list_game_windows() -> dict[str, Any]:
     return {"ok": True, "windows": windows}
 
 
-@mcp.tool()
-def run_keyboard_action(
+def _run_keyboard_action(
     value: str,
     text_input_enabled: bool = False,
     delay_seconds: float = 0.0,
@@ -321,10 +323,10 @@ def run_keyboard_action(
     verify_event_type: str = "",
     verify_timeout_ms: int = DEFAULT_DIALOG_VERIFY_TIMEOUT_MS,
 ) -> dict[str, Any]:
-    """Execute a Keyboard action and optionally verify a teaching-configured dialog in this same call.
+    """Execute an internal Keyboard action and optionally verify a dialog in this same call.
 
     ``verify_event_type`` names an entry in teaching ``dynamicTexts``. Its OCR
-    check runs only after the key action succeeds and has a one-second default.
+    check runs only after the key action succeeds and has a ten-second default.
     """
     action, errors = _build_keyboard_action(
         name="MCP Keyboard Action",
@@ -394,6 +396,23 @@ def run_keyboard_action(
         logs=(logs + engine_output)[-20:],
         verify_event_type=str(verify_event_type or "").strip(),
         verify_timeout_ms=clean_verify_timeout_ms,
+    )
+
+
+@mcp.tool()
+def open_daily_events_dialog() -> dict[str, Any]:
+    """Open Daily Events with S and verify its configured text within 10 seconds.
+
+    This is the only game-control MCP tool for this dialog. It targets the
+    PID/HWND selected by Gemini Chat and performs action plus OCR verification
+    in one call.
+    """
+    return _run_keyboard_action(
+        value="s",
+        text_input_enabled=False,
+        delay_seconds=0.0,
+        verify_event_type="dialog.advanced.opened",
+        verify_timeout_ms=DEFAULT_DIALOG_VERIFY_TIMEOUT_MS,
     )
 
 

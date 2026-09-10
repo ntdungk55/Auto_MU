@@ -20,10 +20,11 @@ Tab Gemini Chat là điểm điều khiển game qua AI cho window MU đã chọ
 
 - Controller không phụ thuộc UI tại `samples/ai_game_controller/`.
 - Dropdown chọn target, chuẩn bị MCP và Gemini trong tab Gemini Chat.
-- Reader capture/OCR state 800×600, state store và event `map.changed`.
+- Reader capture/OCR state 800×600, state store và event `map.changed`. Capture tái sử dụng `WindowCapture` của app với `PrintWindow` theo HWND, thay vì screenshot vùng desktop.
 - Scenario CRUD lưu JSON theo target.
 - Catalog scenario thực thi cho Gemini tại `scenario_engine/scenarios/`.
 - MCP process selection, keyboard action và dynamic-text verification.
+- Adapter capture dùng bởi MCP không được ghi debug ra stdout; stdout của MCP chỉ chứa JSON-RPC.
 - Gemini function-calling loop, hiển thị tiến trình tool và kết quả vào chat.
 
 ### Ngoài phạm vi hoặc chưa tự động hóa
@@ -43,7 +44,7 @@ Gemini Chat
   ├─ AIProcessController.select_target(target)
   ├─ ScenarioToolClient
   │    ├─ Process MCP: select_game_process(pid, hwnd)
-  │    ├─ Keyboard MCP: run_keyboard_action(...)
+  │    ├─ Keyboard MCP: open_daily_events_dialog()
   │    └─ scenario_engine/scenarios/*.json → system context snapshot
   └─ Gemini function-calling loop
 
@@ -63,7 +64,7 @@ AIProcessController (không phụ thuộc UI)
 - `AIProcessController`.
 - `ScenarioManager` cho CRUD scenario theo target.
 
-Các dependency hiện tại gồm `ProcessSelector`, `GameWindowCapture`, `TesseractRecognizer`, `GameStateReader`, `GameStateStore`, `EventDetector`, `ScenarioEngine` và Gemini agent của sample.
+Các dependency hiện tại gồm `ProcessSelector`, `GameWindowCapture`, `EasyOCRRecognizer`, `GameStateReader`, `GameStateStore`, `EventDetector`, `ScenarioEngine` và Gemini agent của sample.
 
 ### 4.2. AIProcessController
 
@@ -180,35 +181,30 @@ ROI dùng hệ tọa độ normalized snapshot 800×600, gốc `(0, 0)` ở góc
 ```json
 "dialog.advanced.opened": {
   "text": "Daily Events",
-  "roi": { "x1": 200, "y1": 0, "x2": 600, "y2": 200 }
+  "roi": { "x1": 200, "y1": 0, "x2": 600, "y2": 300 }
 }
 ```
 
-`GameStateReader.verify_dynamic_text()` capture lại window, normalize, crop ROI, OCR và kiểm tra expected text có xuất hiện. Dynamic text không được EventDetector theo dõi liên tục.
+`GameStateReader.verify_dynamic_text()` capture lại window, normalize, crop ROI, dùng grayscale với threshold 80 ở scale 1 rồi OCR. Text được match exact trước, sau đó fuzzy theo cụm từ với ngưỡng 70% để giảm false-negative như `Daily Event`/`Dally Events`; dynamic text không được EventDetector theo dõi liên tục.
 
 ### 8.2. Keyboard MCP action
 
-`run_keyboard_action()` hỗ trợ `verify_event_type` và `verify_timeout_ms`.
+`open_daily_events_dialog()` là tool game-control semantic duy nhất cho Daily Events. Tool không nhận input từ AI: nó luôn gửi `S`, rồi xác minh `dialog.advanced.opened`.
 
-- `verify_timeout_ms` mặc định 1000 ms.
-- Sau action thành công, tool polling OCR dynamic-text ROI tới khi thấy text hoặc timeout.
+- `verify_timeout_ms` mặc định 10000 ms.
+- Sau action thành công, tool polling OCR dynamic-text ROI tới khi thấy text hoặc timeout. EasyOCR không hủy được inference đang chạy; adapter trả empty result khi hết deadline để MCP vẫn kết thúc đúng timeout, còn worker OCR dùng chung có thể hoàn thành nền.
 - Result chỉ là một object: `action_ok` phản ánh gửi action; `verification.success` phản ánh OCR; `ok=true` chỉ khi cả action và verification thành công.
 - Với phím đơn, ví dụ `s`, tool gửi Windows key message trực tiếp đến HWND đã chọn và không focus window.
 - Không có MCP tool OCR/verify thứ hai và không có event UI cho verification này.
 
-Tesseract OCR cần package `pytesseract` và Tesseract executable khả dụng trong môi trường chạy app.
+EasyOCR dùng shared `EasyOCREngine` của app và cần package `easyocr`. Không cần Tesseract executable hoặc `pytesseract` cho AI Game Controller/MCP verification.
 
 ## 9. Scenario thực thi hiện có
 
 File `scenario_engine/scenarios/test_open_advanced_dialog.json` định nghĩa scenario `open_daily_events_dialog`:
 
 ```text
-run_keyboard_action(
-  value="s",
-  text_input_enabled=false,
-  delay_seconds=0,
-  verify_event_type="dialog.advanced.opened"
-)
+open_daily_events_dialog()
 ```
 
 Scenario có một step MCP và `max_tool_calls: 1`. Thành công khi `ok`, `action_ok` và `verification.success` cùng true; failure bao gồm không gửi được phím hoặc hết timeout OCR.
@@ -217,5 +213,5 @@ Scenario có một step MCP và `max_tool_calls: 1`. Thành công khi `ok`, `act
 
 - Python modules liên quan compile được bằng `.venv\\Scripts\\python.exe`.
 - Scenario catalog load được và `list_scenarios` không còn xuất hiện trong MCP tool list của Gemini.
-- Route MCP giả lập xác nhận scenario snapshot không chặn `run_keyboard_action` sau khi Gemini đã có context.
+- Route MCP giả lập xác nhận scenario snapshot route tool result về Gemini sau khi Gemini đã có context.
 - Không có automated unit/integration test mới.

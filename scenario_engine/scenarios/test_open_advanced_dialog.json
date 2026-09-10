@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "open_daily_events_dialog",
   "name": "Mở Daily Events dialog",
-  "description": "Gửi phím S và xác minh Daily Events trong cùng một Keyboard MCP tool call.",
+  "description": "Gọi tool mở Daily Events; tool tự gửi S và xác minh text trong cùng một MCP call.",
   "status": "ready",
   "preconditions": [
     "Gemini Chat đã chọn window MU GameThuVN; tab sẽ đồng bộ PID và HWND đó sang Process MCP.",
@@ -10,7 +10,7 @@
   ],
   "inputs": {},
   "limits": {
-    "timeout_seconds": 2,
+    "timeout_seconds": 12,
     "max_steps": 1,
     "max_tool_calls": 1
   },
@@ -18,13 +18,8 @@
     {
       "id": "open_daily_events_dialog",
       "type": "mcp",
-      "tool": "run_keyboard_action",
-      "arguments": {
-        "value": "s",
-        "text_input_enabled": false,
-        "delay_seconds": 0,
-        "verify_event_type": "dialog.advanced.opened"
-      },
+      "tool": "open_daily_events_dialog",
+      "arguments": {},
       "save_result_as": "open_dialog_result",
       "assert": [
         "${open_dialog_result.ok} == true",
@@ -38,7 +33,7 @@
   ],
   "expected": {
     "success": {
-      "action": "key s sent to the selected game window",
+      "action": "open_daily_events_dialog sent key s to the selected game window",
       "verification": "Daily Events text found within the default OCR timeout"
     },
     "failure": {

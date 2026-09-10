@@ -431,3 +431,83 @@ Specify the first event rule before expecting runtime event messages in Gemini C
 ### Findings
 
 None.
+
+## REVIEW 2026-09-10 15:10:00
+
+- Review ID: REV-20260910-151000
+- Reviewer: Codex
+- Scope: Daily Events OCR tolerance and verification performance
+- Target Diff: `samples/ai_game_controller/infrastructure/game_state_reader.py`, `.kiro/specs/event-ai-chatting/requirements.md`
+- Status: resolved
+
+### Conclusion
+
+Dynamic-text verification now accepts a close OCR rendering of the configured phrase after exact matching fails. The 70% token-phrase threshold accepts common minor errors such as `Daily Event`, `Dally Events`, and `Daily Eevnts`, while rejecting unrelated text such as `Event Inventory` and `Advanced Settings`.
+
+### Findings
+
+None.
+
+### Verification
+
+The scoped modules compile with `.venv\\Scripts\\python.exe`. Direct matcher checks passed for the intended tolerant and rejecting cases. On the selected `NTD0103` game window, direct capture plus EasyOCR took approximately 1.69 seconds on the first read and 0.44 seconds on the second read; therefore the current 10-second verification timeout is not the observed bottleneck. The ROI did not contain `Daily Events` while this diagnostic was run, so a failed verification at that time correctly represents that the dialog was absent from the captured game buffer.
+
+## REVIEW 2026-09-10 15:15:00
+
+- Review ID: REV-20260910-151500
+- Reviewer: Codex
+- Scope: Manual end-to-end MCP tool script
+- Target File: `tools/test_open_daily_events_dialog.py`
+- Status: resolved
+
+### Conclusion
+
+The manual script follows the application path: it discovers one visible MU target, selects its PID/HWND through Process MCP, then invokes `open_daily_events_dialog` through `ScenarioToolClient` so the MCP JSON result envelope is normalized exactly as it is for Gemini Chat.
+
+### Findings
+
+None.
+
+### Verification
+
+`py_compile` passed and `--help` completed successfully without sending an input event to the game. The actual command deliberately sends `S` only when run without `--help`.
+
+## REVIEW 2026-09-10 15:20:00
+
+- Review ID: REV-20260910-152000
+- Reviewer: Codex
+- Scope: Manual MCP script execution fix
+- Target File: `tools/test_open_daily_events_dialog.py`
+- Status: resolved
+
+### Conclusion
+
+The script now calls `ScenarioToolClient.call_tool()` with its supported signature and configures UTF-8 console output before printing MCP payloads. It no longer exits before the semantic MCP tool is invoked or fails while formatting Vietnamese tool output.
+
+### Findings
+
+None.
+
+### Verification
+
+The initial run selected PID `24600` and HWND `856116`, then reached `open_daily_events_dialog`; its only failure was local console encoding during result display. A subsequent read-only capture detected `Daily Events` in the configured ROI, confirming that the preceding semantic MCP call opened the game dialog. `py_compile` and `--help` also passed after the output fix.
+
+## REVIEW 2026-09-10 15:25:00
+
+- Review ID: REV-20260910-152500
+- Reviewer: Codex
+- Scope: MCP manual-test script location
+- Target Diff: `mcp/test_open_daily_events_dialog.py`, deleted `tools/test_open_daily_events_dialog.py`
+- Status: resolved
+
+### Conclusion
+
+The manual full-flow test script is now stored beside the MCP integration under `mcp/`. Its project-root resolution remains correct from the new location, and it preserves the tested Process MCP selection plus semantic Keyboard MCP invocation flow.
+
+### Findings
+
+None.
+
+### Verification
+
+`py_compile` and `--help` passed from the new `mcp/` path without sending a game input event.

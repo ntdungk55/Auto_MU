@@ -1,27 +1,30 @@
-"""Client-area capture adapter for a selected game window."""
+"""Reuse the application's HWND-aware game-window capture implementation."""
 
 from __future__ import annotations
 
-from typing import Any
-
 import numpy as np
+
+from src.logic.system_executor.window_capture import WindowCapture
 
 
 class GameWindowCapture:
-    """Capture only a valid target's client area through Pillow on Windows."""
+    """Capture one selected client area through the app's PrintWindow adapter."""
+
+    def __init__(self) -> None:
+        self._captures: dict[int, WindowCapture] = {}
 
     def capture(self, hwnd: int) -> np.ndarray | None:
-        """Return an RGB client-area image, or ``None`` when capture is unavailable."""
+        """Return a BGR client-area image, or ``None`` when capture is unavailable."""
         try:
             import win32gui
-            from PIL import ImageGrab
         except ImportError as error:
-            raise RuntimeError("window capture requires pywin32 and Pillow") from error
+            raise RuntimeError("window capture requires pywin32") from error
         if not win32gui.IsWindow(hwnd):
             return None
-        left, top = win32gui.ClientToScreen(hwnd, (0, 0))
-        _, _, right, bottom = win32gui.GetClientRect(hwnd)
-        if right <= 0 or bottom <= 0:
-            return None
-        image = ImageGrab.grab(bbox=(left, top, left + right, top + bottom), all_screens=True)
-        return np.asarray(image.convert("RGB"))
+        capture = self._captures.get(int(hwnd))
+        if capture is None:
+            capture = WindowCapture(target_window_hwnd=int(hwnd), debug_output=False)
+            self._captures[int(hwnd)] = capture
+        else:
+            capture.set_target_window(int(hwnd))
+        return capture.capture()

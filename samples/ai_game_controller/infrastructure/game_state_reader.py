@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from difflib import SequenceMatcher
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,7 +16,7 @@ from ..domain.game_target import GameTarget
 
 
 class WindowCapture(Protocol):
-    """Capture a selected window as an image array."""
+    """Capture a selected window as a BGR image array."""
 
     def capture(self, hwnd: int) -> np.ndarray | None:
         """Capture the client area of one window."""
@@ -30,6 +31,8 @@ class TextRecognizer(Protocol):
 
 class GameStateReader:
     """Capture, normalize, and OCR one game window according to teaching JSON."""
+
+    _DYNAMIC_TEXT_FUZZY_THRESHOLD = 0.70
 
     def __init__(
         self,
@@ -97,7 +100,7 @@ class GameStateReader:
                 self._prepare_for_ocr(self._crop(normalized, roi)),
                 timeout_seconds=timeout_seconds,
             )
-            if self._normalize_text(expected_text) in self._normalize_text(recognized_text):
+            if self._dynamic_text_matches(expected_text, recognized_text):
                 return recognized_text
             return None
         except Exception as error:
@@ -156,10 +159,32 @@ class GameStateReader:
             image = cv2.resize(image, None, fx=self._scale, fy=self._scale, interpolation=cv2.INTER_CUBIC)
         if not self._grayscale:
             return image
-        grayscale = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+        grayscale = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         _, thresholded = cv2.threshold(grayscale, self._threshold, 255, cv2.THRESH_BINARY)
         return thresholded
 
     @staticmethod
     def _normalize_text(value: str) -> str:
         return " ".join(value.split()).casefold()
+
+    @classmethod
+    def _dynamic_text_matches(cls, expected_text: str, recognized_text: str) -> bool:
+        """Match an expected dialog label exactly or as a close OCR token phrase."""
+        expected = cls._normalize_text(expected_text)
+        observed = cls._normalize_text(recognized_text)
+        if not expected or not observed:
+            return False
+        if expected in observed:
+            return True
+
+        expected_tokens = expected.split()
+        observed_tokens = observed.split()
+        expected_count = len(expected_tokens)
+        for window_size in range(max(1, expected_count - 1), expected_count + 2):
+            if window_size > len(observed_tokens):
+                continue
+            for start in range(0, len(observed_tokens) - window_size + 1):
+                candidate = " ".join(observed_tokens[start:start + window_size])
+                if SequenceMatcher(None, expected, candidate).ratio() >= cls._DYNAMIC_TEXT_FUZZY_THRESHOLD:
+                    return True
+        return False

@@ -18,7 +18,7 @@ from .infrastructure.process_selector import ProcessSelector
 from .infrastructure.scenario_repository import ScenarioRepository
 from .infrastructure.settings_store import SettingsStore
 from .infrastructure.system_prompt_loader import SystemPromptLoader
-from .infrastructure.tesseract_recognizer import TesseractRecognizer
+from .infrastructure.easyocr_recognizer import EasyOCRRecognizer
 from .infrastructure.window_capture import GameWindowCapture
 
 
@@ -35,7 +35,7 @@ def create_ai_process_controller(
     path_settings = settings.get("paths", {})
     reader = GameStateReader(
         capture=GameWindowCapture(),
-        recognizer=TesseractRecognizer(),
+        recognizer=EasyOCRRecognizer(),
         teaching_path=root.parent.parent / "mcp" / "config" / "mu_game_window.json",
         width=int(ocr_settings.get("clientWidth", 800)),
         height=int(ocr_settings.get("clientHeight", 600)),
