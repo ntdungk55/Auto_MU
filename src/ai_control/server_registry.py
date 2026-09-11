@@ -27,7 +27,6 @@ def default_server_specs() -> list[MCPServerSpec]:
         cwd = os.path.dirname(executable)
         return [
             MCPServerSpec("keyboard", executable, ("--mcp-keyboard-server",), cwd),
-            MCPServerSpec("process", executable, ("--mcp-process-server",), cwd),
         ]
 
     root = project_root()
@@ -36,12 +35,6 @@ def default_server_specs() -> list[MCPServerSpec]:
             "keyboard",
             sys.executable,
             (str(root / "mcp" / "keyboard" / "server.py"),),
-            str(root),
-        ),
-        MCPServerSpec(
-            "process",
-            sys.executable,
-            (str(root / "mcp" / "process" / "server.py"),),
             str(root),
         ),
     ]

@@ -71,7 +71,7 @@ def run_ai_mcp_turn(
                     result = mcp_client.call_tool(name, arguments)
                     if not isinstance(result, dict):
                         result = {"result": result}
-                    phase = "error" if result.get("ok") is False else "success"
+                    phase = "error" if result.get("ok") is False or result.get("success") is False else "success"
                 except Exception as exc:
                     result = {"ok": False, "error": str(exc)}
                     phase = "error"

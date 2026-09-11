@@ -141,7 +141,10 @@ class WindowCapture:
                 screen_dc = win32gui.GetWindowDC(0)
                 screen_mfc = win32ui.CreateDCFromHandle(screen_dc)
                 bitblt_started = time.perf_counter()
-                result = saveDC.BitBlt((0, 0), (width, height), screen_mfc, client_pos, win32con.SRCCOPY)
+                # pywin32 returns None on a successful BitBlt call and raises
+                # an exception on failure. Treat a completed call as success.
+                saveDC.BitBlt((0, 0), (width, height), screen_mfc, client_pos, win32con.SRCCOPY)
+                result = True
                 self._log_debug(
                     f"BitBlt result={bool(result)} elapsed_ms={(time.perf_counter() - bitblt_started) * 1000:.2f}"
                 )

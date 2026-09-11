@@ -13,6 +13,8 @@ from src.ai_control.mcp_client_manager import MCPClientManager
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+GAME_TOOLS = {"get_daily_events_dialog_info", "open_companion_management_dialog",
+              "get_companion_summoned_state", "switch_to_companion_character", "summon_companion_character"}
 
 
 def _tool_call_response(calls):
@@ -72,7 +74,7 @@ def test_schema_conversion_and_dynamic_declarations():
 def test_gemini_executes_mcp_tool_and_returns_final_text():
     chat = _FakeChat(
         [
-            _tool_call_response([("create_keyboard_action", {"name": "Enter", "value": "enter"})]),
+            _tool_call_response([("get_companion_summoned_state", {})]),
             _text_response("Đã tạo action."),
         ]
     )
@@ -87,11 +89,11 @@ def test_gemini_executes_mcp_tool_and_returns_final_text():
 
     assert result.text == "Đã tạo action."
     assert result.tool_call_count == 1
-    assert client.calls == [("create_keyboard_action", {"name": "Enter", "value": "enter"})]
+    assert client.calls == [("get_companion_summoned_state", {})]
 
 
 def test_gemini_limits_execution_to_twenty_tool_calls():
-    requested_calls = [("list_game_windows", {}) for _ in range(21)]
+    requested_calls = [("get_companion_summoned_state", {}) for _ in range(21)]
     chat = _FakeChat([_tool_call_response(requested_calls), _text_response("Đã dừng.")])
     client = _FakeMCPClient()
 
@@ -122,32 +124,29 @@ def test_real_stdio_manager_discovers_and_calls_tools_without_keypress():
         assert manager.wait_until_connected(15)
         tools = manager.refresh_tools()
         names = {tool["name"] for tool in tools}
-        assert "create_keyboard_action" in names
-        assert "run_keyboard_action" in names
+        assert names == GAME_TOOLS
 
         result = manager.call_tool(
-            "create_keyboard_action",
-            {"name": "Press Enter", "value": "enter", "delay_seconds": 0.1},
+            "summon_companion_character",
+            {"target_character": ""},
         )
-        assert result["structuredContent"]["ok"] is True
+        assert result["structuredContent"]["success"] is False
     finally:
         manager.stop()
 
     assert manager.status_snapshot().state == "stopped"
 
 
-def test_default_manager_aggregates_keyboard_and_process_servers():
+def test_default_manager_exposes_only_five_game_tools():
     manager = MCPClientManager(startup_timeout_seconds=20)
     manager.start()
     try:
         assert manager.wait_until_connected(20)
         tools = manager.refresh_tools(20)
         names = {tool["name"] for tool in tools}
-        assert "create_keyboard_action" in names
-        assert "select_game_process" in names
-        assert "get_selected_process_info" in names
+        assert names == GAME_TOOLS
 
-        result = manager.call_tool("get_selected_process_info", {})
+        result = manager.call_tool("summon_companion_character", {"target_character": ""})
         assert "structuredContent" in result
     finally:
         manager.stop()

@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "id": "open_companion_management_dialog",
+  "name": "Mở quản lý nhân vật phụ",
+  "description": "Chỉ mở và verify Manage Sub-Characters; không bấm Enter Character.",
+  "status": "ready",
+  "preconditions": ["Gemini Chat đã chọn đúng window MU.", "Slot 1 đã triệu hồi nhân vật phụ."],
+  "inputs": {},
+  "limits": { "timeout_seconds": 6, "max_steps": 1, "max_tool_calls": 1 },
+  "steps": [
+    {
+      "id": "open_companion_management_dialog",
+      "type": "mcp",
+      "tool": "open_companion_management_dialog",
+      "arguments": {},
+      "save_result_as": "dialog_result",
+      "assert": ["${dialog_result.success} == true"],
+      "on_success": "complete",
+      "on_failure": "failed"
+    }
+  ],
+  "result": {
+    "success_message": "Đã mở dialog quản lý nhân vật phụ.",
+    "failure_message": "Không thể mở hoặc verify dialog quản lý nhân vật phụ."
+  }
+}

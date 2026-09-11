@@ -44,7 +44,9 @@ class ScenarioToolClient:
         return self._load_scenario_snapshot()
 
     def synchronize_selected_target(self, target: Any) -> None:
-        """Make Process MCP use the same process and window as Gemini Chat."""
+        """Persist Gemini Chat's selected PID/HWND without exposing a selection tool to AI."""
+        from src.ai_control.servers.process import select_game_process
+
         target_id = str(getattr(target, "target_id", "") or "")
         try:
             process_text, window_text = target_id.split(":", 1)
@@ -52,14 +54,10 @@ class ScenarioToolClient:
             window_handle = int(window_text)
         except (TypeError, ValueError):
             raise ValueError("selected game target does not contain a valid process id and window handle") from None
-        raw_result = self._mcp_client.call_tool(
-            "select_game_process",
-            {"pid": process_id, "selected_window_hwnd": window_handle},
-        )
-        result = self._text_result_payload(raw_result)
+        result = select_game_process(pid=process_id, selected_window_hwnd=window_handle)
         if not bool(result.get("ok")):
-            errors = result.get("errors") or result.get("error") or raw_result
-            raise RuntimeError(f"Process MCP could not select the Gemini target: {errors}")
+            errors = result.get("errors") or result.get("error") or result
+            raise RuntimeError(f"Could not synchronize the selected Gemini target: {errors}")
 
     def _load_scenario_snapshot(self) -> dict[str, Any]:
         scenarios: list[dict[str, Any]] = []

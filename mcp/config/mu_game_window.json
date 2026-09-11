@@ -184,9 +184,22 @@
         "x2": 451,
         "y2": 550
       }
+    },
+    "companionManagement1": {
+      "description": "Button mở dialog quản lý nhân vật phụ số 1",
+      "recognitionType": "image",
+      "clickable": true,
+      "notSummonedTemplate": "assets/companion_management1_not_summoned.png",
+      "notSummonedThreshold": 0.7,
+      "roi": {
+        "x1": 640,
+        "y1": 529,
+        "x2": 672,
+        "y2": 562
+      }
     }
   },
-  "dynamicTexts": {
+  "dialogs": {
     "dialog.advanced.opened": {
       "text": "Daily Events",
       "roi": {
@@ -194,6 +207,298 @@
         "y1": 0,
         "x2": 600,
         "y2": 300
+      },
+      "layout": {
+        "referenceImagePath": "assets/daily_events_ntd3006.png",
+        "Anchor": {
+          "description": "Tiêu đề dialog Daily Events",
+          "recognitionType": "image",
+          "clickable": false,
+          "text": "Daily Events",
+          "titleImagePath": "assets/daily_events_title.png",
+          "templateThreshold": 0.7,
+          "detectedRoi": {
+            "x1": 499,
+            "y1": 163,
+            "x2": 573,
+            "y2": 182
+          }
+        },
+        "openKey": "s",
+        "textRecognition": {
+          "engine": "easyocr",
+          "scale": 4,
+          "padding": 8,
+          "minimumConfidence": 0.4
+        },
+        "textRegions": {
+          "boss": {
+            "description": "Boss remaining entries",
+            "recognitionType": "text",
+            "valuePattern": "Remaining\\s*[:;]\\s*(\\d+)\\s*times?",
+            "roiRelativeToTitle": {
+              "x1": -161,
+              "y1": 64,
+              "x2": -63,
+              "y2": 78
+            }
+          },
+          "jewel": {
+            "description": "Jewel mining remaining entries",
+            "recognitionType": "text",
+            "valuePattern": "Remaining\\s*[:;]\\s*(\\d+)\\s*times?",
+            "roiRelativeToTitle": {
+              "x1": -161,
+              "y1": 96,
+              "x2": -63,
+              "y2": 110
+            }
+          },
+          "bc": {
+            "description": "Blood Castle remaining entries",
+            "recognitionType": "text",
+            "valuePattern": "Remaining\\s*[:;]\\s*(\\d+)\\s*times?",
+            "roiRelativeToTitle": {
+              "x1": -74,
+              "y1": 208,
+              "x2": 26,
+              "y2": 223
+            }
+          },
+          "devil": {
+            "description": "Demon Square remaining entries",
+            "recognitionType": "text",
+            "valuePattern": "Remaining\\s*[:;]\\s*(\\d+)\\s*times?",
+            "roiRelativeToTitle": {
+              "x1": -74,
+              "y1": 224,
+              "x2": 26,
+              "y2": 240
+            }
+          },
+          "ig": {
+            "description": "Imperial Guardian (IG) remaining entries",
+            "recognitionType": "text",
+            "valuePattern": "Remaining\\s*[:;]\\s*(\\d+)\\s*times?",
+            "roiRelativeToTitle": {
+              "x1": -74,
+              "y1": 241,
+              "x2": 26,
+              "y2": 257
+            }
+          }
+        }
+      }
+    },
+    "dialog.companion_management.opened": {
+      "text": "Manage Sub-Characters",
+      "roi": {
+        "x1": 150,
+        "y1": 0,
+        "x2": 650,
+        "y2": 400
+      },
+      "layout": {
+        "referenceImagePath": "assets/companion_management_ntd3006.png",
+        "Anchor": {
+          "description": "Tiêu đề dialog Manage Sub-Characters",
+          "recognitionType": "image",
+          "clickable": false,
+          "text": "Manage Sub-Characters",
+          "titleImagePath": "assets/companion_management_title.png",
+          "templateThreshold": 0.75,
+          "detectedRoi": {
+            "x1": 501,
+            "y1": 105,
+            "x2": 638,
+            "y2": 132
+          },
+          "dialogOriginOffset": {
+            "x": -158,
+            "y": -10
+          }
+        },
+        "textRegions": {
+          "characterName": {
+            "description": "Character value",
+            "recognitionType": "text",
+            "valuePattern": "/text",
+            "roiRelativeToTitle": {
+              "x1": 151,
+              "y1": 52,
+              "x2": 278,
+              "y2": 66
+            }
+          },
+          "server": {
+            "description": "Server value",
+            "recognitionType": "text",
+            "valuePattern": "/text",
+            "roiRelativeToTitle": {
+              "x1": 151,
+              "y1": 66,
+              "x2": 278,
+              "y2": 78
+            }
+          },
+          "map": {
+            "description": "Map value",
+            "recognitionType": "text",
+            "valuePattern": "/text",
+            "roiRelativeToTitle": {
+              "x1": 151,
+              "y1": 78,
+              "x2": 278,
+              "y2": 90
+            }
+          },
+          "level": {
+            "description": "Level value",
+            "recognitionType": "text",
+            "valuePattern": "/text",
+            "roiRelativeToTitle": {
+              "x1": 151,
+              "y1": 90,
+              "x2": 278,
+              "y2": 103
+            }
+          },
+          "reset": {
+            "description": "Reset value",
+            "recognitionType": "text",
+            "valuePattern": "/text",
+            "roiRelativeToTitle": {
+              "x1": 151,
+              "y1": 103,
+              "x2": 278,
+              "y2": 115
+            }
+          },
+          "status": {
+            "description": "Status value",
+            "recognitionType": "text",
+            "valuePattern": "/text",
+            "roiRelativeToTitle": {
+              "x1": 151,
+              "y1": 115,
+              "x2": 278,
+              "y2": 129
+            }
+          }
+        },
+        "buttons": {
+          "autoAttack": {
+            "description": "Button Auto Attack",
+            "recognitionType": "image",
+            "roi": {
+              "x1": 220,
+              "y1": 182,
+              "x2": 320,
+              "y2": 207
+            }
+          },
+          "callCharacterTo": {
+            "description": "Button Call character to",
+            "roi": {
+              "x1": 326,
+              "y1": 182,
+              "x2": 426,
+              "y2": 207
+            }
+          },
+          "enterCharacter": {
+            "description": "Button Enter Character",
+            "roi": {
+              "x1": 220,
+              "y1": 210,
+              "x2": 320,
+              "y2": 235
+            },
+            "templateImagePath": "assets/companion_management_enter_character.png"
+          },
+          "goToCharacter": {
+            "description": "Button Go to Character",
+            "roi": {
+              "x1": 326,
+              "y1": 210,
+              "x2": 426,
+              "y2": 235
+            }
+          },
+          "exitCharacter": {
+            "description": "Button Exit Character",
+            "roi": {
+              "x1": 220,
+              "y1": 238,
+              "x2": 320,
+              "y2": 263
+            }
+          },
+          "close": {
+            "description": "Button đóng dialog Manage Sub-Characters",
+            "roi": {
+              "x1": 404,
+              "y1": 7,
+              "x2": 432,
+              "y2": 31
+            }
+          }
+        },
+        "textRecognition": {
+          "engine": "winrt",
+          "fallbackEngine": "easyocr",
+          "scale": 2,
+          "padding": 8,
+          "minimumConfidence": 0.3
+        }
+      }
+    },
+    "dialog.character_list.opened": {
+      "text": "Character List",
+      "roi": {
+        "x1": 200,
+        "y1": 0,
+        "x2": 400,
+        "y2": 250
+      },
+      "layout": {
+        "referenceImagePath": "assets/character_list_dialog.png",
+        "Anchor": {
+          "description": "Tiêu đề dialog Character List",
+          "clickable": false,
+          "text": "Character List",
+          "titleImagePath": "assets/character_list_title.png",
+          "templateThreshold": 0.7,
+          "detectedRoi": {
+            "x1": 233,
+            "y1": 205,
+            "x2": 316,
+            "y2": 224
+          }
+        },
+        "textRegions": {
+          "characterList": {
+            "description": "Danh sách nhân vật có thể triệu hồi; ROI tính tương đối từ góc trên-trái tiêu đề Character List, bắt đầu dưới Summon Fee và kết thúc trước Automatically summon the main...",
+            "valuePattern": "/text",
+            "roi": {
+              "x1": 67,
+              "y1": 75,
+              "x2": 292,
+              "y2": 280
+            }
+          }
+        },
+        "buttons": {
+          "close": {
+            "description": "Button đóng dialog Character List; ROI tính tương đối từ góc trên-trái tiêu đề Character List",
+            "roi": {
+              "x1": 266,
+              "y1": -2,
+              "x2": 289,
+              "y2": 20
+            }
+          }
+        }
       }
     }
   },
@@ -208,6 +513,6 @@
     "For healthBar, the first numeric line is current health and the second numeric line is fixed or maximum health.",
     "A mainInfo item with recognitionType set to text is detected by OCR and must define valuePattern.",
     "A mainInfo item with recognitionType set to image is detected by image matching and does not require valuePattern.",
-    "dynamicTexts are OCR checks used only when their corresponding tool-result verification is requested; they are not read during normal state polling."
+    "dialogs contain dialog teaching data, including text checks, reference images, title templates, and layouts; they are used only for requested dialog actions and verification, not normal state polling."
   ]
 }

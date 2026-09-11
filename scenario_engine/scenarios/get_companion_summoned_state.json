@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "id": "get_companion_summoned_state",
+  "name": "Đọc thông tin nhân vật phụ",
+  "description": "Khi có nhân vật phụ ở slot 1, mở Manage Sub-Characters nếu chưa mở, verify ảnh tiêu đề rồi đọc tên, Server, Map, Level, Reset và Status theo teaching. Sau khi đọc, click nút X và xác minh dialog đã đóng.",
+  "status": "ready",
+  "preconditions": ["Gemini Chat đã chọn đúng window MU."],
+  "inputs": {},
+  "limits": { "timeout_seconds": 30, "max_steps": 1, "max_tool_calls": 1 },
+  "steps": [
+    {
+      "id": "get_companion_summoned_state",
+      "type": "mcp",
+      "tool": "get_companion_summoned_state",
+      "arguments": {},
+      "save_result_as": "state_result",
+      "assert": ["${state_result.success} == true"],
+      "on_success": "complete",
+      "on_failure": "failed"
+    }
+  ],
+  "result": {
+    "success_message": "Thông tin nhân vật phụ nằm trong character; nếu companion_summoned=false thì slot chưa có nhân vật phụ.",
+    "failure_message": "Không mở, không đọc đủ thông tin hoặc không đóng được dialog; xem error, fields, missing_fields và dialog_close."
+  }
+}

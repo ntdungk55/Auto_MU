@@ -53,8 +53,9 @@ class GameStateReader:
         self._scale = max(1.0, scale)
         self._grayscale = grayscale
         self._threshold = threshold
-        self._main_info_teaching, self._dynamic_texts = self._load_teaching()
+        self._main_info_teaching, self._dialogs = self._load_teaching()
         self.last_error: str | None = None
+        self.last_dialog_verification: dict[str, object] = {}
 
     def read(self, target: GameTarget) -> GameState | None:
         """Read a normalized OCR snapshot for the configured target."""
@@ -81,14 +82,16 @@ class GameStateReader:
         event_type: str,
         timeout_seconds: float | None = None,
     ) -> str | None:
-        """OCR one configured dynamic-text ROI only when a caller requests it."""
-        definition = self._dynamic_texts.get(event_type)
+        """Verify a dialog title by its teaching template, or OCR for text-only teaching."""
+        self.last_error = None
+        self.last_dialog_verification = {}
+        definition = self._dialogs.get(event_type)
         if definition is None:
-            raise ValueError(f"dynamic text is not configured for event: {event_type}")
+            raise ValueError(f"dialog is not configured for event: {event_type}")
         expected_text = str(definition.get("text", "") or "")
         roi = definition.get("roi")
         if not expected_text or not isinstance(roi, dict):
-            raise ValueError(f"dynamic text configuration is invalid for event: {event_type}")
+            raise ValueError(f"dialog configuration is invalid for event: {event_type}")
 
         try:
             image = self._capture.capture(target.hwnd)
@@ -96,6 +99,11 @@ class GameStateReader:
                 self.last_error = "window capture returned no image"
                 return None
             normalized = cv2.resize(image, (self._width, self._height), interpolation=cv2.INTER_AREA)
+            anchor = definition.get("layout", {}).get("Anchor", {})
+            if "titleImagePath" in anchor or anchor.get("recognitionType") == "image":
+                matched = self._match_dialog_title(self._crop(normalized, roi), anchor, roi)
+                return expected_text if matched else None
+            self.last_dialog_verification = {"method": "ocr"}
             recognized_text = self._recognizer.recognize(
                 self._prepare_for_ocr(self._crop(normalized, roi)),
                 timeout_seconds=timeout_seconds,
@@ -107,21 +115,55 @@ class GameStateReader:
             self.last_error = str(error)
             return None
 
+    def _match_dialog_title(
+        self, image: np.ndarray, anchor: dict[str, object], roi: dict[str, object],
+    ) -> bool:
+        """Match the saved title inside its search ROI and retain diagnostic evidence."""
+        self.last_dialog_verification = {"method": "template_matching"}
+        configured_path = str(anchor.get("titleImagePath", "") or "")
+        if not configured_path:
+            raise ValueError("dialog title titleImagePath is required for image verification")
+        template_path = Path(__file__).resolve().parents[3] / configured_path
+        self.last_dialog_verification["template_path"] = configured_path
+        if not template_path.is_file():
+            raise FileNotFoundError(f"Dialog title template does not exist: {template_path}")
+        template = cv2.imread(str(template_path), cv2.IMREAD_GRAYSCALE)
+        if template is None:
+            raise ValueError(f"Could not read dialog title template: {template_path}")
+        threshold = float(anchor["templateThreshold"])
+        if not 0.0 < threshold <= 1.0:
+            raise ValueError("dialog title templateThreshold must be greater than 0 and at most 1")
+        if float(template.std()) < 1e-6:
+            raise ValueError("dialog title template must contain visual detail")
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        height, width = template.shape
+        if height > gray.shape[0] or width > gray.shape[1]:
+            raise ValueError("dialog title template is larger than its search ROI")
+        _, score, _, location = cv2.minMaxLoc(cv2.matchTemplate(gray, template, cv2.TM_CCOEFF_NORMED))
+        x = max(0, int(roi["x1"])) + location[0]
+        y = max(0, int(roi["y1"])) + location[1]
+        self.last_dialog_verification.update({
+            "score": round(float(score), 6),
+            "threshold": threshold,
+            "bbox": {"x1": x, "y1": y, "x2": x + width, "y2": y + height},
+        })
+        return bool(np.isfinite(score) and score >= threshold)
+
     def _load_teaching(self) -> tuple[dict[str, object], dict[str, dict[str, object]]]:
         with self._teaching_path.open("r", encoding="utf-8-sig") as stream:
             payload = json.load(stream)
         main_info = payload.get("mainInfo")
         if not isinstance(main_info, dict):
             raise ValueError("teaching JSON must contain mainInfo")
-        raw_dynamic_texts = payload.get("dynamicTexts", {})
-        if not isinstance(raw_dynamic_texts, dict):
-            raise ValueError("teaching JSON dynamicTexts must be an object")
-        dynamic_texts = {
+        raw_dialogs = payload.get("dialogs", {})
+        if not isinstance(raw_dialogs, dict):
+            raise ValueError("teaching JSON dialogs must be an object")
+        dialogs = {
             str(event_type): definition
-            for event_type, definition in raw_dynamic_texts.items()
+            for event_type, definition in raw_dialogs.items()
             if isinstance(definition, dict)
         }
-        return main_info, dynamic_texts
+        return main_info, dialogs
 
     def _read_main_info(self, image: np.ndarray) -> dict[str, object]:
         result: dict[str, object] = {}

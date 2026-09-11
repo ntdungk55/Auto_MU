@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "id": "summon_companion_character",
+  "name": "Triệu hồi nhân vật phụ",
+  "description": "Triệu hồi đúng tên nhân vật vào slot 1; verify ảnh tiêu đề, chọn theo OCR và xác nhận bằng icon slot.",
+  "status": "ready",
+  "preconditions": [
+    "Gemini Chat đã chọn đúng window MU.",
+    "Slot 1 chưa triệu hồi; tool tự kiểm tra trước khi click.",
+    "Người dùng đã cung cấp tên nhân vật cần triệu hồi."
+  ],
+  "inputs": {
+    "target_character": { "type": "string", "required": true, "description": "Tên nhân vật phụ cần triệu hồi, không phải tên window game hiện tại." }
+  },
+  "limits": { "timeout_seconds": 40, "max_steps": 1, "max_tool_calls": 1 },
+  "steps": [
+    {
+      "id": "summon_companion_character",
+      "type": "mcp",
+      "tool": "summon_companion_character",
+      "arguments": { "target_character": "${inputs.target_character}" },
+      "save_result_as": "summon_result",
+      "assert": ["${summon_result.success} == true"],
+      "on_success": "complete",
+      "on_failure": "failed"
+    }
+  ],
+  "result": {
+    "success_message": "Đã triệu hồi nhân vật phụ; icon slot xác nhận đã triệu hồi.",
+    "failure_message": "Không thể triệu hồi nhân vật phụ; xem lỗi tool."
+  }
+}

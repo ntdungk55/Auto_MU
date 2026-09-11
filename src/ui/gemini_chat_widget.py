@@ -27,6 +27,7 @@ from PyQt6.QtWidgets import (
 )
 
 from src.ai_control.scenario_tool_client import ScenarioToolClient
+from src.ai_control.game_window_initializer import prepare_game_window_for_ocr
 
 try:
     from PIL import Image
@@ -501,6 +502,10 @@ class GeminiChatWidget(QWidget):
                 self._current_key(), self._current_model()
             )
             controller.select_target(target)
+            prepare_game_window_for_ocr(
+                target.hwnd,
+                Path(__file__).resolve().parents[2] / "mcp" / "config" / "mu_game_window.json",
+            )
             controller.subscribe(self._on_game_event)
             controller.subscribe_ai_response(self._on_ai_response)
         except Exception as error:

@@ -8,13 +8,18 @@ import os
 from pathlib import Path
 import sys
 import time
-from typing import Any
+from typing import Any, Callable
 
 try:
     from mcp.server import FastMCP
 except ImportError:  # MCP 2.x
     from mcp.server import MCPServer as FastMCP
 
+from src.ai_control.companion_switcher import switch_to_companion_character as run_companion_switch
+from src.ai_control.companion_switcher import open_companion_management_dialog as run_open_companion_dialog
+from src.ai_control.companion_info import get_companion_information
+from src.ai_control.companion_summoner import summon_companion_character as run_companion_summon
+from src.ai_control.daily_events_info import get_daily_events_dialog_info as read_daily_events
 from src.ai_control.servers.process import resolve_selected_process
 from src.logic.action_type import ActionMode, ActionType, AutoAction
 
@@ -131,70 +136,6 @@ def _action_to_json(action: AutoAction) -> dict[str, Any]:
     }
 
 
-@mcp.tool()
-def keyboard_action_schema() -> dict[str, Any]:
-    """Return the supported input contract for an Auto_MU Keyboard action."""
-    return {
-        "action_type": ActionType.KEYBOARD.value,
-        "required": ["name", "value"],
-        "fields": {
-            "name": {"type": "string", "max_length": 120},
-            "purpose": {"type": "string", "default": ""},
-            "value": {"type": "string", "description": "Một phím hoặc chuỗi văn bản"},
-            "text_input_enabled": {"type": "boolean", "default": False},
-            "delay_seconds": {"type": "number", "minimum": 0, "maximum": MAX_DELAY_SECONDS},
-            "goto_step_enabled": {"type": "boolean", "default": False},
-            "goto_step_index": {"type": "integer", "minimum": 0, "default": 0},
-            "verify_event_type": {"type": "string", "default": ""},
-            "verify_timeout_ms": {"type": "integer", "minimum": 1, "default": DEFAULT_DIALOG_VERIFY_TIMEOUT_MS},
-        },
-        "special_keys": sorted(SPECIAL_KEYS),
-    }
-
-
-@mcp.tool()
-def create_keyboard_action(
-    name: str,
-    value: str,
-    text_input_enabled: bool = False,
-    purpose: str = "",
-    delay_seconds: float = 1.0,
-    goto_step_enabled: bool = False,
-    goto_step_index: int = 0,
-) -> dict[str, Any]:
-    """Create and validate a draft Keyboard action; this does not save a Tool."""
-    action, errors = _build_keyboard_action(
-        name, value, text_input_enabled, purpose, delay_seconds,
-        goto_step_enabled, goto_step_index,
-    )
-    if errors:
-        return {"ok": False, "errors": errors}
-    return {"ok": True, "action": _action_to_json(action)}
-
-
-@mcp.tool()
-def validate_keyboard_action(action: dict[str, Any]) -> dict[str, Any]:
-    """Validate Keyboard action JSON and return a normalized draft."""
-    if not isinstance(action, dict):
-        return {"ok": False, "errors": ["action phải là JSON object"]}
-    action_type = str(action.get("action_type", ActionType.KEYBOARD.value) or "")
-    if action_type != ActionType.KEYBOARD.value:
-        return {"ok": False, "errors": [f"action_type phải là '{ActionType.KEYBOARD.value}'"]}
-
-    draft, errors = _build_keyboard_action(
-        name=action.get("name", ""),
-        value=action.get("value", ""),
-        text_input_enabled=bool(action.get("text_input_enabled", False)),
-        purpose=action.get("purpose", ""),
-        delay_seconds=action.get("delay", action.get("delay_seconds", 1.0)),
-        goto_step_enabled=bool(action.get("goto_step_enabled", False)),
-        goto_step_index=action.get("goto_step_index", 0),
-    )
-    if errors:
-        return {"ok": False, "errors": errors}
-    return {"ok": True, "action": _action_to_json(draft)}
-
-
 def _selected_visible_windows() -> tuple[list[dict[str, Any]], str | None]:
     process, error = resolve_selected_process()
     if error:
@@ -232,7 +173,7 @@ def _post_single_key(hwnd: int, key: str) -> bool:
 
 
 def _await_dynamic_text(hwnd: int, event_type: str, timeout_ms: int) -> dict[str, Any]:
-    """OCR one teaching-configured dialog ROI until it matches or times out."""
+    """Verify one configured dialog by title image or OCR until it matches or times out."""
     from samples.ai_game_controller.domain.game_target import GameTarget
     from samples.ai_game_controller.infrastructure.game_state_reader import GameStateReader
     from samples.ai_game_controller.infrastructure.easyocr_recognizer import EasyOCRRecognizer
@@ -259,7 +200,9 @@ def _await_dynamic_text(hwnd: int, event_type: str, timeout_ms: int) -> dict[str
                 "success": True,
                 "timed_out": False,
                 "event_type": event_type,
-                "observed_text": observed_text,
+                **reader.last_dialog_verification,
+                ("matched_label" if reader.last_dialog_verification.get("method") == "template_matching"
+                 else "observed_text"): observed_text,
             }
         if reader.last_error:
             return {
@@ -267,13 +210,15 @@ def _await_dynamic_text(hwnd: int, event_type: str, timeout_ms: int) -> dict[str
                 "timed_out": False,
                 "event_type": event_type,
                 "error": reader.last_error,
+                **reader.last_dialog_verification,
             }
         time.sleep(min(0.05, remaining))
     return {
         "success": False,
         "timed_out": True,
         "event_type": event_type,
-        "error": f"dynamic text was not found within {timeout_ms} ms",
+        "error": f"dialog title was not found within {timeout_ms} ms",
+        **reader.last_dialog_verification,
     }
 
 
@@ -306,15 +251,6 @@ def _keyboard_result(
     return result
 
 
-@mcp.tool()
-def list_game_windows() -> dict[str, Any]:
-    """List visible windows owned by the currently selected game process."""
-    windows, error = _selected_visible_windows()
-    if error:
-        return {"ok": False, "errors": [error], "windows": []}
-    return {"ok": True, "windows": windows}
-
-
 def _run_keyboard_action(
     value: str,
     text_input_enabled: bool = False,
@@ -325,7 +261,7 @@ def _run_keyboard_action(
 ) -> dict[str, Any]:
     """Execute an internal Keyboard action and optionally verify a dialog in this same call.
 
-    ``verify_event_type`` names an entry in teaching ``dynamicTexts``. Its OCR
+    ``verify_event_type`` names an entry in teaching ``dialogs``. Its title
     check runs only after the key action succeeds and has a ten-second default.
     """
     action, errors = _build_keyboard_action(
@@ -400,20 +336,85 @@ def _run_keyboard_action(
 
 
 @mcp.tool()
-def open_daily_events_dialog() -> dict[str, Any]:
-    """Open Daily Events with S and verify its configured text within 10 seconds.
+def get_daily_events_dialog_info() -> dict[str, Any]:
+    """Read remaining Boss, jewel mining, Blood Castle, Devil and IG entries on the selected window.
 
-    This is the only game-control MCP tool for this dialog. It targets the
-    PID/HWND selected by Gemini Chat and performs action plus OCR verification
-    in one call.
+    Use the already-open Daily Events dialog, or send its configured S key and
+    verify the title image. OCR five title-relative teaching regions and return
+    integer counts in remaining (boss, jewel, bc, devil, ig) plus OCR evidence.
+    Missing or uncertain counts are null and success=false; zero is a valid count.
+    Leaves the dialog open. Does not enter any event or click any purchase button.
     """
-    return _run_keyboard_action(
-        value="s",
-        text_input_enabled=False,
-        delay_seconds=0.0,
-        verify_event_type="dialog.advanced.opened",
-        verify_timeout_ms=DEFAULT_DIALOG_VERIFY_TIMEOUT_MS,
-    )
+    return _run_companion_tool(read_daily_events, send_key=_post_single_key)
+
+
+@mcp.tool()
+def switch_to_companion_character() -> dict[str, Any]:
+    """Switch to the companion currently shown by Companion Management slot 1.
+
+    The selected Gemini Chat window is used directly. This call opens the
+    dialog, matches its title and Enter Character button, sends background
+    clicks to that HWND, and verifies the window title changed.
+    """
+    return _run_companion_tool(run_companion_switch)
+
+
+def _run_companion_tool(action: Callable[..., dict[str, Any]], **arguments: Any) -> dict[str, Any]:
+    """Keep game actions on the selected window and keep library output off MCP stdout."""
+    captured_stdout = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(captured_stdout):
+            windows, error = _selected_visible_windows()
+            if error:
+                return {"success": False, "error": error}
+            if len(windows) != 1:
+                return {"success": False, "error": "Select exactly one game window in Gemini Chat"}
+            result = action(windows[0], **arguments)
+    except Exception as error:
+        result = {"success": False, "error": str(error)}
+    logs = captured_stdout.getvalue().splitlines()
+    if logs:
+        result["logs"] = logs[-20:]
+    return result
+
+
+@mcp.tool()
+def open_companion_management_dialog() -> dict[str, Any]:
+    """Open and image-verify slot 1 Manage Sub-Characters on the selected window; do not enter it.
+
+    Requires a summoned companion. Reads the button ROI, title image, and title
+    threshold from teaching JSON. Sends only the dialog-opening background click.
+    """
+    return _run_companion_tool(run_open_companion_dialog)
+
+
+@mcp.tool()
+def get_companion_summoned_state() -> dict[str, Any]:
+    """Read slot 1 companion name, server, map, level, reset, and status on the selected window.
+
+    Click the companion slot when present and Manage Sub-Characters is not already
+    open. Verify its title image, then OCR the six teaching regions. Click the
+    taught X button and verify the dialog closed, including on OCR failure.
+    Closing failure preserves the read fields and returns failure. An empty slot returns
+    companion_summoned=false and character=null; incomplete OCR returns failure
+    with partial fields. The historical tool name is retained for existing callers.
+    """
+    return _run_companion_tool(get_companion_information)
+
+
+@mcp.tool()
+def summon_companion_character(target_character: str) -> dict[str, Any]:
+    """Summon the named companion into slot 1 of the selected game window.
+
+    target_character is the companion to summon, not the current window's character.
+    Requires the not-summoned icon, verifies Character List by its title image,
+    OCRs the configured name list, clicks the unique matching name, and confirms
+    the slot icon changed. Uses teaching JSON and background clicks. Closes the
+    dialog if OCR finds no unique target. Does not change to the summoned character.
+    """
+    if not target_character.strip():
+        return {"success": False, "error": "target_character must be a non-empty character name"}
+    return _run_companion_tool(run_companion_summon, target_character=target_character)
 
 
 def run_keyboard_mcp_server() -> None:

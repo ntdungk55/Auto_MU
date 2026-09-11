@@ -2,6 +2,9 @@
 
 from src.ai_control.servers import process as process_server
 from src.ai_control.shared.selected_process_store import SelectedProcessStore
+from src.ai_control.scenario_tool_client import ScenarioToolClient
+from types import SimpleNamespace
+import pytest
 
 
 def _candidate(pid: int, name: str = "main.exe", creation: int = 100) -> dict:
@@ -67,3 +70,18 @@ def test_selected_process_store_replaces_json_atomically(tmp_path):
 
     assert store.load() == {"pid": 2, "process_name": "main.exe"}
     assert list(store.path.parent.glob("*.tmp")) == []
+
+
+def test_chat_synchronizes_target_without_a_process_mcp_tool(tmp_path, monkeypatch):
+    store = SelectedProcessStore(tmp_path / "selected_process.json")
+    monkeypatch.setattr(process_server, "selected_process_store", store)
+    monkeypatch.setattr(process_server, "inspect_process", lambda pid, **_: _candidate(int(pid)))
+    client = ScenarioToolClient(mcp_client=object(), scenario_directory=tmp_path)
+    client.synchronize_selected_target(SimpleNamespace(target_id="321:1321"))
+    assert store.load()["pid"] == 321
+    assert store.load()["selected_window_hwnd"] == 1321
+    current, error = process_server.resolve_selected_process()
+    assert error is None and current["selected_window_hwnd"] == 1321
+    with pytest.raises(RuntimeError, match="does not belong"):
+        client.synchronize_selected_target(SimpleNamespace(target_id="321:9999"))
+    assert store.load()["selected_window_hwnd"] == 1321

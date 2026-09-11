@@ -183,7 +183,6 @@ def _public_candidate(candidate: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-@mcp.tool()
 def select_game_process(
     pid: int = 0,
     process_name: str = "",
@@ -250,7 +249,6 @@ def select_game_process(
     return {"ok": True, "selected": True, "process": _public_candidate(selected)}
 
 
-@mcp.tool()
 def get_selected_process_info() -> dict[str, Any]:
     """Return live information for the process currently used by game tools."""
     process, error = resolve_selected_process()

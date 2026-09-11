@@ -24,23 +24,15 @@ User command
     -> Chuyển step, hỏi lại user hoặc kết thúc
 ```
 
-## Ví dụ hiện có
+## Catalog hiện có
 
-Người dùng yêu cầu:
+Có 5 scenario tương ứng với 5 MCP tool game: mở Daily Events, mở quản lý nhân vật
+phụ, đọc thông tin nhân vật phụ, đổi nhân vật và triệu hồi. Catalog được nạp vào
+prompt khi tạo phiên chat, không có tool `list_scenario`. Người dùng chọn cửa sổ
+trên Gemini Chat; app đồng bộ PID/HWND bằng hàm nội bộ trước khi gọi tool game.
 
-```text
-Chọn process game main.exe rồi nhấn Enter.
-```
-
-Scenario tương ứng là `scenarios/task_a_select_and_press_enter.json`. Scenario
-này gọi skill `skills/select_game_and_press_key.json`, sử dụng ba MCP tool:
-
-1. `select_game_process`
-2. `get_selected_process_info`
-3. `run_keyboard_action`
-
-Xem `examples/task_a_execution_trace.md` để thấy đầy đủ AI sẽ làm gì trong
-trường hợp tìm thấy một process, nhiều process hoặc process đã tắt.
+Ví dụ chọn process rồi nhấn Enter và skill đi kèm đã được gỡ vì phụ thuộc các
+MCP tool không còn được expose.
 
 System prompt chính nằm tại
 `prompt/system_prompt/scenario_engine_system_prompt.md`. Nội dung file này được

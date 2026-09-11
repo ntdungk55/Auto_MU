@@ -1,84 +1,37 @@
-"""Tests for the example Keyboard MCP server."""
+"""Verify the restricted game MCP catalog and internal target validation."""
 
-import importlib.util
-from pathlib import Path
+import asyncio
 
+from src.ai_control.servers import keyboard, process
+from src.ai_control.server_registry import default_server_specs
 
-SERVER_PATH = Path(__file__).resolve().parents[1] / "src" / "ai_control" / "servers" / "keyboard.py"
-
-
-def _load_server_module():
-    spec = importlib.util.spec_from_file_location("auto_mu_keyboard_mcp", SERVER_PATH)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
+GAME_TOOLS = {
+    "get_daily_events_dialog_info", "open_companion_management_dialog",
+    "get_companion_summoned_state", "switch_to_companion_character",
+    "summon_companion_character",
+}
 
 
-def test_create_keyboard_action_draft():
-    server = _load_server_module()
-    result = server.create_keyboard_action(
-        name="Press Enter",
-        value="ENTER",
-        delay_seconds=0.5,
-    )
-
-    assert result["ok"] is True
-    assert result["action"]["action_type"] == "Ấn Phím"
-    assert result["action"]["value"] == "enter"
-    assert result["action"]["delay"] == 0.5
+def test_only_five_game_tools_are_exposed() -> None:
+    assert {tool.name for tool in asyncio.run(keyboard.mcp.list_tools())} == GAME_TOOLS
+    assert asyncio.run(process.mcp.list_tools()) == []
+    assert [spec.name for spec in default_server_specs()] == ["keyboard"]
 
 
-def test_create_keyboard_text_action_preserves_text():
-    server = _load_server_module()
-    result = server.create_keyboard_action(
-        name="Type command",
-        value="/truytim HuongYeu36",
-        text_input_enabled=True,
-    )
-
-    assert result["ok"] is True
-    assert result["action"]["value"] == "/truytim HuongYeu36"
-    assert result["action"]["text_input_enabled"] is True
+def test_daily_events_rejects_missing_game_window(monkeypatch) -> None:
+    monkeypatch.setattr(keyboard, "resolve_selected_process", lambda: (None, "No selected game process"))
+    result = keyboard.get_daily_events_dialog_info()
+    assert result["success"] is False
+    assert "No selected game process" in result["error"]
 
 
-def test_invalid_keyboard_action_is_rejected():
-    server = _load_server_module()
-    result = server.create_keyboard_action(name="", value="not-a-real-key")
-
-    assert result["ok"] is False
-    assert len(result["errors"]) == 2
-
-
-def test_run_keyboard_action_rejects_missing_game_window(monkeypatch):
-    server = _load_server_module()
-    monkeypatch.setattr(server, "resolve_selected_process", lambda: (None, "Chưa chọn process game"))
-
-    result = server.run_keyboard_action(
-        value="enter",
-    )
-
-    assert result["ok"] is False
-    assert "Chưa chọn process" in result["errors"][0]
-
-
-def test_list_game_windows_only_returns_selected_process_windows(monkeypatch):
-    server = _load_server_module()
-    monkeypatch.setattr(
-        server,
-        "resolve_selected_process",
-        lambda: (
-            {
-                "pid": 123,
-                "windows": [
-                    {"hwnd": 10, "title": "MU", "visible": True},
-                    {"hwnd": 11, "title": "Hidden", "visible": False},
-                ],
-            },
-            None,
-        ),
-    )
-
-    result = server.list_game_windows()
-
-    assert result == {"ok": True, "windows": [{"hwnd": 10, "title": "MU", "visible": True}]}
+def test_internal_window_selection_filters_hidden_windows(monkeypatch) -> None:
+    monkeypatch.setattr(keyboard, "resolve_selected_process", lambda: (
+        {"pid": 123, "windows": [
+            {"hwnd": 10, "title": "MU", "visible": True},
+            {"hwnd": 11, "title": "Hidden", "visible": False},
+        ]}, None,
+    ))
+    windows, error = keyboard._selected_visible_windows()
+    assert error is None
+    assert windows == [{"hwnd": 10, "title": "MU", "visible": True}]
