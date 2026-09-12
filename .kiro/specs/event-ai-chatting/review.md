@@ -1611,3 +1611,507 @@ None.
 ### Request
 
 Run the script with --direct --title NTD3006 to inspect the current game window.
+
+## REVIEW 2026-09-12 06:57:32
+
+- Review ID: REV-20260912-065732
+- Reviewer: Codex
+- Scope: Close Daily Events after reading in both MCP and direct script modes
+- Target Diff: `src/ai_control/dialog_actions.py`, `src/ai_control/daily_events_info.py`, `src/ai_control/companion_info.py`, `src/ai_control/servers/keyboard.py`, `mcp/config/mu_game_window.json`, `mcp/test_get_daily_events_dialog_info.py`, Daily Events tests/scenario and related documentation
+- Status: resolved
+
+### Conclusion
+
+Daily Events now clicks its top-right X after reading, including partial or failed OCR and dialogs that were already open. The close region is persisted relative to the title in teaching, based on the inspected NTD3006 screenshot. The existing companion close logic was extracted into a shared helper supporting title-relative and dialog-origin-relative teaching without changing companion behavior. Closure rechecks the current position, clicks the selected HWND, and verifies title disappearance. A missing capture cannot prove closure. Close failure preserves read counters while returning failure. Unverified-dialog paths do not click X. MCP and --direct share this implementation; the CLI also prints the close result.
+
+### Findings
+
+None.
+
+### Verification
+
+54 targeted tests passed, including successful and already-open reads followed by closing, moved-dialog X coordinates, failed OCR cleanup, unavailable OCR cleanup, close timeout preserving counters, missing capture after click, already-closed no-click behavior, and companion regressions. The MCP catalog remains five tools. Python syntax, teaching/scenario JSON, and git diff --check passed. No live game input was sent during this change; hardware delivery was simulated at the I/O boundary.
+
+### Open Questions
+
+None.
+
+### Request
+
+Rerun the same direct test command to use the updated close behavior; reconnect chat for an existing MCP session.
+
+## REVIEW 2026-09-12 07:30:47
+
+- Review ID: REV-20260912-073047
+- Reviewer: Codex
+- Scope: Add a consolidated current MCP tool catalog to requirements
+- Target File: `.kiro/specs/event-ai-chatting/requirements.md`
+- Status: resolved
+
+### Conclusion
+
+Requirements now has a dedicated `3.1. Danh mục MCP tool hiện có` section immediately after the architecture overview. It documents the exact five exposed game tools, inputs, behavior, principal result fields, and final dialog state. Shared result conventions explain selected-window ownership, scenario prompt loading, success semantics, OCR null versus zero, Daily Events and companion payloads, and required dialog-close verification. It explicitly states that scenario listing, process/window selection, and keyboard action construction are not exposed MCP tools.
+
+### Findings
+
+None.
+
+### Verification
+
+The live FastMCP registration returned exactly the five names documented in the new section. Markdown inspection and `git diff --check` passed for the requirements file. This documentation-only change did not require runtime regression tests.
+
+### Open Questions
+
+None.
+
+### Request
+
+No further update is required for this documentation scope.
+
+## REVIEW 2026-09-12 07:42:44
+
+- Review ID: REV-20260912-074244
+- Reviewer: Codex
+- Scope: Close Companion Management after the standalone open-and-verify MCP tool
+- Target Diff: `src/ai_control/companion_switcher.py`, `src/ai_control/servers/keyboard.py`, `tests/test_companion_mcp_flows.py`, `mcp/test_open_companion_management_dialog.py`, `scenario_engine/scenarios/open_companion_management_dialog.json`, `mcp/README.md`, `.kiro/specs/event-ai-chatting/requirements.md`
+- Status: resolved
+
+### Conclusion
+
+The standalone open_companion_management_dialog MCP tool now opens and image-verifies Manage Sub-Characters, clicks the taught X at the title-relative current dialog location, and verifies title disappearance. Close failure preserves open-dialog evidence and returns success=false with dialog_close.closed=false. The manual script uses the same wrapper. The lower-level opening helper remains open-only so switch_to_companion_character can click Enter Character before the dialog disappears. The requirements catalog and scenario assertion now require successful closure.
+
+### Findings
+
+None.
+
+### Verification
+
+55 targeted tests passed. Coverage includes successful open/verify/close, dialog location changes, close failure, the unchanged switch flow, companion information cleanup, Daily Events cleanup, and title matching. MCP discovery description and scenario close assertion were checked, the manual script imported and displayed help, Python/scenario syntax passed, and git diff --check passed. No live game input was sent during this change.
+
+### Open Questions
+
+None.
+
+### Request
+
+Reconnect Gemini Chat or restart the app to load the new standalone tool behavior.
+
+## REVIEW 2026-09-12 07:55:47
+
+- Review ID: REV-20260912-075547
+- Reviewer: Codex
+- Scope: Prevent companion tools from clicking an empty or visually uncertain slot
+- Target Diff: `src/ai_control/companion_switcher.py`, `src/ai_control/companion_info.py`, `src/ai_control/companion_summoner.py`, `mcp/config/mu_game_window.json`, summoned indicator assets, `tests/test_companion_mcp_flows.py`, MCP and requirements documentation
+- Status: resolved
+
+### Conclusion
+
+The previous precondition treated a low empty-slot template score as proof that a companion was summoned. This was unsafe when the configured ROI shifted or another game window obscured the selected client. Companion state is now tri-state. The empty icon is searched within a configured margin; a summoned state requires positive Play or Pause indicator matches in at least two sampled frames. If neither state is verified, the result is unknown and every companion flow refuses to click the slot.
+
+### Findings
+
+None.
+
+### Verification
+
+All 58 targeted companion, Daily Events, dialog-title, and keyboard MCP tests passed. Coverage includes a shifted empty icon, ambiguous imagery, an occluded colored slot, verified summoned indicators, and refusal to click unknown states. A live read-only check of NTD3006 returned `companion_state="unknown"` while its slot capture was obscured, and sent no input. JSON parsing, indicator asset loading, and `git diff --check` passed.
+
+### Open Questions
+
+None.
+
+### Request
+
+Restart or reconnect the app, then keep the selected game window unobstructed so capture can verify the slot before an action.
+
+## REVIEW 2026-09-12 12:22:33
+
+- Review ID: REV-20260912-122233
+- Reviewer: Codex
+- Scope: Audit click verification across the five exposed game tools
+- Target Diff: `src/ai_control/companion_switcher.py`, `src/ai_control/companion_summoner.py`, `tests/test_companion_mcp_flows.py`, MCP and requirements documentation
+- Status: resolved
+
+### Conclusion
+
+All exposed mouse actions now require current visual evidence for their intended target. Companion Management opening requires a positively verified summoned slot. Switching re-verifies both the dialog title and Enter Character button immediately before clicking Enter Character. Summoning requires a verified empty slot before opening Character List, a verified Character List title and one unique OCR target before selecting a character, and positive Play/Pause evidence before success. Character List error cleanup now captures and re-verifies the current title before clicking X. Daily Events and companion-information cleanup use the shared close helper, which re-verifies the current title before clicking X.
+
+### Findings
+
+None.
+
+### Verification
+
+All 59 targeted tests passed. The new regression test changes the captured frame after Character List OCR fails and confirms that the stale title coordinates are rejected without sending the X click. Existing tests cover wrong or absent titles, uncertain and occluded companion slots, ambiguous OCR, failed opening, and failed close verification. `git diff --check` passed with line-ending notices only.
+
+### Open Questions
+
+None.
+
+### Request
+
+Restart or reconnect the app to load the updated tool implementations.
+
+## REVIEW 2026-09-12 12:28:42
+
+- Review ID: REV-20260912-122842
+- Reviewer: Codex
+- Scope: Add brightness-gated companion slot verification to all companion-opening tools
+- Target Diff: `mcp/config/mu_game_window.json`, `src/ai_control/companion_switcher.py`, `tests/test_companion_mcp_flows.py`, MCP and requirements documentation
+- Status: resolved
+
+### Conclusion
+
+The shared companion-state reader now measures the configured inner icon region at the 75th brightness percentile. Existing teaching images measured approximately 72 for the empty icon and 104-123 for occupied icons, so the JSON threshold is 85. A summoned state now requires both brightness at or above this threshold and a matching Play/Pause indicator in at least two of three frames. The three affected tools share this reader and refuse to click for empty or unknown states.
+
+### Findings
+
+None.
+
+### Verification
+
+All 60 targeted tests passed. New coverage proves that an indicator-like match without a bright character icon remains unknown and sends no click. Existing coverage confirms empty, shifted-empty, occupied, ambiguous, and occluded slot handling. JSON parsing and `git diff --check` passed with line-ending notices only.
+
+### Open Questions
+
+None.
+
+### Request
+
+Restart or reconnect the app to load the brightness teaching and shared state-reader update.
+
+## REVIEW 2026-09-12 14:23:33
+
+- Review ID: REV-20260912-142333
+- Reviewer: Codex
+- Scope: Calibrate the summoned companion brightness threshold against live game windows
+- Target Diff: `mcp/config/mu_game_window.json`
+- Status: resolved
+
+### Conclusion
+
+The initial brightness threshold of 85 was derived from saved teaching screenshots but rejected real summoned icons whose live 75th-percentile brightness was 80-81. The threshold is now 75. Brightness remains only one half of positive summoned verification: a Play/Pause indicator must also meet its template threshold in at least two of three frames, so lowering the brightness threshold does not turn brightness alone into permission to click.
+
+### Findings
+
+None.
+
+### Verification
+
+Read-only checks sent no input. NTD0104 and NTD3001 now classify as summoned with indicator scores around 0.87-0.88 and brightness from 75.5 to 83. zPhoenix, NTD1007, and NTD2008 remain unknown because one or both positive conditions fail. All 60 targeted tests passed, JSON configuration parsing passed, and `git diff --check` reported line-ending notices only.
+
+### Open Questions
+
+None.
+
+### Request
+
+Restart or reconnect the app before retrying the switch scenario.
+
+## REVIEW 2026-09-12 14:35:58
+
+- Review ID: REV-20260912-143558
+- Reviewer: Codex
+- Scope: Add a scenario that switches to the companion only when its Level is 400
+- Target Diff: `scenario_engine/scenarios/switch_to_companion_if_level_400.json`, `.kiro/specs/event-ai-chatting/requirements.md`
+- Status: resolved
+
+### Conclusion
+
+The new ready scenario first calls get_companion_summoned_state and requires a successful, positively summoned result with a non-null companion Level. It normalizes the returned Level by reading its first integer and calls switch_to_companion_character only when that integer equals 400. Any other Level completes without switching. Missing or uncertain companion information fails before the switch tool can run. No MCP tool was added, preserving the five-tool exposure limit.
+
+### Findings
+
+None.
+
+### Verification
+
+The new JSON parsed successfully, its MCP steps reference the existing information and switch tools in the required order, and its false branch terminates without a switch call. ScenarioToolClient loaded six valid catalog entries including this scenario. `git diff --check` passed with line-ending notices only.
+
+### Open Questions
+
+None.
+
+### Request
+
+Reconnect Gemini Chat or reselect the process to load the refreshed scenario catalog.
+
+## REVIEW 2026-09-12 14:43:57
+
+- Review ID: REV-20260912-144357
+- Reviewer: Codex
+- Scope: Report actual companion information and expose uncertain manual state checks
+- Target Diff: `scenario_engine/scenarios/get_companion_summoned_state.json`, `mcp/test_template_match_companion_dialog.py`, `.kiro/specs/event-ai-chatting/requirements.md`
+- Status: resolved
+
+### Conclusion
+
+The scenario previously ended with a fixed explanatory sentence, allowing the final response to omit the actual tool fields. Its result contract now renders companion_summoned plus name, server, map, level, reset, and status from state_result, distinguishes an empty slot, and includes the actual error and companion_state on failure. The manual read-only state script now reports success=false and exits nonzero for an unverified state instead of wrapping unknown evidence in success=true.
+
+### Findings
+
+None.
+
+### Verification
+
+A read-only LuckCoin03 capture showed VS Code covering most of the selected game client. The sampled slot therefore came from VS Code pixels and correctly remained unknown with brightness 46 and indicator score 0.359; no input was sent. All six scenarios loaded as valid, the updated script compiled, 27 companion-flow tests passed, and `git diff --check` reported line-ending notices only.
+
+### Open Questions
+
+None.
+
+### Request
+
+Keep LuckCoin03 unobstructed, then reconnect Gemini Chat or reselect the process before rerunning the scenario.
+
+## REVIEW 2026-09-12 14:50:28
+
+- Review ID: REV-20260912-145028
+- Reviewer: Codex
+- Scope: Wake battery-saver game windows and recognize dimmed companion icons
+- Target Diff: `src/ai_control/servers/keyboard.py`, `src/ai_control/companion_switcher.py`, `mcp/config/mu_game_window.json`, related tests and documentation
+- Status: resolved
+
+### Conclusion
+
+All five exposed tools now attempt one LEFT_SHIFT key down/up on the selected HWND and wait 300 ms before recognition. LEFT_SHIFT was selected because it creates keyboard activity without opening a dialog or activating a skill. Wake failure is reported as evidence and does not bypass visual verification. Companion recognition now has a low-power path requiring both brightness of at least 55 and a stronger indicator score of at least 0.92 in two of three frames. The empty-slot template remains the first and highest-priority check.
+
+### Findings
+
+None.
+
+### Verification
+
+All 62 targeted tests passed, including the configured LEFT_SHIFT wake command and a dimmed summoned-icon regression. A live read-only LuckCoin03 capture, after the window was unobstructed, classified as summoned in all three samples with brightness 61 and indicator scores about 0.937. The direct wake attempt from this terminal returned Windows error 5 because the game has a higher integrity level; this exact failure will now appear in wake_up.error while recognition continues. No mouse click was sent during live verification.
+
+### Open Questions
+
+None.
+
+### Request
+
+Run Auto_MU at the same privilege level as the game if wake_up reports Access is denied, then reconnect Gemini Chat to load the update.
+
+## REVIEW 2026-09-12 15:50:36
+
+- Review ID: REV-20260912-155036
+- Reviewer: Codex
+- Scope: Test LEFT_SHIFT wake-up on the former NTD2008 window and increase settle delay
+- Target Diff: `mcp/config/mu_game_window.json`, `tests/test_mcp_keyboard_server.py`, MCP and requirements documentation
+- Status: resolved
+
+### Conclusion
+
+The former NTD2008 HWND 525096 is now titled NTD2006 after a character switch. A direct LEFT_SHIFT wake test could not deliver either key message because Windows returned error 5, Access is denied. This proves that the current non-elevated terminal cannot test whether the game reacts to LEFT_SHIFT; it does not prove the key itself is ineffective. The configured post-wake settle delay is now 500 ms. Low-power visual verification remains available when wake delivery fails.
+
+### Findings
+
+None.
+
+### Verification
+
+Before and after the rejected wake attempt, the slot remained visually identical: summoned, brightness 61, Play indicator score about 0.939. No click or accepted key input was sent. All 32 relevant keyboard-server and companion-flow tests passed. `git diff --check` passed with line-ending notices only.
+
+### Open Questions
+
+The key's in-game wake behavior can only be confirmed from an Auto_MU process running at the same integrity level as the elevated game process.
+
+### Request
+
+Run Auto_MU as Administrator, reconnect Gemini Chat, and inspect `wake_up.success` on the next tool call.
+
+## REVIEW 2026-09-12 15:54:58
+
+- Review ID: REV-20260912-155458
+- Reviewer: Codex
+- Scope: Verify LEFT_SHIFT wake delivery from an elevated process
+- Target Diff: Runtime verification only
+- Status: resolved
+
+### Conclusion
+
+An elevated Python process successfully delivered LEFT_SHIFT key down and key up to HWND 525096, the former NTD2008 window now titled NTD2006. The configured helper waited 500 ms. The captured frame changed after delivery while companion recognition remained stable and verified as summoned.
+
+### Findings
+
+None.
+
+### Verification
+
+The elevated run returned wake_up.success=true with key LEFT_SHIFT and settle_ms=500. Mean absolute frame difference before and after wake was 6.86585625. Companion state was summoned both before and after, with brightness 61 and Play indicator score about 0.942 in all three samples. No mouse click was sent.
+
+### Open Questions
+
+None.
+
+### Request
+
+Run Auto_MU at the same Administrator level as the game so production MCP calls can deliver the wake key.
+
+## REVIEW 2026-09-12 16:02:23
+
+- Review ID: REV-20260912-160223
+- Reviewer: Codex
+- Scope: Validate background-only wake behavior and remove the unverified wake claim
+- Target Diff: `src/ai_control/servers/keyboard.py`, `mcp/config/mu_game_window.json`, related tests and documentation
+- Status: resolved
+
+### Conclusion
+
+The earlier elevated LEFT_SHIFT result proved message delivery but did not prove a background wake. A foreground activation test did wake the renderer, but foreground activation is explicitly disallowed by the user. Controlled elevated background tests then delivered F24, Scroll Lock, and Caps Lock through PostMessage while keeping another window in the foreground. None changed the dimmed slot brightness. LEFT_SHIFT had already shown the same behavior. The automatic wake step and its misleading success payload have therefore been removed. Companion tools continue to recognize the dimmed UI through the verified low-power thresholds.
+
+### Findings
+
+None.
+
+### Verification
+
+For HWND 525096, each background key test retained the foreground window and kept slot brightness at 61 before and after 500 ms. F24, Scroll Lock, and Caps Lock were delivered successfully without clicks or game action. The low-power state continued to verify the companion through a Play indicator score around 0.94. All 61 targeted tests passed, JSON parsing passed, and `git diff --check` passed with line-ending notices only.
+
+### Open Questions
+
+No safe keyboard PostMessage tested so far wakes this client while it remains in the background.
+
+### Request
+
+Use low-power visual verification for background tools. Do not claim the game was awakened unless a future client-specific wake mechanism can be verified without foreground activation.
+
+## REVIEW 2026-09-12 16:03:55
+
+- Review ID: REV-20260912-160355
+- Reviewer: Codex
+- Scope: Test background J key as a wake-up candidate
+- Target Diff: Runtime verification only
+- Status: resolved
+
+### Conclusion
+
+The J key was delivered to the target through background PostMessage without activating the target window, but it did not wake the client.
+
+### Findings
+
+None.
+
+### Verification
+
+HWND 525096 remained in the background. Its slot brightness stayed at 61 before and after 500 ms, and the Play indicator score stayed at approximately 0.940. No mouse click was sent.
+
+### Open Questions
+
+None.
+
+### Request
+
+Do not use J as the background wake key.
+
+## REVIEW 2026-09-12 16:19:36
+
+- Review ID: REV-20260912-161936
+- Reviewer: Codex
+- Scope: Distinguish selected-window errors from companion action and verification failures
+- Target Diff: MCP result contract, Gemini system prompt, conditional companion scenario, requirements, documentation, and tests
+- Status: resolved
+
+### Conclusion
+
+The selected PID and HWND were valid. The reported runtime failure occurred after the companion slot click because the Manage Sub-Characters title image was not matched. Gemini incorrectly converted that verification failure into a request to select a game window. MCP results now expose `selection_required=true` only for actual process/window selection errors and explicitly return `selection_required=false` for focus, capture, OCR, click, and verification failures. The prompt and conditional scenario now require this flag before asking the user to select a window.
+
+### Findings
+
+None.
+
+### Verification
+
+The current selection store resolved to one live visible HWND. The targeted test suite passed with 61 tests. The conditional scenario JSON parsed successfully, and `git diff --check` passed with line-ending notices only. A prior elevated runtime check also verified that foreground focus wakes the selected game without sending a key or waiting, then restores the previous foreground window.
+
+### Open Questions
+
+The separate runtime reason why the Manage Sub-Characters title did not match after the slot click remains visible as the real tool error and can now be investigated without being masked as a selection problem.
+
+### Request
+
+Reload the Gemini Chat session so it receives the updated system prompt and scenario catalog. Do not ask the user to select a window unless the tool result explicitly contains `selection_required=true`.
+
+## REVIEW 2026-09-12 16:28:17
+
+- Review ID: REV-20260912-162817
+- Reviewer: Codex
+- Scope: Diagnose and fix missing companion Server OCR
+- Target Diff: Companion OCR teaching, runtime reader, diagnostic script, documentation, requirements, and tests
+- Status: resolved
+
+### Conclusion
+
+The Server ROI was correctly positioned, but its runtime value was a single yellow glyph only about eight pixels tall. The global 2x fallback scale and unrestricted EasyOCR call failed to detect it. The Server teaching now applies 4x scaling with a numeric allowlist, and Level applies 4x scaling independently. The runtime reader supports per-region scale, padding, and allowlist overrides without changing other fields.
+
+### Findings
+
+None.
+
+### Verification
+
+An elevated live run against selected HWND 525096 returned success with Server `6`, Level `0.mt (0.000%)`, no missing fields, and `dialog_close.closed=true`. Offline OCR against the captured Server crop returned `6` with confidence above 0.9999. All 62 targeted tests passed. Teaching JSON parsing, Python compilation, and `git diff --check` passed; diff check emitted line-ending notices only.
+
+### Open Questions
+
+None.
+
+### Request
+
+Use `mcp/test_get_companion_dialog_info.py` to reproduce the current MCP flow and optionally save its runtime result and OCR crops.
+
+## REVIEW 2026-09-12 16:32:09
+
+- Review ID: REV-20260912-163209
+- Reviewer: Codex
+- Scope: Replace foreground-focus wake with a background center click
+- Target Diff: MCP wrapper wake implementation, test scripts, requirements, documentation, and tests
+- Status: resolved
+
+### Conclusion
+
+The MCP wrapper now wakes the selected game by posting one mouse move, left-button down, and left-button up sequence at the center of its client area. It does not request foreground activation, send a key, or wait. Foreground restoration was removed because the wrapper no longer changes foreground.
+
+### Findings
+
+None.
+
+### Verification
+
+An elevated live test against NTD2008, HWND 525096, posted the click at client coordinate `(400, 300)` for an `800x600` client. Foreground HWND remained 262584 before and after the click. Companion slot brightness increased from 61.0 to 101.25 after a separate 500 ms observation period, proving the game left its dimmed state. The wake result itself reported `delay_ms=0`, `focus_requested=false`, and `foreground_changed=false`. All 63 targeted tests passed.
+
+### Open Questions
+
+None.
+
+### Request
+
+Use the background center-click wake before each game tool capture.
+
+## REVIEW 2026-09-12 16:37:11
+
+- Review ID: REV-20260912-163711
+- Reviewer: Codex
+- Scope: Change the conditional companion switch from exact Level 400 to above Level 400
+- Target Diff: Conditional scenario and requirements
+- Status: resolved
+
+### Conclusion
+
+The conditional scenario now treats the `.mt`/`,mt` suffix as proof that the companion is above Level 400 and calls `switch_to_companion_character`. A `.lv`/`,lv` suffix does not call the switch tool. The leading number is no longer compared with 400 because it represents Master Level when the suffix is `mt`; therefore `0.mt (0.000%)` qualifies.
+
+### Findings
+
+None.
+
+### Verification
+
+The scenario catalog loaded all six scenario files successfully and the updated condition contains explicit `mt` and `lv` branches. All 63 targeted tests passed, and `git diff --check` passed with line-ending notices only.
+
+### Open Questions
+
+None.
+
+### Request
+
+Reload the Gemini Chat session so its immutable scenario catalog includes the updated condition.

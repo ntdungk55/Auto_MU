@@ -2,6 +2,9 @@
 
 import asyncio
 
+import win32con
+import win32gui
+
 from src.ai_control.servers import keyboard, process
 from src.ai_control.server_registry import default_server_specs
 
@@ -22,6 +25,7 @@ def test_daily_events_rejects_missing_game_window(monkeypatch) -> None:
     monkeypatch.setattr(keyboard, "resolve_selected_process", lambda: (None, "No selected game process"))
     result = keyboard.get_daily_events_dialog_info()
     assert result["success"] is False
+    assert result["selection_required"] is True
     assert "No selected game process" in result["error"]
 
 
@@ -35,3 +39,28 @@ def test_internal_window_selection_filters_hidden_windows(monkeypatch) -> None:
     windows, error = keyboard._selected_visible_windows()
     assert error is None
     assert windows == [{"hwnd": 10, "title": "MU", "visible": True}]
+
+
+def test_wake_clicks_client_center_without_changing_foreground(monkeypatch) -> None:
+    messages = []
+    monkeypatch.setattr(win32gui, "IsWindow", lambda hwnd: hwnd == 10)
+    monkeypatch.setattr(win32gui, "IsWindowVisible", lambda hwnd: hwnd == 10)
+    monkeypatch.setattr(win32gui, "GetClientRect", lambda hwnd: (0, 0, 800, 600))
+    monkeypatch.setattr(win32gui, "GetForegroundWindow", lambda: 99)
+    monkeypatch.setattr(win32gui, "PostMessage", lambda hwnd, message, wparam, lparam: messages.append(
+        (hwnd, message, wparam, lparam)
+    ))
+
+    result = keyboard._wake_selected_window({"hwnd": 10})
+
+    expected_lparam = (300 << 16) | 400
+    assert messages == [
+        (10, win32con.WM_MOUSEMOVE, 0, expected_lparam),
+        (10, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, expected_lparam),
+        (10, win32con.WM_LBUTTONUP, 0, expected_lparam),
+    ]
+    assert result["method"] == "background_center_click"
+    assert (result["x"], result["y"]) == (400, 300)
+    assert result["focus_requested"] is False
+    assert result["foreground_changed"] is False
+    assert result["delay_ms"] == 0

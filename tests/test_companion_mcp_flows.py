@@ -29,8 +29,10 @@ def game(monkeypatch: pytest.MonkeyPatch) -> dict:
     character_list = cv2.imread(str(ROOT / "assets/character_list_dialog.png"))
     management = cv2.imread(str(ROOT / "assets/companion_management_dialog.png"))
     assert character_list is not None and management is not None
+    summoned = np.zeros((600, 800, 3), dtype=np.uint8)
+    summoned[529:562, 640:672] = management[529:562, 640:672]
     state = {
-        "unsummoned": unsummoned, "summoned": np.zeros((600, 800, 3), dtype=np.uint8),
+        "unsummoned": unsummoned, "summoned": summoned,
         "character_list": character_list, "management": management,
         "frames": [], "clicks": [], "captures": [], "ocr_calls": 0, "close_works": True,
         "items": [([[10, 10], [70, 10], [70, 30], [10, 30]], "NTD3001", 0.99)],
@@ -44,7 +46,7 @@ def game(monkeypatch: pytest.MonkeyPatch) -> dict:
 
     def click(self: object, x: int, y: int) -> None:
         state["clicks"].append((x, y))
-        if (x, y) in ((761, 114), (581, 144)) and state["close_works"]:
+        if (x, y) in ((423, 37), (761, 114), (581, 144)) and state["close_works"]:
             state["frames"] = [state["summoned"]]
 
     class OCR:
@@ -60,6 +62,10 @@ def game(monkeypatch: pytest.MonkeyPatch) -> dict:
     monkeypatch.setattr(win32gui, "IsWindow", lambda hwnd: hwnd == TARGET["hwnd"])
     monkeypatch.setattr(win32gui, "IsWindowVisible", lambda hwnd: hwnd == TARGET["hwnd"])
     monkeypatch.setattr(keyboard, "_selected_visible_windows", lambda: ([dict(TARGET)], None))
+    monkeypatch.setattr(keyboard, "_wake_selected_window", lambda target: {
+        "success": True, "method": "background_center_click", "hwnd": TARGET["hwnd"],
+        "x": 400, "y": 300, "focus_requested": False, "key_sent": False, "delay_ms": 0,
+    })
     return state
 
 
@@ -88,6 +94,24 @@ def test_unmatched_or_ambiguous_name_closes_dialog(game: dict, duplicate: bool) 
     assert game["clicks"][-1] == (result["close_button"]["click_x"], result["close_button"]["click_y"])
 
 
+def test_unmatched_name_does_not_close_from_stale_title(game: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    game["frames"] = [game["unsummoned"], game["character_list"]]
+    game["items"] = []
+
+    class OCR:
+        def readtext(self: object, image: np.ndarray, **kwargs: object) -> list:
+            game["ocr_calls"] += 1
+            game["frames"] = [game["summoned"]]
+            return []
+
+    monkeypatch.setattr(EasyOCREngine, "_get_reader", lambda self: OCR())
+    result = keyboard.summon_companion_character("NTD3001")
+    assert result["success"] is False
+    assert result["dialog_close_requested"] is False
+    assert result["close_button"]["click_sent"] is False
+    assert game["clicks"] == [(656, 545)]
+
+
 def test_already_summoned_prevents_clicks(game: dict) -> None:
     game["frames"] = [game["summoned"]]
     result = keyboard.summon_companion_character("NTD3001")
@@ -95,6 +119,74 @@ def test_already_summoned_prevents_clicks(game: dict) -> None:
     assert "already summoned" in result["error"]
     assert not game["clicks"]
     assert game["ocr_calls"] == 0
+
+
+def test_shifted_empty_slot_is_detected_before_click(game: dict) -> None:
+    frame = np.zeros((602, 800, 3), dtype=np.uint8)
+    icon = cv2.imread(str(ROOT / "assets/companion_management1_not_summoned.png"))
+    frame[533:566, 640:672] = icon
+    game["frames"] = [frame]
+    state = switcher.get_companion_summoned_state(TARGET["hwnd"])
+    assert state["companion_summoned"] is False
+    assert state["companion_state"] == "not_summoned"
+    assert state["not_summoned_icon_score"] >= state["not_summoned_threshold"]
+    result = switcher.open_companion_management_dialog(TARGET)
+    assert result["success"] is False
+    assert not game["clicks"]
+
+
+def test_ambiguous_slot_state_refuses_to_click(game: dict) -> None:
+    template = cv2.imread(str(ROOT / "assets/companion_management1_not_summoned.png"), cv2.IMREAD_GRAYSCALE)
+    noise = np.random.default_rng(7).integers(0, 256, template.shape, dtype=np.uint8)
+    blend = np.clip(0.64 * template.astype(np.float32) + 0.36 * noise, 0, 255).astype(np.uint8)
+    frame = np.zeros((600, 800, 3), dtype=np.uint8)
+    frame[529:562, 640:672] = cv2.cvtColor(blend, cv2.COLOR_GRAY2BGR)
+    game["frames"] = [frame]
+    state = switcher.get_companion_summoned_state(TARGET["hwnd"])
+    assert state["companion_summoned"] is None
+    assert state["companion_state"] == "unknown"
+    result = switcher.open_companion_management_dialog(TARGET)
+    assert result["success"] is False
+    assert "uncertain" in result["error"]
+    assert not game["clicks"]
+
+
+def test_occluded_slot_refuses_to_click(game: dict) -> None:
+    frame = np.zeros((602, 800, 3), dtype=np.uint8)
+    frame[523:568, 634:678] = (25, 80, 140)
+    game["frames"] = [frame]
+    state = switcher.get_companion_summoned_state(TARGET["hwnd"])
+    assert state["companion_summoned"] is None
+    assert state["companion_state"] == "unknown"
+    result = switcher.open_companion_management_dialog(TARGET)
+    assert result["success"] is False
+    assert "uncertain" in result["error"]
+    assert not game["clicks"]
+
+
+def test_indicator_without_bright_character_icon_refuses_to_click(game: dict) -> None:
+    frame = np.zeros((600, 800, 3), dtype=np.uint8)
+    indicator = cv2.imread(str(ROOT / "assets/companion_summoned_play_indicator.png"))
+    assert indicator is not None
+    frame[529:542, 640:652] = indicator
+    game["frames"] = [frame]
+    state = switcher.get_companion_summoned_state(TARGET["hwnd"])
+    assert state["companion_summoned"] is None
+    assert state["companion_state"] == "unknown"
+    assert any(sample["matched"] for sample in state["summoned_indicator_samples"])
+    assert not any(sample["brightness_matched"] for sample in state["summoned_indicator_samples"])
+    result = switcher.open_companion_management_dialog(TARGET)
+    assert result["success"] is False
+    assert not game["clicks"]
+
+
+def test_dimmed_low_power_character_icon_is_still_verified(game: dict) -> None:
+    dimmed = cv2.convertScaleAbs(game["summoned"], alpha=0.5, beta=0)
+    game["frames"] = [dimmed]
+    state = switcher.get_companion_summoned_state(TARGET["hwnd"])
+    assert state["companion_summoned"] is True
+    assert state["companion_state"] == "summoned"
+    assert all(sample["low_power_matched"] for sample in state["summoned_indicator_samples"])
 
 
 def test_icon_must_change_before_reporting_success(game: dict) -> None:
@@ -113,13 +205,24 @@ def test_absent_title_prevents_character_selection(game: dict) -> None:
     assert game["ocr_calls"] == 0
 
 
-def test_open_management_tool_only_opens_dialog(game: dict) -> None:
+def test_open_management_tool_verifies_then_closes_dialog(game: dict) -> None:
     game["frames"] = [game["summoned"], game["management"]]
     result = keyboard.open_companion_management_dialog()
     assert result["success"] is True
     assert result["verification"]["method"] == "template_matching"
-    assert game["clicks"] == [(656, 545)]
+    assert game["clicks"] == [(656, 545), (423, 37)]
+    assert result["dialog_close"]["closed"] is True
     assert game["ocr_calls"] == 0
+
+
+def test_open_management_close_failure_returns_failure(game: dict) -> None:
+    game["frames"] = [game["summoned"], game["management"]]
+    game["close_works"] = False
+    result = switcher.verify_and_close_companion_management_dialog(TARGET, close_timeout_seconds=0.1)
+    assert result["success"] is False
+    assert result["verification"]["success"] is True
+    assert result["dialog_close"]["closed"] is False
+    assert game["clicks"] == [(656, 545), (423, 37)]
 
 
 def test_switch_still_enters_and_verifies_title(game: dict, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -170,6 +273,7 @@ def test_info_missing_ocr_returns_partial_failure(game: dict, monkeypatch: pytes
     game["items"] = []
     result = keyboard.get_companion_summoned_state()
     assert result["success"] is False
+    assert result["selection_required"] is False
     assert set(result["missing_fields"]) == {"name", "server", "map", "level", "reset", "status"}
     assert all(value is None for value in result["character"].values())
     assert game["clicks"] == [(761, 114)]
@@ -199,6 +303,31 @@ def test_info_ocr_fallback_and_numeric_level_correction(game: dict, monkeypatch:
     assert result["character"]["level"] == "0.mt (0.000%)"
     assert result["fields"]["level"]["raw_text"] == "o.mt (0.000%)"
     assert game["ocr_calls"] == 1
+
+
+def test_info_uses_taught_scale_and_digit_allowlist_for_small_fields(
+    game: dict, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    game["frames"] = [cv2.imread(str(ROOT / "assets/companion_management_ntd3006.png"))]
+    values = iter(["NTD3001", "", "Loren Market (233,30)", "", "137.rs", "Waiting for control"])
+    monkeypatch.setattr(WinRTOCREngine, "recognize", lambda self, image: next(values))
+    requests: list[dict] = []
+
+    class OCR:
+        def readtext(self, image: np.ndarray, **kwargs: object) -> list:
+            requests.append({"shape": image.shape[:2], "options": kwargs})
+            text = "6" if kwargs.get("allowlist") else "O.mt (0.000%)"
+            return [([[0, 0], [10, 0], [10, 10], [0, 10]], text, 0.99)]
+
+    monkeypatch.setattr(EasyOCREngine, "_get_reader", lambda self: OCR())
+    result = keyboard.get_companion_summoned_state()
+    assert result["success"] is True
+    assert result["character"]["server"] == "6"
+    assert result["character"]["level"] == "0.mt (0.000%)"
+    assert requests[0]["options"]["allowlist"] == "0123456789"
+    assert requests[0]["shape"] == (112, 572)
+    assert "allowlist" not in requests[1]["options"]
+    assert requests[1]["shape"] == (116, 572)
 
 
 def test_info_close_failure_preserves_character_fields(game: dict) -> None:

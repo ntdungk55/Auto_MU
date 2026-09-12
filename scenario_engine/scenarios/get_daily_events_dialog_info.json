@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "get_daily_events_dialog_info",
   "name": "Đọc lượt Daily Events",
-  "description": "Mở Daily Events nếu cần, verify ảnh tiêu đề rồi đọc lượt Boss, đào ngọc, BC, Devil và IG theo teaching.",
+  "description": "Mở Daily Events nếu cần, verify ảnh tiêu đề rồi đọc lượt Boss, đào ngọc, BC, Devil và IG theo teaching. Đọc xong click X và xác minh dialog đã đóng, kể cả khi OCR lỗi.",
   "status": "ready",
   "preconditions": [
     "Gemini Chat đã chọn window MU GameThuVN; app đồng bộ PID/HWND bằng hàm nội bộ.",
@@ -23,7 +23,8 @@
       "save_result_as": "daily_events_result",
       "assert": [
         "${daily_events_result.success} == true",
-        "${daily_events_result.verification.success} == true"
+        "${daily_events_result.verification.success} == true",
+        "${daily_events_result.dialog_close.closed} == true"
       ],
       "on_success": "complete",
       "on_failure": "failed"
@@ -40,6 +41,6 @@
   },
   "result": {
     "success_message": "Đã đọc năm lượt còn lại trong remaining: boss, jewel, bc, devil và ig.",
-    "failure_message": "Không mở, không xác minh được dialog hoặc không đọc đủ lượt; xem error, fields và missing_fields."
+    "failure_message": "Không mở, không đọc đủ lượt hoặc không đóng được dialog; xem error, fields, missing_fields và dialog_close."
   }
 }

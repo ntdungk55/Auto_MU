@@ -73,16 +73,33 @@ def _character_list_close_roi() -> tuple[int, int, int, int]:
     return int(roi["x1"]), int(roi["y1"]), int(roi["x2"]), int(roi["y2"])
 
 
-def _close_character_list(hwnd: int, title_bbox: dict[str, int]) -> dict[str, int]:
-    """Post a no-focus click to the configured Character List close button."""
+def _close_character_list(hwnd: int) -> dict[str, Any]:
+    """Re-verify Character List, then click its configured close button."""
+    image = GameWindowCapture().capture(hwnd)
+    if image is None:
+        return {"click_sent": False, "verified": False, "error": "Could not capture Character List before closing"}
+    title_match = _title_template_match(image)
+    threshold = float(_title_anchor_config()["templateThreshold"])
+    if title_match["score"] < threshold:
+        return {
+            "click_sent": False, "verified": False, "score": title_match["score"],
+            "threshold": threshold, "error": "Character List title is no longer verified; refusing to click X",
+        }
+    title_bbox = title_match["bbox"]
     relative_x1, relative_y1, relative_x2, relative_y2 = _character_list_close_roi()
     x1 = int(title_bbox["x1"]) + relative_x1
     y1 = int(title_bbox["y1"]) + relative_y1
     x2 = int(title_bbox["x1"]) + relative_x2
     y2 = int(title_bbox["y1"]) + relative_y2
+    height, width = image.shape[:2]
+    if not (0 <= x1 < x2 <= width and 0 <= y1 < y2 <= height):
+        return {"click_sent": False, "verified": True, "error": "Character List close button is outside the capture"}
     click_x, click_y = (x1 + x2) // 2, (y1 + y2) // 2
     MouseController(target_window_hwnd=hwnd).click_at_client(click_x, click_y)
-    return {"x1": x1, "y1": y1, "x2": x2, "y2": y2, "click_x": click_x, "click_y": click_y}
+    return {
+        "x1": x1, "y1": y1, "x2": x2, "y2": y2, "click_x": click_x, "click_y": click_y,
+        "click_sent": True, "verified": True, "score": title_match["score"], "threshold": threshold,
+    }
 
 
 def _read_character_list(image: Any, title_bbox: dict[str, int]) -> dict[str, Any]:
@@ -155,7 +172,7 @@ def _wait_for_companion_summon(hwnd: int, timeout_seconds: float) -> dict[str, A
     deadline = time.monotonic() + max(0.1, timeout_seconds)
     while time.monotonic() < deadline:
         companion_state = get_companion_summoned_state(hwnd)
-        if companion_state["companion_summoned"]:
+        if companion_state["companion_summoned"] is True:
             return companion_state
         time.sleep(0.05)
     return None
@@ -182,8 +199,10 @@ def summon_companion_character(
             raise ValueError("Character List templateThreshold must be greater than 0 and at most 1")
         state = get_companion_summoned_state(hwnd)
         result["before_companion_state"] = state
-        if state["companion_summoned"]:
+        if state["companion_summoned"] is True:
             raise RuntimeError("Companion is already summoned")
+        if state["companion_summoned"] is not False:
+            raise RuntimeError("Companion slot 1 state is uncertain; refusing to click")
         x, y = _open_button_center()
         mouse = MouseController(target_window_hwnd=hwnd)
         mouse.click_at_client(x, y)
@@ -206,8 +225,8 @@ def summon_companion_character(
                 if selected_item is None:
                     raise RuntimeError(f"Target character was not uniquely found by OCR: {target_character}")
             except Exception:
-                result["close_button"] = _close_character_list(hwnd, title_match["bbox"])
-                result["dialog_close_requested"] = True
+                result["close_button"] = _close_character_list(hwnd)
+                result["dialog_close_requested"] = result["close_button"]["click_sent"]
                 raise
             bbox = selected_item["bbox"]
             mouse.click_at_client((bbox["x1"] + bbox["x2"]) // 2, (bbox["y1"] + bbox["y2"]) // 2)

@@ -20,7 +20,9 @@
     }
   ],
   "result": {
-    "success_message": "Thông tin nhân vật phụ nằm trong character; nếu companion_summoned=false thì slot chưa có nhân vật phụ.",
-    "failure_message": "Không mở, không đọc đủ thông tin hoặc không đóng được dialog; xem error, fields, missing_fields và dialog_close."
+    "success_message": "companion_summoned=${state_result.companion_summoned}; Tên=${state_result.character.name}; Server=${state_result.character.server}; Map=${state_result.character.map}; Level=${state_result.character.level}; Reset=${state_result.character.reset}; Status=${state_result.character.status}.",
+    "empty_message": "companion_summoned=false; slot 1 chưa có nhân vật phụ, character=null.",
+    "failure_message": "Không đọc chắc chắn được thông tin nhân vật phụ: ${state_result.error}. Trạng thái slot=${state_result.companion_state}; missing_fields=${state_result.missing_fields}; dialog_close=${state_result.dialog_close}.",
+    "response_rule": "Phải trả các giá trị thật từ state_result theo mẫu phù hợp; không lặp lại mô tả chung của scenario và không tuyên bố đã đọc được character khi success không bằng true."
   }
 }

@@ -191,6 +191,30 @@
       "clickable": true,
       "notSummonedTemplate": "assets/companion_management1_not_summoned.png",
       "notSummonedThreshold": 0.7,
+      "templateSearchMargin": 6,
+      "stateSampleCount": 3,
+      "stateSampleIntervalMs": 50,
+      "summonedRequiredSamples": 2,
+      "brightnessRoiRelative": {
+        "x1": 4,
+        "y1": 4,
+        "x2": 28,
+        "y2": 29
+      },
+      "brightnessPercentile": 75,
+      "summonedBrightnessThreshold": 75,
+      "lowPowerBrightnessThreshold": 55,
+      "lowPowerIndicatorThreshold": 0.92,
+      "summonedIndicatorTemplates": [
+        {
+          "path": "assets/companion_summoned_pause_indicator.png",
+          "threshold": 0.85
+        },
+        {
+          "path": "assets/companion_summoned_play_indicator.png",
+          "threshold": 0.85
+        }
+      ],
       "roi": {
         "x1": 640,
         "y1": 529,
@@ -287,6 +311,18 @@
               "y2": 257
             }
           }
+        },
+        "buttons": {
+          "close": {
+            "description": "Close Daily Events with the top-right X",
+            "clickable": true,
+            "roiRelativeToTitle": {
+              "x1": 241,
+              "y1": -3,
+              "x2": 263,
+              "y2": 19
+            }
+          }
         }
       }
     },
@@ -334,6 +370,8 @@
             "description": "Server value",
             "recognitionType": "text",
             "valuePattern": "/text",
+            "scale": 4,
+            "allowlist": "0123456789",
             "roiRelativeToTitle": {
               "x1": 151,
               "y1": 66,
@@ -356,6 +394,7 @@
             "description": "Level value",
             "recognitionType": "text",
             "valuePattern": "/text",
+            "scale": 4,
             "roiRelativeToTitle": {
               "x1": 151,
               "y1": 90,

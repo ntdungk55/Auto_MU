@@ -11,6 +11,7 @@ import cv2
 
 from samples.ai_game_controller.infrastructure.window_capture import GameWindowCapture
 from src.ai_control.companion_switcher import PROJECT_ROOT, TEACHING_PATH, _load_template, _match
+from src.ai_control.dialog_actions import close_taught_dialog
 from src.logic.system_executor.ocr_engine import EasyOCREngine
 
 
@@ -59,11 +60,13 @@ def _read_remaining(image: Any, title: dict[str, Any], layout: dict[str, Any]) -
 
 
 def get_daily_events_dialog_info(target: dict[str, Any], *, send_key: Callable[[int, str], bool],
-                                 dialog_timeout_seconds: float = 10.0) -> dict[str, Any]:
-    """Open Daily Events if needed, verify its title, and read five remaining-entry counters."""
+                                 dialog_timeout_seconds: float = 10.0,
+                                 close_timeout_seconds: float = 2.0) -> dict[str, Any]:
+    """Open Daily Events if needed, read five counters, and close its verified dialog."""
     import win32gui
 
     result: dict[str, Any] = {"success": False, "target": dict(target)}
+    dialog_verified = False
     try:
         hwnd = int(target["hwnd"])
         if not win32gui.IsWindow(hwnd) or not win32gui.IsWindowVisible(hwnd):
@@ -95,6 +98,7 @@ def get_daily_events_dialog_info(target: dict[str, Any], *, send_key: Callable[[
                 time.sleep(0.05)
             else:
                 raise RuntimeError("Daily Events title was not matched after the opening key")
+        dialog_verified = True
         result["verification"] = {"success": True, "method": "template_matching", "score": title["score"],
                                   "threshold": threshold, "bbox": title["bbox"]}
         fields = _read_remaining(image, title, layout)
@@ -106,4 +110,14 @@ def get_daily_events_dialog_info(target: dict[str, Any], *, send_key: Callable[[
             result["error"] = "Could not read Daily Events counters: " + ", ".join(result["missing_fields"])
     except Exception as error:
         result.update(success=False, error=str(error))
+    finally:
+        if dialog_verified:
+            try:
+                closing = close_taught_dialog(hwnd, layout, template, threshold, close_timeout_seconds, "Daily Events")
+            except Exception as error:
+                closing = {"closed": False, "error": str(error)}
+            result["dialog_close"] = closing
+            if not closing["closed"]:
+                result["success"] = False
+                result["error"] = "; ".join(filter(None, (result.get("error"), closing["error"])))
     return result

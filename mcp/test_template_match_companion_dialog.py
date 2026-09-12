@@ -66,13 +66,14 @@ def main() -> int:
         arguments = _parse_args()
         target = _find_window(arguments.character_name)
         if arguments.check_companion_state:
+            companion_state = get_companion_summoned_state(int(target["hwnd"]))
             result = {
-                "success": True,
+                "success": companion_state["companion_state_verified"],
                 "target": target,
-                "precondition": get_companion_summoned_state(int(target["hwnd"])),
+                "precondition": companion_state,
             }
             print(json.dumps(result, ensure_ascii=False, indent=2))
-            return 0
+            return 0 if result["success"] else 1
         result = switch_to_companion_character(
             target,
             reference_image=arguments.reference_image,

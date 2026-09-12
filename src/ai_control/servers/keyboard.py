@@ -16,7 +16,7 @@ except ImportError:  # MCP 2.x
     from mcp.server import MCPServer as FastMCP
 
 from src.ai_control.companion_switcher import switch_to_companion_character as run_companion_switch
-from src.ai_control.companion_switcher import open_companion_management_dialog as run_open_companion_dialog
+from src.ai_control.companion_switcher import verify_and_close_companion_management_dialog as run_open_companion_dialog
 from src.ai_control.companion_info import get_companion_information
 from src.ai_control.companion_summoner import summon_companion_character as run_companion_summon
 from src.ai_control.daily_events_info import get_daily_events_dialog_info as read_daily_events
@@ -151,25 +151,59 @@ def _selected_visible_windows() -> tuple[list[dict[str, Any]], str | None]:
     return windows, None
 
 
+def _post_virtual_key(hwnd: int, virtual_key: int) -> bool:
+    """Queue one virtual-key press and release without focusing the target window."""
+    import win32api
+    import win32con
+    import win32gui
+
+    scan_code = int(win32api.MapVirtualKey(virtual_key, 0)) & 0xFF
+    down_lparam = 1 | (scan_code << 16)
+    up_lparam = down_lparam | (1 << 30) | (1 << 31)
+    win32gui.PostMessage(int(hwnd), win32con.WM_KEYDOWN, int(virtual_key), down_lparam)
+    win32gui.PostMessage(int(hwnd), win32con.WM_KEYUP, int(virtual_key), up_lparam)
+    return True
+
+
 def _post_single_key(hwnd: int, key: str) -> bool:
     """Queue one character key press for a specific window without focusing it."""
     if len(key) != 1:
         return False
 
     import win32api
-    import win32con
-    import win32gui
 
     key_scan = int(win32api.VkKeyScan(key))
     if key_scan == -1:
         return False
-    virtual_key = key_scan & 0xFF
-    scan_code = int(win32api.MapVirtualKey(virtual_key, 0)) & 0xFF
-    down_lparam = 1 | (scan_code << 16)
-    up_lparam = down_lparam | (1 << 30) | (1 << 31)
-    win32gui.PostMessage(int(hwnd), win32con.WM_KEYDOWN, virtual_key, down_lparam)
-    win32gui.PostMessage(int(hwnd), win32con.WM_KEYUP, virtual_key, up_lparam)
-    return True
+    return _post_virtual_key(hwnd, key_scan & 0xFF)
+
+
+def _wake_selected_window(target: dict[str, Any]) -> dict[str, Any]:
+    """Wake the selected game with one background click at its client-area center."""
+    import win32con
+    import win32gui
+
+    hwnd = int(target["hwnd"])
+    if not win32gui.IsWindow(hwnd) or not win32gui.IsWindowVisible(hwnd):
+        raise RuntimeError("Selected game window is no longer visible")
+    left, top, right, bottom = win32gui.GetClientRect(hwnd)
+    width, height = int(right - left), int(bottom - top)
+    if width <= 0 or height <= 0:
+        raise RuntimeError("Selected game window has an invalid client area")
+    x, y = width // 2, height // 2
+    foreground_before = int(win32gui.GetForegroundWindow() or 0)
+    lparam = (y << 16) | (x & 0xFFFF)
+    win32gui.PostMessage(hwnd, win32con.WM_MOUSEMOVE, 0, lparam)
+    win32gui.PostMessage(hwnd, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, lparam)
+    win32gui.PostMessage(hwnd, win32con.WM_LBUTTONUP, 0, lparam)
+    foreground_after = int(win32gui.GetForegroundWindow() or 0)
+    return {
+        "success": True, "method": "background_center_click", "hwnd": hwnd,
+        "x": x, "y": y, "client_width": width, "client_height": height,
+        "foreground_before": foreground_before, "foreground_after": foreground_after,
+        "foreground_changed": foreground_after != foreground_before,
+        "focus_requested": False, "key_sent": False, "delay_ms": 0,
+    }
 
 
 def _await_dynamic_text(hwnd: int, event_type: str, timeout_ms: int) -> dict[str, Any]:
@@ -343,7 +377,9 @@ def get_daily_events_dialog_info() -> dict[str, Any]:
     verify the title image. OCR five title-relative teaching regions and return
     integer counts in remaining (boss, jewel, bc, devil, ig) plus OCR evidence.
     Missing or uncertain counts are null and success=false; zero is a valid count.
-    Leaves the dialog open. Does not enter any event or click any purchase button.
+    Clicks the taught X button after reading, including OCR failures, and verifies
+    closure. If closing fails, returns failure with the counters already read.
+    Does not enter any event or click any purchase button.
     """
     return _run_companion_tool(read_daily_events, send_key=_post_single_key)
 
@@ -362,16 +398,24 @@ def switch_to_companion_character() -> dict[str, Any]:
 def _run_companion_tool(action: Callable[..., dict[str, Any]], **arguments: Any) -> dict[str, Any]:
     """Keep game actions on the selected window and keep library output off MCP stdout."""
     captured_stdout = io.StringIO()
+    wake_up: dict[str, Any] | None = None
     try:
         with contextlib.redirect_stdout(captured_stdout):
             windows, error = _selected_visible_windows()
             if error:
-                return {"success": False, "error": error}
+                return {"success": False, "selection_required": True, "error": error}
             if len(windows) != 1:
-                return {"success": False, "error": "Select exactly one game window in Gemini Chat"}
+                return {
+                    "success": False, "selection_required": True,
+                    "error": "Select exactly one game window in Gemini Chat",
+                }
+            wake_up = _wake_selected_window(windows[0])
             result = action(windows[0], **arguments)
     except Exception as error:
         result = {"success": False, "error": str(error)}
+    if wake_up is not None:
+        result["wake_up"] = wake_up
+    result.setdefault("selection_required", False)
     logs = captured_stdout.getvalue().splitlines()
     if logs:
         result["logs"] = logs[-20:]
@@ -380,10 +424,11 @@ def _run_companion_tool(action: Callable[..., dict[str, Any]], **arguments: Any)
 
 @mcp.tool()
 def open_companion_management_dialog() -> dict[str, Any]:
-    """Open and image-verify slot 1 Manage Sub-Characters on the selected window; do not enter it.
+    """Open and image-verify slot 1 Manage Sub-Characters, then close it with the taught X.
 
     Requires a summoned companion. Reads the button ROI, title image, and title
-    threshold from teaching JSON. Sends only the dialog-opening background click.
+    threshold from teaching JSON. Does not enter the character. Returns failure
+    if the title disappears cannot be verified after the close click.
     """
     return _run_companion_tool(run_open_companion_dialog)
 
@@ -395,8 +440,9 @@ def get_companion_summoned_state() -> dict[str, Any]:
     Click the companion slot when present and Manage Sub-Characters is not already
     open. Verify its title image, then OCR the six teaching regions. Click the
     taught X button and verify the dialog closed, including on OCR failure.
-    Closing failure preserves the read fields and returns failure. An empty slot returns
-    companion_summoned=false and character=null; incomplete OCR returns failure
+    Closing failure preserves the read fields and returns failure. A verified empty slot
+    returns companion_summoned=false and character=null. An occluded or uncertain slot
+    returns companion_summoned=null and sends no click. Incomplete OCR returns failure
     with partial fields. The historical tool name is retained for existing callers.
     """
     return _run_companion_tool(get_companion_information)

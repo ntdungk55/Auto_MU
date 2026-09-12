@@ -2,7 +2,7 @@
 
 The script discovers one MU window, persists its PID/HWND through the internal selector,
 then calls the semantic Keyboard MCP tool. It sends the `S` key only when
-Daily Events is not already visible, then reads the five remaining counters.
+Daily Events is not already visible, then reads the five counters and closes the dialog.
 Use --direct to call the same implementation in this process without starting MCP.
 """
 
@@ -74,6 +74,9 @@ def _print_daily_result(result: dict[str, Any]) -> int:
                        ("devil", "Devil"), ("ig", "IG")):
         value = remaining.get(key)
         print(f"  {label}: {value if value is not None else 'UNKNOWN'}")
+    closing = result.get("dialog_close")
+    if closing is not None:
+        print(f"Dialog closed: {closing.get('closed', False)}")
     return 0 if result.get("success") else 1
 
 
