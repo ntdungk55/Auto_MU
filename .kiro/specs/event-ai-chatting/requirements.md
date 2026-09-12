@@ -149,6 +149,15 @@ Bộ chọn process lưu selection có PID, creation time, HWND và title. Keybo
 
 Chỉ expose 5 MCP tool game: `get_daily_events_dialog_info`, `open_companion_management_dialog`, `get_companion_summoned_state`, `switch_to_companion_character`, `summon_companion_character`. Các tool schema/tạo/validate action bàn phím, liệt kê cửa sổ, chọn và xem process đã được gỡ khỏi MCP. Registry mặc định chỉ khởi động server game. Chọn và kiểm tra process vẫn là hàm nội bộ để đồng bộ cửa sổ từ Gemini Chat và script manual. Catalog scenario tiếp tục được nạp trong prompt, không thêm tool liệt kê scenario.
 
+### 5.3. Trạng thái AI và tool trong chat
+
+- Từ lúc người dùng gửi yêu cầu đến khi Gemini trả kết quả hoặc lỗi, cuối luồng chat hiển thị một bubble nhỏ bên trái gồm ba dấu chấm chuyển động lên xuống tuần tự. Indicator bị xóa khi turn kết thúc và không tạo trùng nếu trạng thái busy được phát nhiều lần.
+- Các event bắt đầu, hoàn tất, lỗi hoặc chạm giới hạn của MCP tool dùng bubble `tool`, căn sát lề trái vùng chat. Bubble tool có nền xanh đậm, chữ xanh sáng và viền riêng để phân biệt với bubble AI, user và system.
+- Tool event mới được chèn ngay phía trên indicator đang chạy, nên indicator luôn nằm cuối luồng trong lúc AI tiếp tục xử lý.
+- Bubble thông báo system như `Đã chọn process` và `Connected` được căn giữa và rộng vừa nội dung; 80% chiều rộng khả dụng của hàng chat là giới hạn tối đa. Nội dung dài hơn giới hạn tự wrap và tăng chiều cao vừa đủ.
+- Mọi bubble dùng chiều cao theo nội dung text sau khi wrap, padding nội dung `8px 5px`; spacer cuối danh sách nhận phần chiều cao còn dư để các item không bị kéo giãn.
+- Bubble người dùng bên phải và bubble AI bên trái rộng theo nội dung, tối đa 50% chiều rộng hàng chat; text dài tự wrap tại giới hạn này. Tool bubble tiếp tục bám lề trái và đặt màu chữ xanh sáng trực tiếp trên label để luôn tương phản với nền xanh đậm.
+
 ## 6. Catalog scenario và Gemini orchestration
 
 ### 6.1. Catalog snapshot
@@ -161,7 +170,7 @@ scenario_engine/prompt/system_prompt/scenario_engine_system_prompt.md
 
 `list_scenarios` không còn là Gemini tool. Catalog là snapshot bất biến của session. Khi thêm, sửa hoặc xóa scenario, người dùng phải chọn lại process hoặc kết nối lại Gemini để nạp catalog mới.
 
-Scenario `switch_to_companion_if_level_400` gọi `get_companion_summoned_state` trước để đọc thông tin nhân vật phụ. Chỉ khi result thành công, slot được xác nhận đã triệu hồi và `character.level` có hậu tố `.mt`/`,mt`, scenario mới gọi `switch_to_companion_character`; hậu tố `mt` biểu thị nhân vật đã vượt Level 400, kể cả giá trị `0.mt (0.000%)`. Hậu tố `.lv`/`,lv` biểu thị nhân vật chưa vượt Level 400 và kết thúc mà không đổi nhân vật. Level null, không nhận diện chắc chắn hậu tố, OCR lỗi hoặc trạng thái slot không chắc chắn đi nhánh failure và không gọi tool đổi nhân vật. Không dùng số nguyên đầu tiên để quyết định vì với hậu tố `mt`, số đó là Master Level.
+Scenario `get_companion_summoned_state` phục vụ yêu cầu chỉ đọc/xem/kiểm tra thông tin, không có điều kiện Level và không đổi nhân vật. Scenario `switch_to_companion_if_level_400` chỉ được chọn khi người dùng yêu cầu rõ ràng hành động đổi/chuyển nhân vật có điều kiện; nó gọi `get_companion_summoned_state` trước để đọc thông tin nhân vật phụ. Chỉ khi result thành công, slot được xác nhận đã triệu hồi và `character.level` có hậu tố `.mt`/`,mt`, scenario mới gọi `switch_to_companion_character`; hậu tố `mt` biểu thị nhân vật đã vượt Level 400, kể cả giá trị `0.mt (0.000%)`. Hậu tố `.lv`/`,lv` đã đọc chắc chắn biểu thị nhân vật chưa vượt Level 400 và kết thúc mà không đổi nhân vật. Level null, không nhận diện chắc chắn hậu tố, OCR lỗi hoặc trạng thái slot không chắc chắn đi nhánh failure, không gọi tool đổi nhân vật và không được báo là chưa vượt Level 400. Không dùng số nguyên đầu tiên để quyết định vì với hậu tố `mt`, số đó là Master Level.
 
 ### 6.2. Quy tắc Gemini
 

@@ -2115,3 +2115,143 @@ None.
 ### Request
 
 Reload the Gemini Chat session so its immutable scenario catalog includes the updated condition.
+
+## REVIEW 2026-09-12 16:55:26
+
+- Review ID: REV-20260912-165526
+- Reviewer: Codex
+- Scope: Add Gemini working indicator and restyle tool events
+- Target Diff: Gemini Chat widget, UI requirements, and focused UI tests
+- Status: resolved
+
+### Conclusion
+
+Gemini Chat now shows a left-aligned three-dot bouncing indicator for the full duration of an active turn. Tool progress events use a dedicated left-aligned blue bubble instead of the centered system style. New tool events are inserted above the active indicator so the indicator remains the final chat item until the response or error arrives.
+
+### Findings
+
+None.
+
+### Verification
+
+Seven focused Gemini UI and MCP integration tests passed. The Qt offscreen preview confirmed the user bubble remains right-aligned, the tool bubble is flush left with a distinct dark-blue style, and the animated indicator appears beneath it. Python compilation and `git diff --check` passed.
+
+### Open Questions
+
+None.
+
+### Request
+
+Use the new busy indicator and dedicated tool bubble style for Gemini Chat turns.
+
+## REVIEW 2026-09-12 17:01:15
+
+- Review ID: REV-20260912-170115
+- Reviewer: Codex
+- Scope: Widen centered system messages and compact chat item height
+- Target Diff: Gemini Chat bubble layout, UI requirements, and UI tests
+- Status: resolved
+
+### Conclusion
+
+Centered system messages now use a `1:8:1` horizontal layout, giving their bubble 80 percent of the chat row. Chat bubbles use compact content padding and a maximum vertical size policy, while the final spacer consumes unused height. Messages therefore remain only as tall as their wrapped text requires.
+
+### Findings
+
+None.
+
+### Verification
+
+The focused Qt tests verified a system bubble width ratio between 0.78 and 0.82, content padding of 8 pixels horizontally and 5 pixels vertically, and content-sized vertical behavior. An offscreen 900-pixel preview confirmed both requested system messages are centered and span 80 percent of the row. All focused UI and integration tests passed.
+
+### Open Questions
+
+None.
+
+### Request
+
+Use the 80-percent centered layout for system status messages and compact content height for all chat bubbles.
+
+## REVIEW 2026-09-12 17:03:57
+
+- Review ID: REV-20260912-170357
+- Reviewer: Codex
+- Scope: Separate read-only companion intent from conditional switching and reject unknown Level text
+- Target Diff: Companion scenarios, system prompt, requirements, and scenario contract tests
+- Status: resolved
+
+### Conclusion
+
+Gemini previously selected the conditional switch scenario for a read-only companion-information request because both descriptions emphasized reading companion data. It could then treat any non-matching or missing Level as the `.lv` branch and emit the misleading “not above Level 400” message. The read-only scenario now explicitly has no Level gate or switch action. The conditional scenario requires an explicit user request to switch, branches `.mt` and `.lv` separately, and routes null or unrecognized Level text to failure.
+
+### Findings
+
+None.
+
+### Verification
+
+A live diagnostic on NTD2006 returned `companion_state=unknown` and `character=null`; this confirms there was no Level text from which to infer an `.lv` result. The revised contract reports that underlying verification failure. All six scenario JSON files parsed successfully, and ten focused scenario, Gemini UI, and MCP integration tests passed. `git diff --check` passed with line-ending notices only.
+
+### Open Questions
+
+The current NTD2006 slot image was not verified as summoned or empty during the live diagnostic. This is an independent visual-state issue and is now reported directly instead of being masked by the Level condition.
+
+### Request
+
+Reload the Gemini Chat session so the updated scenario selection rules and branching are included in its immutable prompt snapshot.
+
+## REVIEW 2026-09-12 17:07:17
+
+- Review ID: REV-20260912-170717
+- Reviewer: Codex
+- Scope: Treat 80 percent as the maximum width for centered system messages
+- Target Diff: Gemini system-bubble sizing, UI requirements, and layout tests
+- Status: resolved
+
+### Conclusion
+
+System bubbles are now centered at their natural text width. Their width is calculated from the active font and content padding, then capped at 80 percent of the available chat row. Text wraps only when its natural width exceeds that cap, and the bubble grows vertically to fit the wrapped lines.
+
+### Findings
+
+None.
+
+### Verification
+
+Four focused Qt tests passed. They verify that a long message reaches but does not exceed the 80-percent cap, remains horizontally centered, and uses compact content height; a short Connected message remains narrower than the cap and centered. An offscreen preview confirmed the requested behavior for the selected-process and Connected messages.
+
+### Open Questions
+
+None.
+
+### Request
+
+Use natural centered width for system messages and apply 80 percent only as their wrapping limit.
+
+## REVIEW 2026-09-12 17:09:43
+
+- Review ID: REV-20260912-170943
+- Reviewer: Codex
+- Scope: Make tool progress text visible and cap user/AI bubbles at half width
+- Target Diff: Gemini bubble styling and sizing, UI requirements, bridge/UI tests
+- Status: resolved
+
+### Conclusion
+
+Tool progress callbacks were already emitted for start and completion, but the child label did not reliably inherit the foreground color from the parent widget selector. The tool label now receives its light-blue color directly. User and AI bubbles use natural content width capped at 50 percent of the available chat row, with long text wrapping at the cap.
+
+### Findings
+
+None.
+
+### Verification
+
+The Gemini bridge test observed both start and success events for one MCP call. Focused UI tests verified the explicit tool-label color and confirmed long user and AI bubbles remain between 47 and 50 percent of the row while staying aligned to their respective edges. Ten focused UI and Gemini MCP tests passed. An offscreen preview confirmed the tool text is visible and both conversation sides wrap at half width.
+
+### Open Questions
+
+None.
+
+### Request
+
+Display tool progress with explicit contrasting text and wrap user/AI messages at a 50-percent maximum width.

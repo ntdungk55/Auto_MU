@@ -2,7 +2,8 @@
   "schema_version": 1,
   "id": "switch_to_companion_if_level_400",
   "name": "Đổi sang nhân vật phụ khi Level lớn hơn 400",
-  "description": "Đọc thông tin nhân vật phụ ở slot 1. Chỉ đổi sang nhân vật phụ khi giá trị Level có hậu tố .mt, biểu thị nhân vật đã vượt Level 400.",
+  "description": "Yêu cầu hành động đổi nhân vật có điều kiện. Đọc thông tin nhân vật phụ ở slot 1 và chỉ đổi sang nhân vật phụ khi giá trị Level có hậu tố .mt, biểu thị nhân vật đã vượt Level 400.",
+  "selection_rule": "Chỉ chọn scenario này khi người dùng yêu cầu rõ ràng đổi/chuyển sang nhân vật phụ nếu Level vượt 400. Không chọn cho yêu cầu chỉ đọc, xem hoặc kiểm tra thông tin.",
   "status": "ready",
   "preconditions": [
     "Gemini Chat đã chọn đúng window MU.",
@@ -11,7 +12,7 @@
   "inputs": {},
   "limits": {
     "timeout_seconds": 40,
-    "max_steps": 3,
+    "max_steps": 4,
     "max_tool_calls": 2
   },
   "steps": [
@@ -34,7 +35,14 @@
       "type": "condition",
       "condition": "Chuẩn hóa ${companion_info.character.level} về chữ thường và bỏ khoảng trắng quanh dấu chấm hoặc dấu phẩy. Điều kiện đúng khi giá trị Level có dạng số nguyên theo sau bởi hậu tố .mt hoặc ,mt, ví dụ 0.mt (0.000%); hậu tố mt nghĩa là nhân vật đã vượt Level 400. Giá trị có hậu tố .lv hoặc ,lv, ví dụ 399.lv (50.000%), là chưa vượt Level 400 và điều kiện sai. Không quyết định bằng số nguyên đầu tiên vì đó là Master Level khi hậu tố là mt.",
       "on_true": "switch_to_companion",
-      "on_false": "complete"
+      "on_false": "check_companion_level_not_above_400"
+    },
+    {
+      "id": "check_companion_level_not_above_400",
+      "type": "condition",
+      "condition": "Điều kiện chỉ đúng khi ${companion_info.character.level} có dạng số nguyên theo sau bởi hậu tố .lv hoặc ,lv sau khi chuẩn hóa chữ thường và khoảng trắng. Nếu không nhận ra chắc chắn hậu tố lv thì điều kiện sai; không được coi Level null, chuỗi trống hoặc OCR không rõ là dưới Level 400.",
+      "on_true": "complete",
+      "on_false": "failed"
     },
     {
       "id": "switch_to_companion",
@@ -48,8 +56,10 @@
     }
   ],
   "result": {
-    "success_message": "Nếu Level nhân vật phụ có hậu tố .mt: đã đổi sang nhân vật phụ. Nếu Level có hậu tố .lv: đã đọc thông tin và giữ nguyên nhân vật hiện tại.",
+    "success_message": "Chỉ báo đã đổi khi switch_result.success=true. Nếu Level thật có hậu tố .lv, báo đã đọc thông tin và giữ nguyên nhân vật hiện tại.",
     "failure_message": "Scenario thất bại tại tool hiện tại: ${companion_info.error}${switch_result.error}. selection_required=${companion_info.selection_required}${switch_result.selection_required}. Chỉ yêu cầu chọn lại cửa sổ nếu một tool trả selection_required=true.",
-    "no_switch_message": "Level nhân vật phụ chưa có hậu tố .mt nên chưa vượt Level 400; không gọi switch_to_companion_character."
+    "no_switch_message": "Đã đọc Level=${companion_info.character.level}; hậu tố .lv xác nhận nhân vật chưa vượt Level 400 nên không gọi switch_to_companion_character.",
+    "unrecognized_level_message": "Không nhận diện chắc chắn định dạng Level từ ${companion_info.character.level}; không gọi switch_to_companion_character và không được báo là nhân vật chưa vượt Level 400.",
+    "response_rule": "Chỉ dùng no_switch_message khi companion_info.success=true và Level khớp hậu tố .lv/,lv. Level null, không nhận ra mt/lv, hoặc companion_info.success khác true phải báo failure/unrecognized_level_message."
   }
 }

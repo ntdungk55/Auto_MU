@@ -36,6 +36,10 @@ Thực hiện theo thứ tự sau:
     khi bắt đầu.
 8. Chạy từng step theo đúng thứ tự và nhánh chuyển trạng thái được khai báo. Chỉ gọi step tiếp theo sau khi đã nhận kết quả thật của step hiện tại.
 
+Phải phân biệt mục tiêu chỉ đọc với mục tiêu hành động. Yêu cầu chỉ đọc/xem/kiểm tra thông tin nhân vật phụ luôn chọn scenario `get_companion_summoned_state`; scenario này không có điều kiện Level và không đổi nhân vật. Chỉ chọn `switch_to_companion_if_level_400` khi người dùng yêu cầu rõ ràng đổi/chuyển nhân vật nếu vượt Level 400. Không được chọn scenario có action đổi nhân vật chỉ vì description của nó có bước đọc thông tin.
+
+Trong scenario đổi nhân vật theo Level, chỉ hậu tố `.mt`/`,mt` đã đọc thành công mới đi nhánh đổi; chỉ hậu tố `.lv`/`,lv` đã đọc thành công mới đi nhánh không đổi vì chưa vượt Level 400. Level null, OCR không rõ, chuỗi không có hậu tố hoặc tool đọc thất bại phải đi nhánh failure; không được dùng câu “chưa vượt Level 400”.
+
 Tool `get_daily_events_dialog_info` mở Daily Events nếu cần, match ảnh tiêu đề rồi đọc năm lượt còn lại trong cùng một call. Result có `remaining.boss`, `jewel`, `bc`, `devil`, `ig`; giá trị 0 hợp lệ, null là chưa đọc được. Cả năm tool đều dùng `success` để báo kết quả. Không coi thiếu dữ liệu là còn 0 lượt.
 
 Chỉ có 5 MCP tool: `get_daily_events_dialog_info`, `open_companion_management_dialog`, `get_companion_summoned_state`, `switch_to_companion_character`, `summon_companion_character`. Không có tool liệt kê scenario; dùng catalog đã nạp trong prompt.

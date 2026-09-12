@@ -80,16 +80,22 @@ def test_gemini_executes_mcp_tool_and_returns_final_text():
     )
     client = _FakeMCPClient()
 
+    events = []
     result = run_gemini_mcp_turn(
         chat=chat,
         initial_content=["Tạo action Enter"],
         mcp_client=client,
         genai_module=genai,
+        on_tool_event=events.append,
     )
 
     assert result.text == "Đã tạo action."
     assert result.tool_call_count == 1
     assert client.calls == [("get_companion_summoned_state", {})]
+    assert [(event["phase"], event["name"]) for event in events] == [
+        ("start", "get_companion_summoned_state"),
+        ("success", "get_companion_summoned_state"),
+    ]
 
 
 def test_gemini_limits_execution_to_twenty_tool_calls():

@@ -8,8 +8,8 @@ import json
 from pathlib import Path
 from typing import Optional, Callable
 
-from PyQt6.QtCore import Qt, pyqtSignal, QObject, QTimer
-from PyQt6.QtGui import QPixmap, QKeyEvent
+from PyQt6.QtCore import Qt, pyqtSignal, QObject, QTimer, QRectF
+from PyQt6.QtGui import QPixmap, QKeyEvent, QColor, QPainter
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
     QScrollArea,
     QFileDialog,
     QDialog,
+    QSizePolicy,
 )
 
 from src.ai_control.scenario_tool_client import ScenarioToolClient
@@ -122,15 +123,19 @@ class _ChatBubble(QWidget):
     def __init__(self, text: str, side: str = "left", image_path: str | None = None, meta: str | None = None, parent=None):
         super().__init__(parent)
         outer = QHBoxLayout()
-        outer.setContentsMargins(6, 2, 6, 2)
+        outer.setContentsMargins(6, 1, 6, 1)
+        outer.setSpacing(0)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
 
         bubble = QWidget()
         bubble_l = QVBoxLayout()
-        bubble_l.setContentsMargins(10, 8, 10, 8)
-        bubble_l.setSpacing(6)
+        bubble_l.setContentsMargins(8, 5, 8, 5)
+        bubble_l.setSpacing(4)
 
         label = QLabel(text or "")
+        self.label = label
         label.setWordWrap(True)
+        label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         bubble_l.addWidget(label)
 
@@ -150,11 +155,24 @@ class _ChatBubble(QWidget):
 
         bubble.setLayout(bubble_l)
 
+        self.side = side
+        self.bubble = bubble
         if side == "right":
             bubble.setStyleSheet("background:#1b74e4;color:#fff;border-radius:14px;")
             outer.addStretch(1)
             outer.addWidget(bubble, 0)
+        elif side == "tool":
+            outer.setContentsMargins(0, 2, 6, 2)
+            label.setStyleSheet("color:#b9dcff;")
+            bubble.setObjectName("toolCallBubble")
+            bubble.setStyleSheet(
+                "QWidget#toolCallBubble{background:#172a46;color:#b9dcff;"
+                "border:1px solid #285d8f;border-radius:10px;}"
+            )
+            outer.addWidget(bubble, 0, Qt.AlignmentFlag.AlignLeft)
+            outer.addStretch(1)
         elif side == "system":
+            bubble.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
             bubble.setStyleSheet("background:#1f1f1f;color:#d0d0d0;border-radius:10px;")
             outer.addStretch(1)
             outer.addWidget(bubble, 0)
@@ -165,6 +183,79 @@ class _ChatBubble(QWidget):
             outer.addStretch(1)
 
         self.setLayout(outer)
+
+    def resizeEvent(self, event):
+        """Size chat bubbles from content and wrap them at the configured row fraction."""
+        super().resizeEvent(event)
+        maximum_fraction = {"system": 0.8, "left": 0.5, "right": 0.5}.get(self.side)
+        if maximum_fraction is None:
+            return
+        margins = self.layout().contentsMargins()
+        available = max(1, self.width() - margins.left() - margins.right())
+        bubble_margins = self.bubble.layout().contentsMargins()
+        text_width = max(
+            (self.label.fontMetrics().horizontalAdvance(line) for line in self.label.text().splitlines()),
+            default=0,
+        )
+        child_widths = [text_width]
+        for index in range(1, self.bubble.layout().count()):
+            child = self.bubble.layout().itemAt(index).widget()
+            if child is not None:
+                child_widths.append(child.sizeHint().width())
+        content_width = max(child_widths) + bubble_margins.left() + bubble_margins.right() + 2
+        target_width = int(available * maximum_fraction)
+        if self.side in {"left", "right"}:
+            self.bubble.setFixedWidth(max(1, target_width))
+        else:
+            self.bubble.setFixedWidth(max(1, min(content_width, target_width)))
+
+
+class _BouncingDots(QWidget):
+    """Paint three chat-typing dots that rise and fall in sequence."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(38, 20)
+        self._phase = 0
+        self._timer = QTimer(self)
+        self._timer.setInterval(120)
+        self._timer.timeout.connect(self._advance)
+        self._timer.start()
+
+    def _advance(self):
+        self._phase = (self._phase + 1) % 6
+        self.update()
+
+    def paintEvent(self, event):
+        del event
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#b9c0ca"))
+        wave = (0, 2, 4, 2, 0, 0)
+        for index, x in enumerate((7.0, 19.0, 31.0)):
+            rise = wave[(self._phase - index * 2) % len(wave)]
+            painter.drawEllipse(QRectF(x - 3.0, 10.0 - rise, 6.0, 6.0))
+
+
+class _TypingIndicator(QWidget):
+    """Left-aligned chat bubble displayed while Gemini is processing."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("aiWorkingIndicator")
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(6, 2, 6, 2)
+        pill = QWidget()
+        pill.setObjectName("aiWorkingPill")
+        pill.setStyleSheet(
+            "QWidget#aiWorkingPill{background:#2b2b2b;border:1px solid #3a3a3a;border-radius:14px;}"
+        )
+        pill_layout = QHBoxLayout(pill)
+        pill_layout.setContentsMargins(8, 5, 8, 5)
+        pill_layout.addWidget(_BouncingDots(pill))
+        outer.addWidget(pill, 0, Qt.AlignmentFlag.AlignLeft)
+        outer.addStretch(1)
 
 
 class GeminiSettingsDialog(QDialog):
@@ -329,6 +420,7 @@ class GeminiChatWidget(QWidget):
         self._selected_game_target = None
         self._scenario_tool_client: ScenarioToolClient | None = None
         self._chat_ready = False
+        self._typing_indicator: _TypingIndicator | None = None
 
         self._build_ui()
         self._append_system_text("Chọn process game để bắt đầu Gemini Chat.")
@@ -381,6 +473,7 @@ class GeminiChatWidget(QWidget):
 
         self._chat_spacer = QWidget()
         self._chat_spacer.setMinimumHeight(1)
+        self._chat_spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.chat_layout.addWidget(self._chat_spacer)
 
         # Attachment preview (hidden until attached)
@@ -852,7 +945,10 @@ class GeminiChatWidget(QWidget):
 
     def _append_bubble(self, text: str, side: str, image_path: str | None = None, meta: str | None = None):
         try:
-            idx = max(0, self.chat_layout.count() - 1)
+            anchor = self._typing_indicator or self._chat_spacer
+            idx = self.chat_layout.indexOf(anchor)
+            if idx < 0:
+                idx = max(0, self.chat_layout.count() - 1)
             self.chat_layout.insertWidget(idx, _ChatBubble(text=text, side=side, image_path=image_path, meta=meta))
             self._pending_scroll_to_bottom = True
             QTimer.singleShot(0, self._scroll_to_bottom)
@@ -898,8 +994,30 @@ class GeminiChatWidget(QWidget):
             self.attach_btn.setEnabled(not busy)
             self.settings_btn.setEnabled(not busy)
             self.install_btn.setEnabled((not busy) and (genai is None) and (not self._installing_sdk))
+            if busy:
+                self._show_typing_indicator()
+            else:
+                self._hide_typing_indicator()
         except Exception:
             pass
+
+    def _show_typing_indicator(self):
+        if self._typing_indicator is not None:
+            return
+        indicator = _TypingIndicator()
+        self._typing_indicator = indicator
+        idx = self.chat_layout.indexOf(self._chat_spacer)
+        self.chat_layout.insertWidget(max(0, idx), indicator)
+        self._pending_scroll_to_bottom = True
+        QTimer.singleShot(0, self._scroll_to_bottom)
+
+    def _hide_typing_indicator(self):
+        indicator = self._typing_indicator
+        if indicator is None:
+            return
+        self._typing_indicator = None
+        self.chat_layout.removeWidget(indicator)
+        indicator.deleteLater()
 
     def _ensure_sdk(self) -> bool:
         if genai is None:
@@ -1106,7 +1224,7 @@ class GeminiChatWidget(QWidget):
             text = "Đã đạt giới hạn số lần gọi tool."
         else:
             return
-        self._signals.append_message.emit({"side": "system", "text": text, "meta": "Scenario"})
+        self._signals.append_message.emit({"side": "tool", "text": text, "meta": "Scenario"})
 
     @staticmethod
     def _prepare_image_for_vision(img_path: str):
