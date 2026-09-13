@@ -2255,3 +2255,115 @@ None.
 ### Request
 
 Display tool progress with explicit contrasting text and wrap user/AI messages at a 50-percent maximum width.
+
+## REVIEW 2026-09-12 19:42:12
+
+- Review ID: REV-20260912-194212
+- Reviewer: Codex
+- Scope: Prevent early status/tool wrapping and make conversation bubbles a fixed half width
+- Target Diff: Gemini bubble sizing, tool-event presentation, UI requirements, and tests
+- Status: resolved
+
+### Conclusion
+
+User and AI bubbles now always occupy 50 percent of the available chat row, including short messages. System and tool bubbles use natural width up to an 80-percent cap and disable word wrapping while the measured text fits. Tool events no longer add the secondary `Scenario` metadata row, so a short tool completion message remains a compact single-line item.
+
+### Findings
+
+None.
+
+### Verification
+
+Focused Qt tests verify fixed half-width user and AI bubbles for both long and `OK` messages, one-line system text when it fits below the cap, one-line tool text below the cap, explicit tool-label contrast, and wrapping for content that exceeds 80 percent. Eleven focused UI and Gemini MCP tests passed. The offscreen preview showed the selected-process notification on one centered line and the tool completion text on one line.
+
+### Open Questions
+
+None.
+
+### Request
+
+Use fixed 50-percent conversation bubbles and only wrap system/tool status text after it exceeds its 80-percent cap.
+
+## REVIEW 2026-09-12 19:55:11
+
+- Review ID: REV-20260912-195511
+- Reviewer: Codex
+- Scope: Produce human-readable companion responses and reject malformed OCR fields
+- Target Diff: Companion OCR normalization, read-only scenario response, system prompt, requirements, and tests
+- Status: resolved
+
+### Conclusion
+
+The read-only companion scenario previously exposed an internal `key=value` template directly to the user, and the OCR reader accepted any non-empty WinRT string as a valid field. Responses now use natural Vietnamese sentences and hide internal booleans, JSON keys, placeholders, and raw OCR. Field-specific validation rejects malformed Server, Map, Level, Reset, and Status values and invokes EasyOCR when WinRT text is non-empty but invalid.
+
+### Findings
+
+None.
+
+### Verification
+
+Tests cover the reported malformed values: `Imp` is rejected as a Server, an incomplete Kanturu coordinate is rejected, a complete Level string without a closing percent parenthesis is rejected, a valid Level prefix is trimmed from trailing OCR noise, Reset is normalized, and a digit-contaminated Status is rejected. Fifty-one focused companion, scenario, Gemini UI, and MCP integration tests passed. The selected game window had an invalid client area during the attempted live capture, so no new live OCR result was claimed.
+
+### Open Questions
+
+The selected game window must have a valid client area before another live OCR verification can run.
+
+### Request
+
+Return companion information as natural Vietnamese prose and fail uncertain fields instead of exposing malformed OCR as successful data.
+
+## REVIEW 2026-09-12 20:00:51
+
+- Review ID: REV-20260912-200051
+- Reviewer: Codex
+- Scope: Prevent clipped chat text and preserve right alignment
+- Target Diff: Gemini bubble wrapping, alignment, UI requirements, and tests
+- Status: resolved
+
+### Conclusion
+
+The prior implementation disabled word wrapping for system and tool labels below a calculated width and did not provide break opportunities inside underscore-separated tool names. This could clip the final characters instead of moving them to the next line. All labels now keep word wrapping enabled, underscore-separated identifiers receive invisible break opportunities, and label height is recalculated with `heightForWidth`. User text is explicitly right-aligned inside its fixed half-width bubble.
+
+### Findings
+
+None.
+
+### Verification
+
+Six focused Qt tests passed. They verify wrapped height for a narrow `switch_to_companion_character` tool notification, one-line behavior when sufficient width exists, fixed half-width user and AI bubbles, and explicit right alignment for user text. A 430-pixel offscreen preview confirmed the user message stays on the right, the centered process message wraps without clipping, and the tool identifier wraps across lines without losing its suffix.
+
+### Open Questions
+
+None.
+
+### Request
+
+Keep wrapping enabled and calculate bubble height from the final constrained width so no chat text is clipped.
+
+## REVIEW 2026-09-12 20:12:00
+
+- Review ID: REV-20260912-201200
+- Reviewer: Codex
+- Scope: Restore content-sized user and AI chat bubbles
+- Target Diff: Gemini bubble sizing, alignment, UI requirements, and tests
+- Status: resolved
+
+### Conclusion
+
+Short user and AI messages now size to their rendered content. User bubbles remain attached to the right edge while their text uses normal left alignment. Long conversation messages stop growing at 50 percent of the available row width and then wrap.
+
+### Findings
+
+None.
+
+### Verification
+
+Six focused Qt UI tests verify natural-width short messages, right-side placement, left-aligned user text, and the 50-percent cap for long messages. The combined companion, scenario, Gemini UI, and MCP integration suite passed 51 tests. An offscreen render of the reported text confirmed that the bubble no longer fills half of the row unnecessarily.
+
+### Open Questions
+
+None.
+
+### Request
+
+Keep 50 percent as a maximum width for conversation bubbles, not a fixed width.

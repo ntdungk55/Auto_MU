@@ -4,6 +4,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QSizePolicy, QVBoxLayout, QWidget
 
 from src.ui.gemini_chat_widget import _BouncingDots, _ChatBubble, GeminiChatWidget
@@ -36,7 +37,7 @@ def test_busy_indicator_stays_below_left_aligned_tool_bubbles() -> None:
     assert indicator is not None
     assert indicator.objectName() == "aiWorkingIndicator"
 
-    widget._append_bubble("AI đang gọi tool: example", side="tool", meta="Scenario")
+    widget._append_bubble("AI đang gọi tool: example", side="tool")
     indicator_index = widget.chat_layout.indexOf(indicator)
     tool_bubble = widget.chat_layout.itemAt(indicator_index - 1).widget()
     assert isinstance(tool_bubble, _ChatBubble)
@@ -66,6 +67,7 @@ def test_system_bubble_is_centered_and_wraps_at_eighty_percent_maximum() -> None
     width_ratio = message.bubble.width() / message.width()
     assert width_ratio <= 0.8
     assert width_ratio >= 0.76
+    assert message.label.wordWrap() is True
     bubble_left = message.bubble.mapTo(message, message.bubble.rect().topLeft()).x()
     bubble_right = message.width() - bubble_left - message.bubble.width()
     assert abs(bubble_left - bubble_right) <= 2
@@ -78,21 +80,54 @@ def test_system_bubble_is_centered_and_wraps_at_eighty_percent_maximum() -> None
 def test_short_system_bubble_uses_content_width_below_maximum() -> None:
     _application()
     container = QWidget()
-    container.resize(620, 160)
+    container.resize(1000, 160)
     layout = QVBoxLayout(container)
-    message = _ChatBubble("Connected: gemini-2.5-flash", side="system")
+    message = _ChatBubble(
+        "Đã chọn process: MU GamethuVN - Season 21 (Golden - NTD2008)",
+        side="system",
+    )
     layout.addWidget(message)
     layout.addStretch(1)
     container.show()
     APP.processEvents()
 
     assert message.bubble.width() < message.width() * 0.8
+    assert message.label.wordWrap() is True
+    assert message.label.height() <= message.label.fontMetrics().height() + 2
     bubble_left = message.bubble.mapTo(message, message.bubble.rect().topLeft()).x()
     bubble_right = message.width() - bubble_left - message.bubble.width()
     assert abs(bubble_left - bubble_right) <= 2
 
 
-def test_user_and_ai_bubbles_always_use_half_of_chat_width() -> None:
+def test_tool_notification_stays_on_one_line_until_eighty_percent() -> None:
+    _application()
+    container = QWidget()
+    container.resize(720, 160)
+    layout = QVBoxLayout(container)
+    message = _ChatBubble("Tool hoàn tất: switch_to_companion_character", side="tool")
+    layout.addWidget(message)
+    layout.addStretch(1)
+    container.show()
+    APP.processEvents()
+
+    assert message.bubble.width() < message.width() * 0.8
+    assert message.label.wordWrap() is True
+    assert message.label.height() <= message.label.fontMetrics().height() + 2
+    assert message.bubble.mapTo(message, message.bubble.rect().topLeft()).x() <= 1
+
+    narrow = QWidget()
+    narrow.resize(300, 180)
+    narrow_layout = QVBoxLayout(narrow)
+    wrapped_tool = _ChatBubble("Tool hoàn tất: switch_to_companion_character", side="tool")
+    narrow_layout.addWidget(wrapped_tool)
+    narrow_layout.addStretch(1)
+    narrow.show()
+    APP.processEvents()
+    assert "\u200b" in wrapped_tool.label.text()
+    assert wrapped_tool.label.height() > wrapped_tool.label.fontMetrics().height()
+
+
+def test_user_and_ai_bubbles_use_content_width_up_to_half_of_chat_width() -> None:
     _application()
     container = QWidget()
     container.resize(720, 300)
@@ -112,11 +147,14 @@ def test_user_and_ai_bubbles_always_use_half_of_chat_width() -> None:
     assert ai_message.bubble.mapTo(ai_message, ai_message.bubble.rect().topLeft()).x() <= 7
     user_left = user_message.bubble.mapTo(user_message, user_message.bubble.rect().topLeft()).x()
     assert user_message.width() - user_left - user_message.bubble.width() <= 7
+    assert user_message.label.alignment() & Qt.AlignmentFlag.AlignLeft
 
     short_ai = _ChatBubble("OK", side="left")
     short_user = _ChatBubble("OK", side="right")
     layout.insertWidget(2, short_ai)
     layout.insertWidget(3, short_user)
     APP.processEvents()
-    assert 0.47 <= short_ai.bubble.width() / short_ai.width() <= 0.5
-    assert 0.47 <= short_user.bubble.width() / short_user.width() <= 0.5
+    assert short_ai.bubble.width() / short_ai.width() < 0.2
+    assert short_user.bubble.width() / short_user.width() < 0.2
+    short_user_left = short_user.bubble.mapTo(short_user, short_user.bubble.rect().topLeft()).x()
+    assert short_user.width() - short_user_left - short_user.bubble.width() <= 7

@@ -154,6 +154,8 @@ Khi hoàn thành, trả lời ngắn gọn:
 - Process/cửa sổ mục tiêu nếu có.
 - Step thất bại nếu không hoàn thành.
 
+Phản hồi cuối phải dùng ngôn ngữ tự nhiên dành cho người dùng. Không chép nguyên mẫu kỹ thuật kiểu `key=value`, không in boolean, JSON, tên biến `${...}`, raw OCR hoặc các trường nội bộ như `companion_summoned`, `missing_fields`, `dialog_close`. Chuyển dữ liệu hợp lệ thành câu hoàn chỉnh; nếu tool thất bại, nói trường nào chưa đọc được hoặc thao tác nào chưa xác minh được bằng lời dễ hiểu.
+
 Không báo "đã hoàn thành" chỉ vì đã lập kế hoạch. Chỉ báo hoàn thành khi step
 cuối cùng thực sự trả thành công.
 

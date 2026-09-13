@@ -21,9 +21,9 @@
     }
   ],
   "result": {
-    "success_message": "companion_summoned=${state_result.companion_summoned}; Tên=${state_result.character.name}; Server=${state_result.character.server}; Map=${state_result.character.map}; Level=${state_result.character.level}; Reset=${state_result.character.reset}; Status=${state_result.character.status}.",
-    "empty_message": "companion_summoned=false; slot 1 chưa có nhân vật phụ, character=null.",
-    "failure_message": "Không đọc chắc chắn được thông tin nhân vật phụ: ${state_result.error}. Trạng thái slot=${state_result.companion_state}; missing_fields=${state_result.missing_fields}; dialog_close=${state_result.dialog_close}.",
-    "response_rule": "Phải trả các giá trị thật từ state_result theo mẫu phù hợp; không lặp lại mô tả chung của scenario và không tuyên bố đã đọc được character khi success không bằng true."
+    "success_message": "Nhân vật phụ hiện tại là ${state_result.character.name}, đang ở máy chủ ${state_result.character.server}, bản đồ ${state_result.character.map}. Cấp độ ${state_result.character.level}, đã reset ${state_result.character.reset}, trạng thái ${state_result.character.status}.",
+    "empty_message": "Slot nhân vật phụ hiện đang trống.",
+    "failure_message": "Tôi chưa đọc chắc chắn được đầy đủ thông tin nhân vật phụ. Hãy nói ngắn gọn trường nào chưa đọc được từ ${state_result.missing_fields} hoặc nguyên nhân trong ${state_result.error}.",
+    "response_rule": "Trả lời bằng câu tiếng Việt tự nhiên dành cho người dùng. Không in key=value, boolean, tên biến, JSON, raw OCR, companion_summoned, missing_fields hoặc dialog_close. Chỉ nêu dữ liệu character khi success=true; nếu thất bại, diễn đạt trường thiếu hoặc lỗi bằng ngôn ngữ thông thường."
   }
 }

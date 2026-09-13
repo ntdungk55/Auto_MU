@@ -330,6 +330,26 @@ def test_info_uses_taught_scale_and_digit_allowlist_for_small_fields(
     assert requests[1]["shape"] == (116, 572)
 
 
+@pytest.mark.parametrize(
+    ("field", "raw", "expected"),
+    [
+        ("server", "Imp", None),
+        ("server", "19", "19"),
+        ("map", "Kanturu (144146j¯", None),
+        ("map", "Kanturu (144.146)", "Kanturu (144,146)"),
+        ("level", "0.mt (0.000%Y1 OT Dinorari", None),
+        ("level", "0.mt (0.000%)Y1 OT Dinorari", "0.mt (0.000%)"),
+        ("reset", "Reset 60.rs extra", "60.rs"),
+        ("status", "vent 71", None),
+        ("status", "Automatically attacking", "Automatically attacking"),
+    ],
+)
+def test_companion_field_normalization_rejects_or_trims_ocr_noise(
+    field: str, raw: str, expected: str | None,
+) -> None:
+    assert companion_info._normalize_field_value(field, raw) == expected
+
+
 def test_info_close_failure_preserves_character_fields(game: dict) -> None:
     game["frames"] = [cv2.imread(str(ROOT / "assets/companion_management_ntd3006.png"))]
     game["close_works"] = False

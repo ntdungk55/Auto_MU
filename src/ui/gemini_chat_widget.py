@@ -132,8 +132,11 @@ class _ChatBubble(QWidget):
         bubble_l.setContentsMargins(8, 5, 8, 5)
         bubble_l.setSpacing(4)
 
-        label = QLabel(text or "")
+        self._plain_text = str(text or "")
+        display_text = self._plain_text.replace("_", "_\u200b")
+        label = QLabel(display_text)
         self.label = label
+        label.setTextFormat(Qt.TextFormat.PlainText)
         label.setWordWrap(True)
         label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -158,6 +161,7 @@ class _ChatBubble(QWidget):
         self.side = side
         self.bubble = bubble
         if side == "right":
+            label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
             bubble.setStyleSheet("background:#1b74e4;color:#fff;border-radius:14px;")
             outer.addStretch(1)
             outer.addWidget(bubble, 0)
@@ -172,6 +176,7 @@ class _ChatBubble(QWidget):
             outer.addWidget(bubble, 0, Qt.AlignmentFlag.AlignLeft)
             outer.addStretch(1)
         elif side == "system":
+            label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
             bubble.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
             bubble.setStyleSheet("background:#1f1f1f;color:#d0d0d0;border-radius:10px;")
             outer.addStretch(1)
@@ -187,14 +192,14 @@ class _ChatBubble(QWidget):
     def resizeEvent(self, event):
         """Size chat bubbles from content and wrap them at the configured row fraction."""
         super().resizeEvent(event)
-        maximum_fraction = {"system": 0.8, "left": 0.5, "right": 0.5}.get(self.side)
+        maximum_fraction = {"system": 0.8, "tool": 0.8, "left": 0.5, "right": 0.5}.get(self.side)
         if maximum_fraction is None:
             return
         margins = self.layout().contentsMargins()
         available = max(1, self.width() - margins.left() - margins.right())
         bubble_margins = self.bubble.layout().contentsMargins()
         text_width = max(
-            (self.label.fontMetrics().horizontalAdvance(line) for line in self.label.text().splitlines()),
+            (self.label.fontMetrics().horizontalAdvance(line) for line in self._plain_text.splitlines()),
             default=0,
         )
         child_widths = [text_width]
@@ -202,12 +207,16 @@ class _ChatBubble(QWidget):
             child = self.bubble.layout().itemAt(index).widget()
             if child is not None:
                 child_widths.append(child.sizeHint().width())
-        content_width = max(child_widths) + bubble_margins.left() + bubble_margins.right() + 2
+        content_width = max(child_widths) + bubble_margins.left() + bubble_margins.right() + 8
         target_width = int(available * maximum_fraction)
-        if self.side in {"left", "right"}:
-            self.bubble.setFixedWidth(max(1, target_width))
-        else:
-            self.bubble.setFixedWidth(max(1, min(content_width, target_width)))
+        bubble_width = max(1, min(content_width, target_width))
+        self.label.setWordWrap(True)
+        self.bubble.setFixedWidth(bubble_width)
+        label_width = max(1, bubble_width - bubble_margins.left() - bubble_margins.right())
+        wrapped_height = self.label.heightForWidth(label_width)
+        self.label.setFixedHeight(max(self.label.fontMetrics().height(), wrapped_height))
+        self.bubble.layout().invalidate()
+        self.updateGeometry()
 
 
 class _BouncingDots(QWidget):
@@ -1224,7 +1233,7 @@ class GeminiChatWidget(QWidget):
             text = "Đã đạt giới hạn số lần gọi tool."
         else:
             return
-        self._signals.append_message.emit({"side": "tool", "text": text, "meta": "Scenario"})
+        self._signals.append_message.emit({"side": "tool", "text": text})
 
     @staticmethod
     def _prepare_image_for_vision(img_path: str):

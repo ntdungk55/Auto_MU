@@ -16,6 +16,9 @@ def test_read_only_companion_scenario_has_no_level_gate_or_switch_action() -> No
     assert "không yêu cầu Level 400" in scenario["description"]
     assert "chỉ lấy hoặc xem" in scenario["selection_rule"]
     assert [step["tool"] for step in scenario["steps"]] == ["get_companion_summoned_state"]
+    assert "key=value" in scenario["result"]["response_rule"]
+    assert "companion_summoned=" not in scenario["result"]["success_message"]
+    assert scenario["result"]["success_message"].startswith("Nhân vật phụ hiện tại là")
 
 
 def test_conditional_switch_requires_explicit_mt_or_lv_branch() -> None:

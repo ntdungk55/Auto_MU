@@ -17,6 +17,40 @@ from src.ai_control.dialog_actions import close_taught_dialog
 from src.logic.system_executor.ocr_engine import EasyOCREngine, WinRTOCREngine
 
 
+def _normalize_field_value(field: str, raw_text: str) -> str | None:
+    """Return a clean companion value only when its field-specific format is credible."""
+    text = " ".join(str(raw_text or "").split()).strip()
+    if not text:
+        return None
+    if field == "name":
+        return text if re.fullmatch(r"[A-Za-z0-9_\-]{2,32}", text) else None
+    if field == "server":
+        match = re.fullmatch(r"\d{1,3}", text)
+        return match.group(0) if match else None
+    if field == "map":
+        match = re.fullmatch(r"([A-Za-z][A-Za-z '\-]{1,40})\s*\(\s*(\d{1,3})\s*[,.;]\s*(\d{1,3})\s*\)", text)
+        return f"{match.group(1).strip()} ({match.group(2)},{match.group(3)})" if match else None
+    if field == "level":
+        match = re.search(
+            r"(?i)(?<![A-Za-z0-9])([oO]|\d{1,4})\s*[.,]\s*(mt|lv)\s*"
+            r"\(\s*([\d.,]+)\s*%\s*\)",
+            text,
+        )
+        if not match:
+            return None
+        number = "0" if match.group(1).casefold() == "o" else match.group(1)
+        percent = match.group(3).replace(",", ".")
+        return f"{number}.{match.group(2).lower()} ({percent}%)"
+    if field == "reset":
+        match = re.search(r"(?i)(?<!\d)(\d{1,5})\s*[.,]\s*rs\b", text)
+        return f"{match.group(1)}.rs" if match else None
+    if field == "status":
+        return text if not any(character.isdigit() for character in text) and sum(
+            character.isalpha() for character in text
+        ) >= 3 else None
+    return None
+
+
 def _read_fields(image: Any, title: dict[str, Any], layout: dict[str, Any]) -> dict[str, Any]:
     """OCR configured value rectangles relative to the matched title on this frame."""
     settings = layout["textRecognition"]
@@ -47,9 +81,12 @@ def _read_fields(image: Any, title: dict[str, Any], layout: dict[str, Any]) -> d
         crop = cv2.copyMakeBorder(image[y1:y2, x1:x2], padding, padding, padding, padding,
                                   cv2.BORDER_CONSTANT, value=(0, 0, 0))
         crop = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
-        raw = " ".join(engine.recognize(crop).split())
+        winrt_raw = " ".join(engine.recognize(crop).split())
+        raw = winrt_raw
+        value = _normalize_field_value(field, raw)
         method, confidence = "winrt", None
-        if not raw:
+        attempts = {"winrt": winrt_raw}
+        if value is None:
             reader = EasyOCREngine()._get_reader()
             easyocr_options: dict[str, Any] = {"detail": 1, "paragraph": False}
             if allowlist is not None:
@@ -57,15 +94,15 @@ def _read_fields(image: Any, title: dict[str, Any], layout: dict[str, Any]) -> d
             items = [] if reader is None else reader.readtext(crop, **easyocr_options)
             accepted = sorted((item for item in items if float(item[2]) >= minimum_confidence),
                               key=lambda item: float(item[0][0][0]))
-            raw = " ".join(str(item[1]).strip() for item in accepted).strip()
+            easyocr_raw = " ".join(str(item[1]).strip() for item in accepted).strip()
+            attempts["easyocr"] = easyocr_raw
+            easyocr_value = _normalize_field_value(field, easyocr_raw)
+            if easyocr_value is not None:
+                raw, value = easyocr_raw, easyocr_value
             method = "easyocr"
             confidence = min((float(item[2]) for item in accepted), default=None)
-        value = raw or None
-        if field == "level" and value:
-            # Only correct O in the numeric level position; preserve raw OCR evidence.
-            value = re.sub(r"^[oO](?=[.,]mt\b)", "0", value)
         fields[field] = {"value": value, "raw_text": raw, "method": method,
-                         "confidence": confidence, "roi": roi}
+                         "confidence": confidence, "roi": roi, "attempts": attempts}
     return fields
 
 
