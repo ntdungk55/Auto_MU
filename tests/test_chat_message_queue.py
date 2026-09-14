@@ -18,3 +18,13 @@ def test_only_one_pending_message_is_kept_per_automatic_rule() -> None:
     assert queue.enqueue_automatic("run", "timer-a") is True
     assert queue.enqueue_automatic("run again", "timer-a") is False
     assert [item.text for item in queue.pending()] == ["run"]
+
+
+def test_clear_discards_all_pending_manual_and_automatic_messages() -> None:
+    queue = ChatMessageQueue()
+    queue.enqueue_manual("manual")
+    queue.enqueue_automatic("automatic", "timer-a")
+
+    queue.clear()
+
+    assert queue.pending() == []

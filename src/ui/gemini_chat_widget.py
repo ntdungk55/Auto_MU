@@ -814,6 +814,7 @@ class GeminiChatWidget(QWidget):
         self._refresh_attachment_ui()
         self._refresh_install_button()
         self._refresh_ai_activity_button()
+        self._refresh_queue_bubble()
         QTimer.singleShot(0, self._scroll_to_bottom)
 
     def _refresh_processes(self):
@@ -1315,6 +1316,9 @@ class GeminiChatWidget(QWidget):
         if active is None or active.is_set():
             return
         active.set()
+        self._message_queue.clear()
+        self._queue_expanded = False
+        self._refresh_queue_bubble()
         self._append_system_text("Đã yêu cầu hủy lượt AI hiện tại.")
         self._set_busy(False)
 
@@ -1517,8 +1521,6 @@ class GeminiChatWidget(QWidget):
             self._queue_bubble.clicked.connect(self._toggle_queue_bubble)
             self._queue_bubble.setStyleSheet("text-align:left;background:#202a36;color:#cfe5ff;border:1px solid #426583;border-radius:10px;padding:7px;")
             self.chat_layout.insertWidget(max(0, self.chat_layout.indexOf(self._chat_spacer)), self._queue_bubble)
-        if not pending:
-            self._queue_bubble.setVisible(False); return
         title = f"Tin nhắn chờ ({len(pending)})"
         detail = "\n".join(f"• {'Người dùng' if item.source == 'manual' else 'Tự động'}: {item.text}" for item in pending)
         self._queue_bubble.setText(title + ("\n" + detail if self._queue_expanded else ""))

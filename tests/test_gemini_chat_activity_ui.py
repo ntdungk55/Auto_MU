@@ -89,6 +89,7 @@ def test_busy_indicator_stays_below_left_aligned_tool_bubbles() -> None:
 def test_ai_activity_button_cancels_the_active_turn() -> None:
     widget = GeminiChatWidget()
     cancel_event = threading.Event()
+    widget._message_queue.enqueue_manual("Tin dang cho")
     widget._active_turn_cancel = cancel_event
     widget._refresh_ai_activity_button()
 
@@ -97,8 +98,17 @@ def test_ai_activity_button_cancels_the_active_turn() -> None:
     widget._cancel_active_turn()
 
     assert cancel_event.is_set()
+    assert widget._message_queue.pending() == []
     assert widget.ai_activity_btn.text() == "●"
     assert not widget.ai_activity_btn.isEnabled()
+
+
+def test_pending_message_bubble_is_created_and_shows_an_empty_queue() -> None:
+    widget = GeminiChatWidget()
+
+    assert widget._queue_bubble is not None
+    assert not widget._queue_bubble.isHidden()
+    assert "(0)" in widget._queue_bubble.text()
 
 
 def test_system_bubble_is_centered_and_wraps_at_eighty_percent_maximum() -> None:

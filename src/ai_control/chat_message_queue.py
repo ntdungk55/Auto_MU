@@ -34,3 +34,7 @@ class ChatMessageQueue:
 
     def pending(self) -> list[QueuedChatMessage]:
         return [*self._manual, *self._automatic]
+
+    def clear(self) -> None:
+        self._manual.clear()
+        self._automatic.clear()
