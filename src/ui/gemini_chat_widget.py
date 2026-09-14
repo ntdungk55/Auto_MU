@@ -1334,7 +1334,7 @@ class GeminiChatWidget(QWidget):
         self._refresh_queue_bubble()
 
     def _start_next_queued_turn(self) -> None:
-        if self._turn_running or not self._chat_ready: return
+        if self._turn_running or self._chat_turn_lock.locked() or not self._chat_ready: return
         queued = self._message_queue.pop_next()
         if queued is None: return
         self._turn_running = True
