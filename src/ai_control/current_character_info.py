@@ -16,9 +16,10 @@ from src.logic.system_executor.ocr_engine import EasyOCREngine, WinRTOCREngine
 
 def _normalize_map(raw_text: str) -> str | None:
     text = " ".join(str(raw_text or "").split()).strip()
-    if not re.fullmatch(r"[A-Za-z][A-Za-z '\-]{1,40}", text):
+    match = re.fullmatch(r"([A-Za-z][A-Za-z '\-]{1,40}?)(?:\s+\d{1,3})?", text)
+    if match is None:
         return None
-    return text
+    return match.group(1).strip()
 
 
 def get_current_character_map(target: dict[str, Any]) -> dict[str, Any]:
@@ -57,12 +58,16 @@ def get_current_character_map(target: dict[str, Any]) -> dict[str, Any]:
         method, confidence = "winrt", None
         if value is None:
             reader = EasyOCREngine()._get_reader()
-            items = [] if reader is None else reader.readtext(ocr_image, detail=1, paragraph=True)
-            easyocr_raw = " ".join(str(item[1]).strip() for item in items if float(item[2]) >= 0.3).strip()
+            items = [] if reader is None else reader.readtext(ocr_image, detail=1, paragraph=False)
+            accepted = [
+                item for item in items
+                if isinstance(item, (list, tuple)) and len(item) >= 3 and float(item[2]) >= 0.3
+            ]
+            easyocr_raw = " ".join(str(item[1]).strip() for item in accepted).strip()
             attempts["easyocr"] = easyocr_raw
             value = _normalize_map(easyocr_raw)
             method = "easyocr"
-            confidence = min((float(item[2]) for item in items), default=None)
+            confidence = min((float(item[2]) for item in accepted), default=None)
         result["ocr"] = {"value": value, "raw_text": winrt_raw if method == "winrt" else attempts["easyocr"], "method": method,
                          "confidence": confidence, "roi": roi, "attempts": attempts}
         if value is None:
