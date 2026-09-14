@@ -465,7 +465,7 @@ class AutoMessageDialog(QDialog):
         layout.addLayout(row)
         buttons = QHBoxLayout()
         add = QPushButton("Thêm mới"); add.clicked.connect(self._new)
-        save = QPushButton("Lưu mục"); save.clicked.connect(self._save)
+        save = QPushButton("Lưu chỉnh sửa"); save.clicked.connect(self._save)
         delete = QPushButton("Xóa"); delete.clicked.connect(self._delete)
         close = QPushButton("Đóng"); close.clicked.connect(self.accept)
         for button in (add, save, delete, close): buttons.addWidget(button)
@@ -482,15 +482,15 @@ class AutoMessageDialog(QDialog):
         for row, rule in enumerate(self.rules):
             self.table.insertRow(row)
             schedule = f"mỗi {rule.get('interval_seconds', 300)}s" if rule.get("kind") == "interval" else f"{rule.get('time', '00:00')} mỗi ngày"
-            status = self._rule_status(rule) if self._rule_status else ("Đang chạy" if rule.get("enabled", True) else "Đã dừng")
+            status = self._rule_status(rule) if self._rule_status else ("Đang chạy" if rule.get("enabled", False) else "Đã dừng")
             remaining = status.split("còn ", 1)[1] if "còn " in status else "—"
             self.table.setItem(row, 0, QTableWidgetItem(str(rule.get("text", ""))))
             self.table.setItem(row, 1, QTableWidgetItem(schedule))
-            self.table.setItem(row, 2, QTableWidgetItem("Đang chạy" if rule.get("enabled", True) else "Đã dừng"))
+            self.table.setItem(row, 2, QTableWidgetItem("Đang chạy" if rule.get("enabled", False) else "Đã dừng"))
             self.table.setItem(row, 3, QTableWidgetItem(remaining))
             for column, label, enabled in ((4, "Start", True), (5, "Stop", False)):
                 button = QPushButton(label)
-                button.setEnabled(enabled != bool(rule.get("enabled", True)))
+                button.setEnabled(enabled != bool(rule.get("enabled", False)))
                 button.clicked.connect(lambda _=False, index=row, value=enabled: self._set_enabled(index, value))
                 self.table.setCellWidget(row, column, button)
             delete = QPushButton("Xóa")
@@ -518,7 +518,7 @@ class AutoMessageDialog(QDialog):
         text = self.text.toPlainText().strip()
         if not text: return
         index = self.table.currentRow()
-        rule = self.rules[index] if 0 <= index < len(self.rules) else {"id": uuid.uuid4().hex, "enabled": True}
+        rule = self.rules[index] if 0 <= index < len(self.rules) else {"id": uuid.uuid4().hex, "enabled": False}
         rule.update({"text": text, "kind": "interval" if self.kind.currentIndex() == 0 else "time", "interval_seconds": self.value.value(), "time": self.clock.time().toString("HH:mm")})
         if not 0 <= index < len(self.rules): self.rules.append(rule)
         self._refresh(); self.table.selectRow(self.rules.index(rule))
@@ -1316,8 +1316,10 @@ class GeminiChatWidget(QWidget):
 
     def _load_auto_rules(self) -> list[dict]:
         try:
-            rules = self._load_auto_messages() if self._load_auto_messages else []
-            return [dict(rule) for rule in rules if isinstance(rule, dict) and rule.get("text")]
+            rules = [dict(rule) for rule in (self._load_auto_messages() if self._load_auto_messages else []) if isinstance(rule, dict) and rule.get("text")]
+            for rule in rules:
+                rule.setdefault("enabled", False)
+            return rules
         except Exception:
             return []
 
@@ -1350,7 +1352,7 @@ class GeminiChatWidget(QWidget):
 
     def _refresh_auto_schedule_status(self) -> None:
         if not hasattr(self, "auto_schedule_status"): return
-        enabled = [rule for rule in self._auto_rules if rule.get("enabled", True)]
+        enabled = [rule for rule in self._auto_rules if rule.get("enabled", False)]
         if not enabled:
             self.auto_schedule_status.setText("Tự động: chưa có lịch đang bật")
             return
@@ -1358,14 +1360,14 @@ class GeminiChatWidget(QWidget):
         self.auto_schedule_status.setText(f"Tự động: {len(enabled)} lịch đang chạy · lần tiếp {datetime.fromtimestamp(due):%H:%M:%S}")
 
     def _auto_rule_status(self, rule: dict) -> str:
-        if not rule.get("enabled", True): return "Đã dừng"
+        if not rule.get("enabled", False): return "Đã dừng"
         seconds = max(0, int(self._auto_next_due.get(str(rule.get("id")), time.time()) - time.time()))
         return f"Đang chạy · còn {seconds}s"
 
     def _enqueue_due_auto_messages(self) -> None:
         now = time.time()
         for rule in self._auto_rules:
-            if not rule.get("enabled", True): continue
+            if not rule.get("enabled", False): continue
             rule_id = str(rule.get("id"))
             if now < self._auto_next_due.get(rule_id, now + 1): continue
             self._message_queue.enqueue_automatic(str(rule.get("text", "")), rule_id)

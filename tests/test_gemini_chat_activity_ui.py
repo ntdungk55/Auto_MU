@@ -7,7 +7,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QSizePolicy, QVBoxLayout, QWidget
 
-from src.ui.gemini_chat_widget import _BouncingDots, _ChatBubble, GeminiChatWidget, GeminiSettingsDialog
+from src.ui.gemini_chat_widget import AutoMessageDialog, _BouncingDots, _ChatBubble, GeminiChatWidget, GeminiSettingsDialog
 from src.ai_control.ai_models.contracts import AIUsage
 from src.ai_control.ai_tool_bridge import AIMCPResult
 
@@ -49,6 +49,15 @@ def test_turn_meta_shows_provider_reported_token_total_after_duration() -> None:
     )
 
     assert meta.startswith("1.23s | 123 token |")
+
+
+def test_automatic_message_row_loads_into_the_edit_form_and_starts_stopped() -> None:
+    dialog = AutoMessageDialog([{"id": "rule-1", "text": "Kiểm tra", "kind": "interval", "interval_seconds": 300, "enabled": False}])
+    dialog.table.selectRow(0)
+    APP.processEvents()
+
+    assert dialog.text.toPlainText() == "Kiểm tra"
+    assert dialog.table.item(0, 2).text() == "Đã dừng"
 
 
 def test_busy_indicator_stays_below_left_aligned_tool_bubbles() -> None:
