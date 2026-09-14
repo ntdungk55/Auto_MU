@@ -6,6 +6,7 @@ import sys
 import importlib
 import json
 import uuid
+from urllib.request import urlopen
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Callable
@@ -280,6 +281,9 @@ class _TypingIndicator(QWidget):
 class GeminiSettingsDialog(QDialog):
     """Settings dialog for the selected AI provider and model."""
 
+    openrouter_models_loaded = pyqtSignal(object)
+    openrouter_models_failed = pyqtSignal(str)
+
     def __init__(
         self,
         parent=None,
@@ -298,6 +302,8 @@ class GeminiSettingsDialog(QDialog):
         self._on_clear_key = on_clear_key
         self._on_save_model = on_save_model
         self._on_save_provider = on_save_provider
+        self._openrouter_models: list[tuple[str, float, float]] = []
+        self._is_loading_openrouter_models = False
 
         layout = QVBoxLayout()
 
@@ -330,6 +336,7 @@ class GeminiSettingsDialog(QDialog):
         model_row = QHBoxLayout()
         model_row.addWidget(QLabel("Model:"))
         self.model_combo = QComboBox()
+        self.model_combo.setMaxVisibleItems(25)
         self._provider_models = {
             "openrouter": ["google/gemini-2.5-flash", "openai/gpt-4o-mini", "anthropic/claude-3.5-haiku", "Custom…"],
             "gemini": ["gemini-2.5-flash", "gemini-2.5-pro", "Custom…"],
@@ -341,11 +348,21 @@ class GeminiSettingsDialog(QDialog):
         model_row.addWidget(self.custom_model_input, 1)
         layout.addLayout(model_row)
 
+        catalog_row = QHBoxLayout()
+        self.model_catalog_status = QLabel("Danh mục OpenRouter chưa tải")
+        catalog_row.addWidget(self.model_catalog_status, 1)
+        self.refresh_models_btn = QPushButton("Cập nhật model")
+        self.refresh_models_btn.clicked.connect(self._load_openrouter_models)
+        catalog_row.addWidget(self.refresh_models_btn)
+        layout.addLayout(catalog_row)
+
         provider_index = self.provider_combo.findData(str(initial_provider or "openrouter").casefold())
         self.provider_combo.setCurrentIndex(max(0, provider_index))
         self._set_models(initial_model)
         self.provider_combo.currentIndexChanged.connect(self._on_provider_changed)
         self.model_combo.currentIndexChanged.connect(self._on_model_changed)
+        self.openrouter_models_loaded.connect(self._apply_openrouter_models)
+        self.openrouter_models_failed.connect(self._openrouter_models_load_failed)
 
         # Bottom buttons
         btn_row = QHBoxLayout()
@@ -356,6 +373,8 @@ class GeminiSettingsDialog(QDialog):
         layout.addLayout(btn_row)
 
         self.setLayout(layout)
+        if self.selected_provider() == "openrouter":
+            self._load_openrouter_models()
 
     def _on_model_changed(self, _idx: int):
         try:
@@ -369,8 +388,21 @@ class GeminiSettingsDialog(QDialog):
         selected_model = str(selected_model or "").strip()
         self.model_combo.blockSignals(True)
         self.model_combo.clear()
-        self.model_combo.addItems(self._provider_models[provider])
-        index = self.model_combo.findText(selected_model)
+        if provider == "openrouter":
+            if self._openrouter_models:
+                for model_id, prompt_price, completion_price in self._openrouter_models:
+                    self.model_combo.addItem(
+                        self._openrouter_model_label(model_id, prompt_price, completion_price), model_id
+                    )
+            else:
+                for model_id in self._provider_models["openrouter"]:
+                    if model_id != "Custom…":
+                        self.model_combo.addItem(f"{model_id} — đang tải giá", model_id)
+            self.model_combo.addItem("Custom…", "custom")
+            index = self.model_combo.findData(selected_model)
+        else:
+            self.model_combo.addItems(self._provider_models[provider])
+            index = self.model_combo.findText(selected_model)
         if index >= 0:
             self.model_combo.setCurrentIndex(index)
             self.custom_model_input.clear()
@@ -390,12 +422,75 @@ class GeminiSettingsDialog(QDialog):
         """Prevent a key for the previous provider from being saved under the new one."""
         self.key_input.clear()
         self._set_models()
+        if self.selected_provider() == "openrouter":
+            self._load_openrouter_models()
 
     def selected_model(self) -> str:
         name = str(self.model_combo.currentText() or "").strip()
-        if name == "Custom…":
+        if self.selected_provider() == "openrouter":
+            name = str(self.model_combo.currentData() or "").strip()
+        if name == "Custom…" or name == "custom":
             name = str(self.custom_model_input.text() or "").strip()
         return name
+
+    @staticmethod
+    def _openrouter_model_label(model_id: str, prompt_price: float, completion_price: float) -> str:
+        return f"{model_id} — ${prompt_price * 1_000_000:g} in / ${completion_price * 1_000_000:g} out / 1M token"
+
+    @staticmethod
+    def _parse_openrouter_models(payload: object) -> list[tuple[str, float, float]]:
+        """Keep text models that can execute this application's MCP tools."""
+        data = payload.get("data", []) if isinstance(payload, dict) else []
+        models: list[tuple[str, float, float]] = []
+        for item in data:
+            if not isinstance(item, dict) or "tools" not in item.get("supported_parameters", []):
+                continue
+            architecture = item.get("architecture", {})
+            if not isinstance(architecture, dict) or "text" not in architecture.get("output_modalities", []):
+                continue
+            pricing = item.get("pricing", {})
+            try:
+                model_id = str(item["id"]).strip()
+                prompt_price = float(pricing.get("prompt", 0))
+                completion_price = float(pricing.get("completion", 0))
+            except (KeyError, TypeError, ValueError):
+                continue
+            if model_id and prompt_price >= 0 and completion_price >= 0:
+                models.append((model_id, prompt_price, completion_price))
+        return sorted(models, key=lambda model: (model[1] + model[2], model[0]))
+
+    def _load_openrouter_models(self) -> None:
+        if self._is_loading_openrouter_models:
+            return
+        self._is_loading_openrouter_models = True
+        self.refresh_models_btn.setEnabled(False)
+        self.model_catalog_status.setText("Đang tải danh mục OpenRouter…")
+
+        def load() -> None:
+            try:
+                with urlopen("https://openrouter.ai/api/v1/models", timeout=12) as response:
+                    self.openrouter_models_loaded.emit(self._parse_openrouter_models(json.load(response)))
+            except Exception as error:
+                self.openrouter_models_failed.emit(str(error))
+
+        threading.Thread(target=load, daemon=True).start()
+
+    def _apply_openrouter_models(self, models: list[tuple[str, float, float]]) -> None:
+        self._is_loading_openrouter_models = False
+        self.refresh_models_btn.setEnabled(True)
+        if not models:
+            self._openrouter_models_load_failed("Không có model hỗ trợ tool")
+            return
+        selected_model = self.selected_model()
+        self._openrouter_models = models
+        self.model_catalog_status.setText(f"{len(models)} model hỗ trợ tool; giá USD / 1M token (in/out)")
+        if self.selected_provider() == "openrouter":
+            self._set_models(selected_model)
+
+    def _openrouter_models_load_failed(self, _error: str) -> None:
+        self._is_loading_openrouter_models = False
+        self.refresh_models_btn.setEnabled(True)
+        self.model_catalog_status.setText("Không tải được danh mục; dùng danh sách mặc định")
 
     def _save_key_clicked(self):
         if self._on_save_key is None:

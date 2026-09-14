@@ -23,7 +23,7 @@ def test_provider_change_uses_its_models_and_never_reuses_the_previous_key():
 
     assert dialog.selected_provider() == "openrouter"
     assert dialog.key_input.text() == ""
-    assert dialog.model_combo.findText("google/gemini-2.5-flash") >= 0
+    assert dialog.model_combo.findData("google/gemini-2.5-flash") >= 0
     dialog.save_model()
     assert saved_models == [("openrouter", "google/gemini-2.5-flash")]
 
@@ -31,3 +31,14 @@ def test_provider_change_uses_its_models_and_never_reuses_the_previous_key():
 def test_provider_sdk_packages_are_selected_by_provider():
     assert GeminiChatWidget._provider_package("openrouter") == "openai"
     assert GeminiChatWidget._provider_package("gemini") == "google-generativeai"
+
+
+def test_openrouter_catalog_keeps_tool_capable_text_models_and_prices_per_token():
+    models = GeminiSettingsDialog._parse_openrouter_models({"data": [
+        {"id": "expensive", "supported_parameters": ["tools"], "architecture": {"output_modalities": ["text"]}, "pricing": {"prompt": "0.000002", "completion": "0.000004"}},
+        {"id": "cheap", "supported_parameters": ["tools"], "architecture": {"output_modalities": ["text"]}, "pricing": {"prompt": "0.0000001", "completion": "0.0000002"}},
+        {"id": "no-tools", "supported_parameters": [], "architecture": {"output_modalities": ["text"]}, "pricing": {"prompt": "0", "completion": "0"}},
+    ]})
+
+    assert models == [("cheap", 0.0000001, 0.0000002), ("expensive", 0.000002, 0.000004)]
+    assert GeminiSettingsDialog._openrouter_model_label(*models[0]).endswith("$0.1 in / $0.2 out / 1M token")
