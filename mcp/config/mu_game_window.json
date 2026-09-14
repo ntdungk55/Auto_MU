@@ -208,11 +208,11 @@
       "summonedIndicatorTemplates": [
         {
           "path": "assets/companion_summoned_pause_indicator.png",
-          "threshold": 0.85
+          "threshold": 0.7
         },
         {
           "path": "assets/companion_summoned_play_indicator.png",
-          "threshold": 0.85
+          "threshold": 0.7
         }
       ],
       "roi": {
