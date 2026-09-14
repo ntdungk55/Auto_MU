@@ -125,6 +125,23 @@ class _PromptTextEdit(QTextEdit):
         super().dropEvent(event)
 
 
+class _PromptActionContainer(QWidget):
+    """Keep a clickable action icon over the right edge of the text editor."""
+
+    def __init__(self, prompt: QTextEdit, action: QPushButton, parent=None):
+        super().__init__(parent)
+        self._action = action
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(prompt)
+        action.setParent(self)
+        action.raise_()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._action.move(self.width() - self._action.width() - 7, (self.height() - self._action.height()) // 2)
+
+
 class _ChatBubble(QWidget):
     def __init__(self, text: str, side: str = "left", image_path: str | None = None, meta: str | None = None, parent=None):
         super().__init__(parent)
@@ -783,8 +800,15 @@ class GeminiChatWidget(QWidget):
         self.prompt.send_requested.connect(self._send)
         self.prompt.setPlaceholderText("Nhập câu hỏi… (Enter để gửi, Shift+Enter xuống dòng, kéo‑thả ảnh vào đây)")
         self.prompt.setMinimumHeight(44)
+        self.prompt.setViewportMargins(0, 0, 34, 0)
         self.prompt.setStyleSheet("background:#111;color:#e6e6e6;border:1px solid #222;border-radius:12px;")
-        input_bar.addWidget(self.prompt, 1)
+
+        self.ai_activity_btn = QPushButton("●")
+        self.ai_activity_btn.setFixedSize(26, 26)
+        self.ai_activity_btn.setToolTip("AI đang dừng")
+        self.ai_activity_btn.clicked.connect(self._cancel_active_turn)
+        prompt_container = _PromptActionContainer(self.prompt, self.ai_activity_btn)
+        input_bar.addWidget(prompt_container, 1)
 
         self.attach_btn = QPushButton("Đính kèm")
         self.attach_btn.clicked.connect(self._pick_image)
@@ -797,12 +821,6 @@ class GeminiChatWidget(QWidget):
         self.auto_messages_btn = QPushButton("Tự động")
         self.auto_messages_btn.clicked.connect(self._open_auto_messages)
         input_bar.addWidget(self.auto_messages_btn, 0)
-
-        self.ai_activity_btn = QPushButton("●")
-        self.ai_activity_btn.setFixedWidth(30)
-        self.ai_activity_btn.setToolTip("AI đang dừng")
-        self.ai_activity_btn.clicked.connect(self._cancel_active_turn)
-        input_bar.addWidget(self.ai_activity_btn, 0)
 
         self.send_btn = QPushButton("Gửi")
         self.send_btn.clicked.connect(self._send)
