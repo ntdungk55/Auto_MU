@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Callable
 
-from PyQt6.QtCore import Qt, pyqtSignal, QObject, QTimer, QRectF, QTime
+from PyQt6.QtCore import Qt, pyqtSignal, QObject, QTimer, QRectF, QTime, QEvent
 from PyQt6.QtGui import QPixmap, QKeyEvent, QColor, QPainter
 from PyQt6.QtWidgets import (
     QWidget,
@@ -705,7 +705,7 @@ class GeminiChatWidget(QWidget):
         self._message_queue = ChatMessageQueue()
         self._auto_rules = self._load_auto_rules()
         self._auto_next_due: dict[str, float] = {}
-        self._queue_bubble: _ChatBubble | None = None
+        self._queue_bubble: QPushButton | None = None
         self._queue_expanded = False
         self._signals.turn_finished.connect(self._on_turn_finished, Qt.ConnectionType.QueuedConnection)
 
@@ -1534,19 +1534,48 @@ class GeminiChatWidget(QWidget):
     def _refresh_queue_bubble(self) -> None:
         pending = self._message_queue.pending()
         if self._queue_bubble is None:
-            self._queue_bubble = QPushButton()
+            self._queue_bubble = QPushButton(self.scroll.viewport())
             self._queue_bubble.setCheckable(True)
             self._queue_bubble.clicked.connect(self._toggle_queue_bubble)
-            self._queue_bubble.setStyleSheet("text-align:left;background:#202a36;color:#cfe5ff;border:1px solid #426583;border-radius:10px;padding:7px;")
-            self.chat_layout.insertWidget(max(0, self.chat_layout.indexOf(self._chat_spacer)), self._queue_bubble)
+            self.scroll.viewport().installEventFilter(self)
         title = f"Tin nhắn chờ ({len(pending)})"
         detail = "\n".join(f"• {'Người dùng' if item.source == 'manual' else 'Tự động'}: {item.text}" for item in pending)
         self._queue_bubble.setText(title + ("\n" + detail if self._queue_expanded else ""))
+        self._queue_bubble.setChecked(self._queue_expanded)
+        self._queue_bubble.setStyleSheet(
+            "text-align:left;background:#202a36;color:#cfe5ff;border:1px solid #426583;border-radius:10px;padding:7px;font-size:11px;"
+            if self._queue_expanded else
+            "text-align:left;background:transparent;color:#a9bfd3;border:0;padding:2px 5px;font-size:10px;"
+        )
         self._queue_bubble.setVisible(True)
+        self._position_queue_bubble()
 
     def _toggle_queue_bubble(self) -> None:
         self._queue_expanded = not self._queue_expanded
         self._refresh_queue_bubble()
+
+    def _position_queue_bubble(self) -> None:
+        bubble = self._queue_bubble
+        if bubble is None:
+            return
+        viewport = self.scroll.viewport()
+        available_width = max(1, viewport.width() - 16)
+        available_height = max(1, viewport.height() - 16)
+        if self._queue_expanded:
+            width = min(380, available_width)
+            line_count = max(1, len(self._message_queue.pending()) + 1)
+            height = min(220, max(40, 20 + line_count * 26), available_height)
+        else:
+            width = min(available_width, max(96, bubble.fontMetrics().horizontalAdvance(bubble.text()) + 12))
+            height = 22
+        bubble.setFixedSize(width, height)
+        bubble.move(max(8, viewport.width() - width - 8), max(8, viewport.height() - height - 8))
+        bubble.raise_()
+
+    def eventFilter(self, watched, event):
+        if watched is self.scroll.viewport() and event.type() == QEvent.Type.Resize:
+            QTimer.singleShot(0, self._position_queue_bubble)
+        return super().eventFilter(watched, event)
 
     def _start_next_queued_turn(self) -> None:
         if self._turn_running or self._chat_turn_lock.locked() or not self._chat_ready: return

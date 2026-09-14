@@ -111,6 +111,22 @@ def test_pending_message_bubble_is_created_and_shows_an_empty_queue() -> None:
     assert "(0)" in widget._queue_bubble.text()
 
 
+def test_pending_message_bubble_overlays_the_bottom_of_the_chat_viewport() -> None:
+    widget = GeminiChatWidget()
+    widget.scroll.viewport().resize(600, 300)
+    widget._position_queue_bubble()
+    bubble = widget._queue_bubble
+    assert bubble is not None
+    assert bubble.parentWidget() is widget.scroll.viewport()
+    assert bubble.geometry().bottom() <= widget.scroll.viewport().rect().bottom() - 7
+
+    widget._message_queue.enqueue_manual("Tin dang cho")
+    widget._queue_expanded = True
+    widget._refresh_queue_bubble()
+    assert bubble.height() > 22
+    assert bubble.geometry().bottom() <= widget.scroll.viewport().rect().bottom() - 7
+
+
 def test_system_bubble_is_centered_and_wraps_at_eighty_percent_maximum() -> None:
     _application()
     container = QWidget()
