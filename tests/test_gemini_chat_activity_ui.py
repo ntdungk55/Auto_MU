@@ -1,6 +1,7 @@
 """Verify Gemini Chat activity and tool-event presentation."""
 
 import os
+import threading
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -83,6 +84,21 @@ def test_busy_indicator_stays_below_left_aligned_tool_bubbles() -> None:
 
     widget._set_busy(False)
     assert widget._typing_indicator is None
+
+
+def test_ai_activity_button_cancels_the_active_turn() -> None:
+    widget = GeminiChatWidget()
+    cancel_event = threading.Event()
+    widget._active_turn_cancel = cancel_event
+    widget._refresh_ai_activity_button()
+
+    assert widget.ai_activity_btn.text() == "■"
+    assert widget.ai_activity_btn.isEnabled()
+    widget._cancel_active_turn()
+
+    assert cancel_event.is_set()
+    assert widget.ai_activity_btn.text() == "●"
+    assert not widget.ai_activity_btn.isEnabled()
 
 
 def test_system_bubble_is_centered_and_wraps_at_eighty_percent_maximum() -> None:

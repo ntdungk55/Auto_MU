@@ -12,6 +12,10 @@ from src.ai_control.ai_models.contracts import AIChatSession, AIToolResult, AIUs
 MAX_TOOL_CALLS_PER_MESSAGE = 20
 
 
+class AIMCPTurnCancelled(RuntimeError):
+    """Raised when the user stops an AI turn between provider or tool calls."""
+
+
 @dataclass(frozen=True)
 class AIMCPResult:
     text: str
@@ -31,6 +35,7 @@ def run_ai_mcp_turn(
     mcp_client: Any,
     max_tool_calls: int = MAX_TOOL_CALLS_PER_MESSAGE,
     on_tool_event: Callable[[dict[str, Any]], None] | None = None,
+    is_cancelled: Callable[[], bool] | None = None,
 ) -> AIMCPResult:
     """Run one scenario turn and clear its dynamic context at every terminal outcome."""
     try:
@@ -40,6 +45,7 @@ def run_ai_mcp_turn(
             mcp_client=mcp_client,
             max_tool_calls=max_tool_calls,
             on_tool_event=on_tool_event,
+            is_cancelled=is_cancelled,
         )
     finally:
         chat.reset_scenario()
@@ -52,21 +58,26 @@ def _run_ai_mcp_turn(
     mcp_client: Any,
     max_tool_calls: int = MAX_TOOL_CALLS_PER_MESSAGE,
     on_tool_event: Callable[[dict[str, Any]], None] | None = None,
+    is_cancelled: Callable[[], bool] | None = None,
 ) -> AIMCPResult:
     """Execute one scenario while retaining its dynamic messages for tool sequencing."""
     call_limit = max(1, int(max_tool_calls))
     tool_call_count = 0
     limit_reached = False
+    _raise_if_cancelled(is_cancelled)
     response = chat.send(initial_content)
+    _raise_if_cancelled(is_cancelled)
     usage = _UsageAccumulator()
     usage.add(response.usage)
 
     while True:
+        _raise_if_cancelled(is_cancelled)
         if not response.tool_calls:
             return AIMCPResult(response.text, tool_call_count, limit_reached, usage.value())
 
         tool_results: list[AIToolResult] = []
         for call in response.tool_calls:
+            _raise_if_cancelled(is_cancelled)
             name = call.name
             arguments = dict(call.arguments or {})
             if tool_call_count >= call_limit:
@@ -93,6 +104,7 @@ def _run_ai_mcp_turn(
                 )
                 try:
                     result = mcp_client.call_tool(name, arguments)
+                    _raise_if_cancelled(is_cancelled)
                     if not isinstance(result, dict):
                         result = {"result": result}
                     phase = "error" if result.get("ok") is False or result.get("success") is False else "success"
@@ -112,7 +124,9 @@ def _run_ai_mcp_turn(
                 )
             tool_results.append(AIToolResult(name=name, result=result, call_id=call.call_id))
 
+        _raise_if_cancelled(is_cancelled)
         response = chat.send_tool_results(tool_results)
+        _raise_if_cancelled(is_cancelled)
         usage.add(response.usage)
         if limit_reached:
             text = response.text or f"Đã dừng vì đạt giới hạn {call_limit} MCP tool calls cho một tin nhắn."
@@ -154,3 +168,8 @@ def _emit_tool_event(callback: Callable[[dict[str, Any]], None] | None, event: d
         callback(event)
     except Exception:
         pass
+
+
+def _raise_if_cancelled(is_cancelled: Callable[[], bool] | None) -> None:
+    if is_cancelled is not None and is_cancelled():
+        raise AIMCPTurnCancelled("AI turn cancelled by user")

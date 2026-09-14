@@ -2,7 +2,9 @@ from types import SimpleNamespace
 
 from src.ai_control.ai_models.contracts import AIToolResult
 from src.ai_control.ai_models.openrouter_adapter import OpenRouterModelAdapter
-from src.ai_control.ai_tool_bridge import run_ai_mcp_turn
+import pytest
+
+from src.ai_control.ai_tool_bridge import AIMCPTurnCancelled, run_ai_mcp_turn
 
 
 class _FakeCompletions:
@@ -109,3 +111,21 @@ def test_openrouter_context_is_reset_after_a_completed_scenario():
     assert all("Scenario đầu" not in str(message) for message in next_messages)
     assert all("call-1" not in str(message) for message in next_messages)
     assert result.usage.total_tokens == 240
+
+
+def test_cancelled_turn_does_not_send_a_provider_request():
+    client_class = _FakeClientClass([_message("Should not be requested")])
+    chat = OpenRouterModelAdapter(
+        api_key="test-key", model_name="google/gemini-2.5-flash", client_class=client_class
+    ).start_chat(system_prompt="System prompt", tools=[])
+
+    with pytest.raises(AIMCPTurnCancelled):
+        run_ai_mcp_turn(
+            chat=chat,
+            initial_content=["Scenario"],
+            mcp_client=_FakeMCPClient(),
+            is_cancelled=lambda: True,
+        )
+
+    _, client = client_class.created[0]
+    assert client.chat.completions.requests == []

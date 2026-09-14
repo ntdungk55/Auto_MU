@@ -684,6 +684,7 @@ class GeminiChatWidget(QWidget):
         self._chat_ready = False
         self._typing_indicator: _TypingIndicator | None = None
         self._turn_running = False
+        self._active_turn_cancel: threading.Event | None = None
         self._message_queue = ChatMessageQueue()
         self._auto_rules = self._load_auto_rules()
         self._auto_next_due: dict[str, float] = {}
@@ -797,6 +798,12 @@ class GeminiChatWidget(QWidget):
         self.auto_messages_btn.clicked.connect(self._open_auto_messages)
         input_bar.addWidget(self.auto_messages_btn, 0)
 
+        self.ai_activity_btn = QPushButton("●")
+        self.ai_activity_btn.setFixedWidth(30)
+        self.ai_activity_btn.setToolTip("AI đang dừng")
+        self.ai_activity_btn.clicked.connect(self._cancel_active_turn)
+        input_bar.addWidget(self.ai_activity_btn, 0)
+
         self.send_btn = QPushButton("Gửi")
         self.send_btn.clicked.connect(self._send)
         input_bar.addWidget(self.send_btn, 0)
@@ -806,6 +813,7 @@ class GeminiChatWidget(QWidget):
         self._append_system_text("Sẵn sàng. Kéo‑thả ảnh vào ô nhập để đính kèm, rồi bấm Gửi.")
         self._refresh_attachment_ui()
         self._refresh_install_button()
+        self._refresh_ai_activity_button()
         QTimer.singleShot(0, self._scroll_to_bottom)
 
     def _refresh_processes(self):
@@ -1285,8 +1293,30 @@ class GeminiChatWidget(QWidget):
                 self._show_typing_indicator()
             else:
                 self._hide_typing_indicator()
+            self._refresh_ai_activity_button()
         except Exception:
             pass
+
+    def _refresh_ai_activity_button(self) -> None:
+        button = getattr(self, "ai_activity_btn", None)
+        if button is None:
+            return
+        active = self._active_turn_cancel
+        running = active is not None and not active.is_set()
+        button.setText("■" if running else "●")
+        button.setEnabled(running)
+        button.setToolTip("Hủy lượt AI hiện tại" if running else "AI đang dừng")
+        button.setStyleSheet(
+            "color:#ff7272;font-size:16px;" if running else "color:#7f8c8d;font-size:16px;"
+        )
+
+    def _cancel_active_turn(self) -> None:
+        active = self._active_turn_cancel
+        if active is None or active.is_set():
+            return
+        active.set()
+        self._append_system_text("Đã yêu cầu hủy lượt AI hiện tại.")
+        self._set_busy(False)
 
     def _show_typing_indicator(self):
         if self._typing_indicator is not None:
@@ -1510,6 +1540,8 @@ class GeminiChatWidget(QWidget):
 
     def _on_turn_finished(self) -> None:
         self._turn_running = False
+        self._active_turn_cancel = None
+        self._refresh_ai_activity_button()
         self._start_next_queued_turn()
 
     def _send(self):
@@ -1549,6 +1581,8 @@ class GeminiChatWidget(QWidget):
 
         # Snapshot inputs (avoid UI thread races)
         model_name = self._current_model_name
+        cancel_event = threading.Event()
+        self._active_turn_cancel = cancel_event
 
         self._signals.set_busy.emit(True)
 
@@ -1567,7 +1601,7 @@ class GeminiChatWidget(QWidget):
                 if not parts:
                     parts = [prompt or ""]
 
-                from src.ai_control.ai_tool_bridge import run_ai_mcp_turn
+                from src.ai_control.ai_tool_bridge import AIMCPTurnCancelled, run_ai_mcp_turn
 
                 with self._chat_turn_lock:
                     tool_result = run_ai_mcp_turn(
@@ -1575,8 +1609,11 @@ class GeminiChatWidget(QWidget):
                         initial_content=parts,
                         mcp_client=tool_client,
                         max_tool_calls=20,
-                        on_tool_event=self._on_tool_event,
+                        on_tool_event=lambda event: None if cancel_event.is_set() else self._on_tool_event(event),
+                        is_cancelled=cancel_event.is_set,
                     )
+                if cancel_event.is_set():
+                    return
                 dt_ms = (time.perf_counter() - t0) * 1000.0
                 txt = tool_result.text
                 self._signals.append_message.emit(
@@ -1586,6 +1623,8 @@ class GeminiChatWidget(QWidget):
                         "meta": self._format_turn_meta(dt_ms, model_name, tool_result),
                     }
                 )
+            except AIMCPTurnCancelled:
+                pass
             except Exception as e:
                 dt_ms = (time.perf_counter() - t0) * 1000.0
                 self._signals.append_message.emit(
