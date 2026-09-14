@@ -1324,7 +1324,10 @@ class GeminiChatWidget(QWidget):
         button.setEnabled(True)
         button.setToolTip("Hủy lượt AI hiện tại" if running else "Gửi tin nhắn (Enter)")
         button.setStyleSheet(
-            "color:#ff7272;font-size:16px;" if running else "color:#a9bfd3;font-size:18px;"
+            "QPushButton{background:#b93f48;color:white;border:0;border-radius:13px;font-size:14px;}"
+            "QPushButton:hover{background:#d6545f;}" if running else
+            "QPushButton{background:#2878c7;color:white;border:0;border-radius:13px;font-size:18px;}"
+            "QPushButton:hover{background:#3a91e6;}"
         )
 
     def _handle_input_action(self) -> None:
