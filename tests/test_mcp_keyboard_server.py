@@ -41,7 +41,7 @@ def test_internal_window_selection_filters_hidden_windows(monkeypatch) -> None:
     assert windows == [{"hwnd": 10, "title": "MU", "visible": True}]
 
 
-def test_wake_clicks_client_center_without_changing_foreground(monkeypatch) -> None:
+def test_wake_clicks_client_top_left_without_changing_foreground(monkeypatch) -> None:
     messages = []
     monkeypatch.setattr(win32gui, "IsWindow", lambda hwnd: hwnd == 10)
     monkeypatch.setattr(win32gui, "IsWindowVisible", lambda hwnd: hwnd == 10)
@@ -53,14 +53,14 @@ def test_wake_clicks_client_center_without_changing_foreground(monkeypatch) -> N
 
     result = keyboard._wake_selected_window({"hwnd": 10})
 
-    expected_lparam = (300 << 16) | 400
+    expected_lparam = (1 << 16) | 1
     assert messages == [
         (10, win32con.WM_MOUSEMOVE, 0, expected_lparam),
         (10, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, expected_lparam),
         (10, win32con.WM_LBUTTONUP, 0, expected_lparam),
     ]
-    assert result["method"] == "background_center_click"
-    assert (result["x"], result["y"]) == (400, 300)
+    assert result["method"] == "background_top_left_click"
+    assert (result["x"], result["y"]) == (1, 1)
     assert result["focus_requested"] is False
     assert result["foreground_changed"] is False
     assert result["delay_ms"] == 0

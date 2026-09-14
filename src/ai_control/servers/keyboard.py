@@ -181,7 +181,7 @@ def _post_single_key(hwnd: int, key: str) -> bool:
 
 
 def _wake_selected_window(target: dict[str, Any]) -> dict[str, Any]:
-    """Wake the selected game with one background click at its client-area center."""
+    """Wake the selected game with one background click at client coordinate (1, 1)."""
     import win32con
     import win32gui
 
@@ -192,7 +192,7 @@ def _wake_selected_window(target: dict[str, Any]) -> dict[str, Any]:
     width, height = int(right - left), int(bottom - top)
     if width <= 0 or height <= 0:
         raise RuntimeError("Selected game window has an invalid client area")
-    x, y = width // 2, height // 2
+    x, y = 1, 1
     foreground_before = int(win32gui.GetForegroundWindow() or 0)
     lparam = (y << 16) | (x & 0xFFFF)
     win32gui.PostMessage(hwnd, win32con.WM_MOUSEMOVE, 0, lparam)
@@ -200,7 +200,7 @@ def _wake_selected_window(target: dict[str, Any]) -> dict[str, Any]:
     win32gui.PostMessage(hwnd, win32con.WM_LBUTTONUP, 0, lparam)
     foreground_after = int(win32gui.GetForegroundWindow() or 0)
     return {
-        "success": True, "method": "background_center_click", "hwnd": hwnd,
+        "success": True, "method": "background_top_left_click", "hwnd": hwnd,
         "x": x, "y": y, "client_width": width, "client_height": height,
         "foreground_before": foreground_before, "foreground_after": foreground_after,
         "foreground_changed": foreground_after != foreground_before,
