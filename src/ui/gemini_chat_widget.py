@@ -433,11 +433,14 @@ class GeminiSettingsDialog(QDialog):
 class AutoMessageDialog(QDialog):
     """Create, update and remove recurring automatic chat messages."""
 
-    def __init__(self, rules: list[dict], parent=None):
+    def __init__(self, rules: list[dict], on_changed: Callable[[list[dict]], None] | None = None,
+                 rule_status: Callable[[dict], str] | None = None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Tin nhắn tự động")
         self.setMinimumWidth(520)
         self.rules = [dict(rule) for rule in rules]
+        self._on_changed = on_changed
+        self._rule_status = rule_status
         layout = QVBoxLayout(self)
         self.list = QListWidget()
         self.list.currentRowChanged.connect(self._load_selected)
@@ -455,19 +458,24 @@ class AutoMessageDialog(QDialog):
         buttons = QHBoxLayout()
         add = QPushButton("Thêm mới"); add.clicked.connect(self._new)
         save = QPushButton("Lưu mục"); save.clicked.connect(self._save)
+        start = QPushButton("Start"); start.clicked.connect(lambda: self._set_enabled(True))
+        stop = QPushButton("Stop"); stop.clicked.connect(lambda: self._set_enabled(False))
         delete = QPushButton("Xóa"); delete.clicked.connect(self._delete)
         close = QPushButton("Đóng"); close.clicked.connect(self.accept)
-        for button in (add, save, delete, close): buttons.addWidget(button)
+        for button in (add, save, start, stop, delete, close): buttons.addWidget(button)
         layout.addLayout(buttons)
         self.kind.currentIndexChanged.connect(lambda _: self._update_kind_ui())
         self._refresh(); self._update_kind_ui()
+        self._status_timer = QTimer(self); self._status_timer.setInterval(1000)
+        self._status_timer.timeout.connect(self._refresh); self._status_timer.start()
 
     def _refresh(self):
         current = self.list.currentRow()
         self.list.clear()
         for rule in self.rules:
             schedule = f"mỗi {rule.get('interval_seconds', 300)}s" if rule.get("kind") == "interval" else f"{rule.get('time', '00:00')} mỗi ngày"
-            self.list.addItem(f"{schedule} — {rule.get('text', '')}")
+            status = self._rule_status(rule) if self._rule_status else ("Đang chạy" if rule.get("enabled", True) else "Đã dừng")
+            self.list.addItem(f"{status} | {schedule} — {rule.get('text', '')}")
         if self.rules: self.list.setCurrentRow(max(0, min(current, len(self.rules) - 1)))
 
     def _update_kind_ui(self):
@@ -493,10 +501,20 @@ class AutoMessageDialog(QDialog):
         rule.update({"text": text, "kind": "interval" if self.kind.currentIndex() == 0 else "time", "interval_seconds": self.value.value(), "time": self.clock.time().toString("HH:mm")})
         if not 0 <= index < len(self.rules): self.rules.append(rule)
         self._refresh(); self.list.setCurrentRow(self.rules.index(rule))
+        if self._on_changed: self._on_changed(self.rules)
 
     def _delete(self):
         index = self.list.currentRow()
-        if 0 <= index < len(self.rules): self.rules.pop(index); self._refresh()
+        if 0 <= index < len(self.rules):
+            self.rules.pop(index); self._refresh()
+            if self._on_changed: self._on_changed(self.rules)
+
+    def _set_enabled(self, enabled: bool):
+        index = self.list.currentRow()
+        if not 0 <= index < len(self.rules): return
+        self.rules[index]["enabled"] = enabled
+        if self._on_changed: self._on_changed(self.rules)
+        self._refresh(); self.list.setCurrentRow(index)
 
 
 class GeminiChatWidget(QWidget):
@@ -627,6 +645,10 @@ class GeminiChatWidget(QWidget):
         attach_l.addWidget(self.clear_attach_btn, 0)
         layout.addWidget(self.attach_row)
         self._attach_path: Optional[str] = None
+
+        self.auto_schedule_status = QLabel("Tự động: chưa có lịch")
+        self.auto_schedule_status.setStyleSheet("color:#a9bfd3;font-size:11px;")
+        layout.addWidget(self.auto_schedule_status)
 
         # Input bar (buttons near Send)
         self.input_row = QWidget()
@@ -1296,12 +1318,29 @@ class GeminiChatWidget(QWidget):
                 self._auto_next_due[rule_id] = due.timestamp()
             else:
                 self._auto_next_due[rule_id] = now + max(1, int(rule.get("interval_seconds", 300)))
+        self._refresh_auto_schedule_status()
 
     def _open_auto_messages(self) -> None:
-        dialog = AutoMessageDialog(self._auto_rules, self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self._auto_rules = dialog.rules
-            self._save_auto_rules(); self._reset_auto_schedule(); self._refresh_queue_bubble()
+        dialog = AutoMessageDialog(self._auto_rules, self._apply_auto_rules, self._auto_rule_status, self)
+        dialog.exec()
+
+    def _apply_auto_rules(self, rules: list[dict]) -> None:
+        self._auto_rules = [dict(rule) for rule in rules]
+        self._save_auto_rules(); self._reset_auto_schedule(); self._refresh_queue_bubble()
+
+    def _refresh_auto_schedule_status(self) -> None:
+        if not hasattr(self, "auto_schedule_status"): return
+        enabled = [rule for rule in self._auto_rules if rule.get("enabled", True)]
+        if not enabled:
+            self.auto_schedule_status.setText("Tự động: chưa có lịch đang bật")
+            return
+        due = min(self._auto_next_due.values(), default=time.time())
+        self.auto_schedule_status.setText(f"Tự động: {len(enabled)} lịch đang chạy · lần tiếp {datetime.fromtimestamp(due):%H:%M:%S}")
+
+    def _auto_rule_status(self, rule: dict) -> str:
+        if not rule.get("enabled", True): return "Đã dừng"
+        seconds = max(0, int(self._auto_next_due.get(str(rule.get("id")), time.time()) - time.time()))
+        return f"Đang chạy · còn {seconds}s"
 
     def _enqueue_due_auto_messages(self) -> None:
         now = time.time()
@@ -1313,6 +1352,7 @@ class GeminiChatWidget(QWidget):
             if rule.get("kind") == "time": self._auto_next_due[rule_id] += 86400
             else: self._auto_next_due[rule_id] = now + max(1, int(rule.get("interval_seconds", 300)))
         self._refresh_queue_bubble(); self._start_next_queued_turn()
+        self._refresh_auto_schedule_status()
 
     def _refresh_queue_bubble(self) -> None:
         pending = self._message_queue.pending()
