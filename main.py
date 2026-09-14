@@ -1262,17 +1262,19 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.stacked_widget)
         self.stacked_widget.setCurrentIndex(0)  # Default to Home
 
-        # Make Gemini key/model available to runtime (actions) even if Gemini tab is never opened.
+        # Make the selected AI provider credentials available to runtime actions.
         try:
-            k = self._get_saved_gemini_key()
-            if k and not os.environ.get("GEMINI_API_KEY"):
-                os.environ["GEMINI_API_KEY"] = k
+            provider = self._get_saved_ai_provider()
+            k = self._get_saved_ai_key(provider)
+            if k:
+                os.environ[f"{provider.upper()}_API_KEY"] = k
+            os.environ["AI_PROVIDER"] = provider
         except Exception:
             pass
         try:
-            m = self._get_saved_gemini_model()
-            if m and not os.environ.get("GEMINI_MODEL_NAME"):
-                os.environ["GEMINI_MODEL_NAME"] = m
+            m = self._get_saved_ai_model(provider)
+            if m:
+                os.environ["AI_MODEL_NAME"] = m
         except Exception:
             pass
 
@@ -1433,9 +1435,9 @@ class MainWindow(QMainWindow):
         self.hotkey_action.triggered.connect(lambda: self.on_toolbar_action_clicked(1))
         toolbar.addAction(self.hotkey_action)
 
-        # Gemini Chat action
-        self.gemini_action = QAction("Gemini Chat", self)
-        self.gemini_action.setToolTip("Chat với Gemini (kéo & thả ảnh để phân tích)")
+        # AI Chat action
+        self.gemini_action = QAction("AI Chat", self)
+        self.gemini_action.setToolTip("Chat với AI (kéo & thả ảnh để phân tích)")
         self.gemini_action.setCheckable(True)
         self.gemini_action.triggered.connect(lambda: self.on_toolbar_action_clicked(2))
         toolbar.addAction(self.gemini_action)
@@ -1450,7 +1452,7 @@ class MainWindow(QMainWindow):
         # Settings menu button (dropdown)
         settings_menu_btn = QToolButton()
         settings_menu_btn.setText("Settings")
-        settings_menu_btn.setToolTip("Cài đặt Telegram & Gemini")
+        settings_menu_btn.setToolTip("Cài đặt Telegram & AI")
         settings_menu_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         
         # Create menu for settings
@@ -1460,7 +1462,7 @@ class MainWindow(QMainWindow):
         telegram_action.triggered.connect(self._open_telegram_settings_dialog)
         settings_menu.addAction(telegram_action)
         
-        gemini_settings_action = QAction("Gemini API Settings", self)
+        gemini_settings_action = QAction("AI Provider Settings", self)
         gemini_settings_action.triggered.connect(self._open_gemini_settings_dialog)
         settings_menu.addAction(gemini_settings_action)
         
@@ -1501,21 +1503,23 @@ class MainWindow(QMainWindow):
             self.close_all_child_windows()
 
     def create_gemini_widget(self):
-        """Tạo widget cho màn hình Gemini Chat."""
+        """Tạo widget cho màn hình AI Chat."""
         return GeminiChatWidget(
-            load_saved_key=self._get_saved_gemini_key,
-            save_key=self._save_gemini_key,
-            clear_saved_key=self._clear_saved_gemini_key,
-            load_saved_model=self._get_saved_gemini_model,
-            save_model=self._save_gemini_model,
+            load_saved_key=lambda: self._get_saved_ai_key(self._get_saved_ai_provider()),
+            save_key=self._save_ai_key,
+            clear_saved_key=self._clear_saved_ai_key,
+            load_saved_model=lambda: self._get_saved_ai_model(self._get_saved_ai_provider()),
+            save_model=self._save_ai_model,
+            load_saved_provider=self._get_saved_ai_provider,
+            save_provider=self._save_ai_provider,
             create_ai_process_controller=self._create_ai_process_controller,
         )
 
-    def _create_ai_process_controller(self, api_key: str, model_name: str):
-        """Create the event-AI controller using the active Gemini credentials."""
+    def _create_ai_process_controller(self, provider: str, api_key: str, model_name: str):
+        """Create the event-AI controller using the selected provider credentials."""
         from samples.ai_game_controller.main import create_ai_process_controller
 
-        controller, _ = create_ai_process_controller(api_key=api_key, model_name=model_name)
+        controller, _ = create_ai_process_controller(provider=provider, api_key=api_key, model_name=model_name)
         return controller
     
     def _open_telegram_settings_dialog(self):
@@ -1525,16 +1529,62 @@ class MainWindow(QMainWindow):
         dialog.exec()
     
     def _open_gemini_settings_dialog(self):
-        """Mở dialog cài đặt Gemini."""
-        from src.ui.gemini_settings_dialog import GeminiSettingsDialog
-        dialog = GeminiSettingsDialog(
-            load_saved_key=self._get_saved_gemini_key,
-            save_key=self._save_gemini_key,
-            load_saved_model=self._get_saved_gemini_model,
-            save_model=self._save_gemini_model,
-            parent=self
-        )
-        dialog.exec()
+        """Mở dialog cài đặt AI dùng chung với tab chat."""
+        self.gemini_widget._open_settings()
+
+    def _get_saved_ai_provider(self) -> str:
+        return str(self._load_app_state().get("ai_provider", "openrouter") or "openrouter").strip().casefold()
+
+    def _save_ai_provider(self, provider: str) -> None:
+        provider = str(provider or "openrouter").strip().casefold()
+        if provider not in {"openrouter", "gemini"}:
+            raise ValueError(f"AI provider không hỗ trợ: {provider}")
+        state = self._load_app_state()
+        state["ai_provider"] = provider
+        self._save_app_state(state)
+        os.environ["AI_PROVIDER"] = provider
+
+    def _get_saved_ai_key(self, provider: str) -> str:
+        provider = str(provider or "openrouter").strip().casefold()
+        state = self._load_app_state()
+        b64 = str(state.get(f"{provider}_api_key_dpapi_b64", "") or "")
+        if not b64:
+            return ""
+        try:
+            return unprotect_from_b64(b64)
+        except Exception:
+            return ""
+
+    def _save_ai_key(self, provider: str, plaintext_key: str) -> None:
+        provider = str(provider or "openrouter").strip().casefold()
+        key = str(plaintext_key or "").strip()
+        if not key:
+            return
+        state = self._load_app_state()
+        state[f"{provider}_api_key_dpapi_b64"] = protect_to_b64(key)
+        self._save_app_state(state)
+        os.environ[f"{provider.upper()}_API_KEY"] = key
+
+    def _clear_saved_ai_key(self, provider: str) -> None:
+        state = self._load_app_state()
+        state.pop(f"{str(provider or '').strip().casefold()}_api_key_dpapi_b64", None)
+        self._save_app_state(state)
+
+    def _get_saved_ai_model(self, provider: str) -> str:
+        provider = str(provider or "openrouter").strip().casefold()
+        state = self._load_app_state()
+        return str(state.get(f"{provider}_model_name", state.get("ai_model_name", "")) or "")
+
+    def _save_ai_model(self, provider: str, model_name: str) -> None:
+        provider = str(provider or "openrouter").strip().casefold()
+        model_name = str(model_name or "").strip()
+        if not model_name:
+            return
+        state = self._load_app_state()
+        state[f"{provider}_model_name"] = model_name
+        self._save_app_state(state)
+        if provider == self._get_saved_ai_provider():
+            os.environ["AI_MODEL_NAME"] = model_name
 
     def _get_saved_gemini_key(self) -> str:
         """Load Gemini API key from app_state.json (DPAPI-protected)."""

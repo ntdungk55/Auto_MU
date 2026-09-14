@@ -4,14 +4,14 @@ Tài liệu này mô tả đúng hành vi đã có trong code tại thời đi�
 
 ## 1. Mục tiêu
 
-Tab Gemini Chat là điểm điều khiển game qua AI cho window MU đã chọn. Luồng hiện tại phải:
+Tab AI Chat là điểm điều khiển game qua AI cho window MU đã chọn. Luồng hiện tại phải:
 
 - Chỉ cho người dùng chọn window có tên chứa `MU GameThuVN`.
 - Chuẩn hóa client area window vừa chọn về `800×600` và reset zoom trước khi tạo phiên chat AI.
 - Đồng bộ chính xác PID và HWND window đã chọn bằng bộ chọn process nội bộ.
-- Khởi tạo Gemini cùng các MCP server trước khi mở chat.
-- Nạp catalog scenario vào system context một lần cho mỗi phiên Gemini.
-- Cho Gemini tự chọn scenario phù hợp trước khi gọi MCP tool cho yêu cầu người dùng hoặc `GameEvent`.
+- Khởi tạo provider AI cùng các MCP server trước khi mở chat.
+- Nạp catalog scenario vào system context một lần cho mỗi phiên AI.
+- Cho AI tự chọn scenario phù hợp trước khi gọi MCP tool cho yêu cầu người dùng hoặc `GameEvent`.
 - Có một rule event thụ động là `map.changed`.
 - Đọc năm lượt Daily Events bằng một MCP call: mở bằng `S` nếu cần, so khớp ảnh tiêu đề và OCR các vùng Boss, đào ngọc, BC, Devil, IG.
 - Hỗ trợ đổi sang nhân vật phụ ở slot 1 bằng một MCP call: mở Companion Management, template-match dialog và `Enter Character`, click không focus, rồi xác minh title window đổi.
@@ -124,15 +124,18 @@ Rule duy nhất là `map.changed`:
 
 ## 5. Gemini Chat và chọn target
 
-### 5.1. Điều kiện hiển thị chat
+### 5.1. Điều kiện hiển thị chat và AI provider
 
 Tab Gemini Chat có dropdown trên cùng và nút Làm mới.
 
 - Dropdown chỉ lấy target có window title chứa `MU GameThuVN`.
 - Lịch sử chat, ô nhập và vùng đính kèm bị ẩn ban đầu.
-- Khi chọn target, tab lần lượt tạo `AIProcessController`, gọi `select_target(target)`, khởi động MCP discovery, đồng bộ target bằng hàm nội bộ và kết nối Gemini.
+- Settings cho chọn provider và model tương ứng. Mặc định là `OpenRouter` với model `google/gemini-2.5-flash`; `Gemini` là lựa chọn tương thích cũ. Mỗi provider lưu API key DPAPI và model riêng, không tự chép key hoặc model giữa provider. Khi đổi provider, ô key phải được xóa để người dùng nhập đúng key của provider mới.
+- Provider OpenRouter gọi endpoint tương thích OpenAI tại `https://openrouter.ai/api/v1`; model cho game chat phải hỗ trợ vision khi gửi ảnh và tool calling khi điều khiển game. Người dùng có thể nhập model OpenRouter tùy chỉnh.
+- Mọi request OpenRouter của AI Chat và OCR post-processing gửi `max_tokens=4996` để không mặc định yêu cầu output tối đa của model vượt quá hạn mức credit hiện có.
+- Khi chọn target, tab lần lượt tạo `AIProcessController`, gọi `select_target(target)`, khởi động MCP discovery, đồng bộ target bằng hàm nội bộ và kết nối provider AI.
 - Ngay sau `select_target(target)` và trước MCP/Gemini, tab đặt kích thước client area game về `800×600`, sau đó gửi click `PostMessage` vào tâm ROI `mainInfo.resetScreenRoom` trong `mcp/config/mu_game_window.json` để reset zoom mà không focus window. ROI hiện tại có tâm `(308, 21)` theo hệ tọa độ client.
-- Nếu thiếu API key/model/SDK, không tìm thấy game, MCP lỗi hoặc Gemini lỗi, tab hiện dialog và vẫn ẩn chat.
+- Nếu thiếu API key/model/SDK, không tìm thấy game, MCP lỗi hoặc provider AI lỗi, tab hiện dialog và vẫn ẩn chat.
 - Chỉ sau khi tất cả bước trên thành công, chat mới được hiển thị.
 
 Khi đổi target, controller listener và MCP client cũ được giải phóng trước khi tạo session mới.
@@ -148,6 +151,8 @@ select_game_process(pid=<PID>, selected_window_hwnd=<HWND>)
 Bộ chọn process lưu selection có PID, creation time, HWND và title. Keyboard MCP sau đó chỉ dùng visible window đúng HWND đã lưu; nếu window này không còn tồn tại hoặc không còn visible, action trả lỗi thay vì chọn một window khác cùng process.
 
 Chỉ expose 5 MCP tool game: `get_daily_events_dialog_info`, `open_companion_management_dialog`, `get_companion_summoned_state`, `switch_to_companion_character`, `summon_companion_character`. Các tool schema/tạo/validate action bàn phím, liệt kê cửa sổ, chọn và xem process đã được gỡ khỏi MCP. Registry mặc định chỉ khởi động server game. Chọn và kiểm tra process vẫn là hàm nội bộ để đồng bộ cửa sổ từ Gemini Chat và script manual. Catalog scenario tiếp tục được nạp trong prompt, không thêm tool liệt kê scenario.
+
+`nvp`, `nv phụ` và `nhân vật phụ` là các từ đồng nghĩa cố định trong AI Chat. AI tự chọn scenario `switch_to_companion_character` khi người dùng yêu cầu rõ “đổi/chuyển sang nvp” cho nhân vật đã triệu hồi ở slot 1 và không hỏi về Level 400. AI chỉ chọn scenario điều kiện khi người dùng nêu rõ điều kiện Level 400. “Triệu hồi/gọi nvp <tên>” thực hiện scenario `summon_companion_character` với `<tên>` là `target_character`. Câu chỉ có “nvp” không được gọi tool và phải hỏi người dùng muốn xem, đổi hay triệu hồi nhân vật phụ.
 
 ### 5.3. Trạng thái AI và tool trong chat
 
@@ -186,6 +191,16 @@ System prompt yêu cầu Gemini:
 Gemini tools được discovery trực tiếp từ MCP servers. `ScenarioToolClient` chỉ route function call sang MCP và unwrap JSON text result để Gemini nhận được `ok`, `error`, `verification` ở top level.
 
 `run_gemini_mcp_turn()` lặp giữa Gemini function call và tool result, với mức tối đa 20 tool calls cho một turn. Tool status được hiển thị vào chat.
+
+### 6.2.1. Giới hạn context theo scenario
+
+Context động của AI phải bị giới hạn trong đúng một scenario turn:
+
+1. Bắt đầu khi AI nhận một yêu cầu người dùng hoặc một `GameEvent` và chọn scenario phù hợp.
+2. Trong lúc scenario chạy, chỉ giữ yêu cầu/event khởi đầu, các assistant tool call, MCP tool result và phản hồi cuối cùng của chính scenario đó để model thực hiện đúng các step tuần tự.
+3. Kết thúc ngay khi có phản hồi cuối, tool lỗi không thể tiếp tục, hoặc chạm giới hạn tool call. Sau thời điểm này phải xóa toàn bộ history động của scenario khỏi session trước khi xử lý scenario tiếp theo.
+
+System prompt, catalog scenario snapshot và tool schema là context tĩnh của session nên được nạp lại cho scenario tiếp theo; chúng không mang dữ liệu, kết quả, OCR, ảnh, event hoặc hội thoại của scenario trước. Ảnh người dùng chỉ thuộc scenario đang chạy và không được gửi lại ở scenario sau. UI vẫn được phép hiển thị toàn bộ lịch sử chat cho người dùng, nhưng lịch sử UI không được dùng làm history gửi lên model.
 
 ### 6.3. Event vào Gemini Chat
 

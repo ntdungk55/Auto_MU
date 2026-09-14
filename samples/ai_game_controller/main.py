@@ -14,6 +14,7 @@ from .infrastructure.game_state_reader import GameStateReader
 from .infrastructure.game_state_store import GameStateStore
 from .infrastructure.ai_agent_factory import AIAgentFactory
 from .infrastructure.gemini_agent import GeminiAgent
+from .infrastructure.openrouter_agent import OpenRouterAgent
 from .infrastructure.process_selector import ProcessSelector
 from .infrastructure.scenario_repository import ScenarioRepository
 from .infrastructure.settings_store import SettingsStore
@@ -26,6 +27,7 @@ def create_ai_process_controller(
     scenario_path: Path | None = None,
     api_key: str | None = None,
     model_name: str | None = None,
+    provider: str | None = None,
 ) -> tuple[AIProcessController, ScenarioManager]:
     """Build the UI-independent controller and its scenario-management API."""
     root = Path(__file__).resolve().parent
@@ -46,9 +48,11 @@ def create_ai_process_controller(
     scenario_manager = ScenarioManager(ScenarioRepository(scenario_path))
     agent_factory = AIAgentFactory()
     agent_factory.register("gemini", GeminiAgent)
+    agent_factory.register("openrouter", OpenRouterAgent)
+    provider_name = str(provider or agent_settings.get("provider", "openrouter")).strip().casefold()
     ai_agent = agent_factory.create(
-        str(agent_settings.get("provider", "gemini")),
-        api_key=api_key if api_key is not None else os.environ.get("GEMINI_API_KEY", ""),
+        provider_name,
+        api_key=api_key if api_key is not None else os.environ.get(f"{provider_name.upper()}_API_KEY", ""),
         model_name=model_name if model_name is not None else str(agent_settings.get("model", "")),
     )
     system_prompt_path = (root / "config" / str(path_settings.get("systemPrompt", "../prompts/system_prompt.md"))).resolve()

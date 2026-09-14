@@ -391,9 +391,17 @@
             }
           },
           "level": {
-            "description": "Level value",
+            "description": "Level value. The canonical value is xxx.lv or xxx.mt; ignore the percentage or any other text in parentheses.",
             "recognitionType": "text",
-            "valuePattern": "/text",
+            "valuePattern": "/xxx.(lv|mt)",
+            "normalization": {
+              "discardParenthesizedText": true,
+              "acceptedSuffixes": ["lv", "mt"],
+              "suffixCorrections": {
+                "1v": "lv",
+                "iv": "lv"
+              }
+            },
             "scale": 4,
             "roiRelativeToTitle": {
               "x1": 151,

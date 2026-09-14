@@ -31,3 +31,14 @@ def test_conditional_switch_requires_explicit_mt_or_lv_branch() -> None:
     assert ".lv" in steps["check_companion_level_not_above_400"]["condition"]
     assert steps["check_companion_level_not_above_400"]["on_false"] == "failed"
     assert "companion_info.success=true" in scenario["result"]["response_rule"]
+
+
+def test_system_prompt_defines_nvp_alias_and_its_safe_actions() -> None:
+    prompt_path = SCENARIOS.parent / "prompt" / "system_prompt" / "scenario_engine_system_prompt.md"
+    prompt = prompt_path.read_text(encoding="utf-8-sig")
+
+    assert "`nvp`, `nv phụ` và `nhân vật phụ`" in prompt
+    assert "switch_to_companion_character" in prompt
+    assert "summon_companion_character" in prompt
+    assert "phải hỏi lại" in prompt
+    assert "không hỏi về Level 400" in prompt

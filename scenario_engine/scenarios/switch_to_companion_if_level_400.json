@@ -3,7 +3,7 @@
   "id": "switch_to_companion_if_level_400",
   "name": "Đổi sang nhân vật phụ khi Level lớn hơn 400",
   "description": "Yêu cầu hành động đổi nhân vật có điều kiện. Đọc thông tin nhân vật phụ ở slot 1 và chỉ đổi sang nhân vật phụ khi giá trị Level có hậu tố .mt, biểu thị nhân vật đã vượt Level 400.",
-  "selection_rule": "Chỉ chọn scenario này khi người dùng yêu cầu rõ ràng đổi/chuyển sang nhân vật phụ nếu Level vượt 400. Không chọn cho yêu cầu chỉ đọc, xem hoặc kiểm tra thông tin.",
+  "selection_rule": "Chỉ chọn scenario này khi người dùng yêu cầu rõ ràng đổi/chuyển sang nhân vật phụ nếu Level vượt 400. Scenario này bắt buộc đọc và kiểm tra Level trước khi đổi. Không chọn cho yêu cầu đổi/chuyển/vào nhân vật phụ không kèm điều kiện Level; khi đó chọn `switch_to_companion_character`. Không chọn cho yêu cầu chỉ đọc, xem hoặc kiểm tra thông tin.",
   "status": "ready",
   "preconditions": [
     "Gemini Chat đã chọn đúng window MU.",
@@ -33,14 +33,14 @@
     {
       "id": "check_companion_level",
       "type": "condition",
-      "condition": "Chuẩn hóa ${companion_info.character.level} về chữ thường và bỏ khoảng trắng quanh dấu chấm hoặc dấu phẩy. Điều kiện đúng khi giá trị Level có dạng số nguyên theo sau bởi hậu tố .mt hoặc ,mt, ví dụ 0.mt (0.000%); hậu tố mt nghĩa là nhân vật đã vượt Level 400. Giá trị có hậu tố .lv hoặc ,lv, ví dụ 399.lv (50.000%), là chưa vượt Level 400 và điều kiện sai. Không quyết định bằng số nguyên đầu tiên vì đó là Master Level khi hậu tố là mt.",
+      "condition": "${companion_info.character.level} đã được tool chuẩn hóa theo teaching về dạng `xxx.lv` hoặc `xxx.mt`; phần trong dấu ngoặc của OCR đã bị bỏ qua. Điều kiện đúng chỉ khi hậu tố là `.mt`, ví dụ `0.mt`; hậu tố `.mt` nghĩa là nhân vật đã vượt Level 400. Hậu tố `.lv`, ví dụ `399.lv`, là chưa vượt Level 400 và điều kiện sai. Không quyết định bằng số nguyên đầu tiên vì đó là Master Level khi hậu tố là mt.",
       "on_true": "switch_to_companion",
       "on_false": "check_companion_level_not_above_400"
     },
     {
       "id": "check_companion_level_not_above_400",
       "type": "condition",
-      "condition": "Điều kiện chỉ đúng khi ${companion_info.character.level} có dạng số nguyên theo sau bởi hậu tố .lv hoặc ,lv sau khi chuẩn hóa chữ thường và khoảng trắng. Nếu không nhận ra chắc chắn hậu tố lv thì điều kiện sai; không được coi Level null, chuỗi trống hoặc OCR không rõ là dưới Level 400.",
+      "condition": "Điều kiện chỉ đúng khi ${companion_info.character.level} có dạng chuẩn `xxx.lv`. Nếu không nhận ra chắc chắn hậu tố lv thì điều kiện sai; không được coi Level null, chuỗi trống hoặc OCR không rõ là dưới Level 400.",
       "on_true": "complete",
       "on_false": "failed"
     },

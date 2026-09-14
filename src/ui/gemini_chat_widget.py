@@ -46,9 +46,7 @@ class _Signals(QObject):
     append_html = pyqtSignal(str)
     append_message = pyqtSignal(object)
     set_busy = pyqtSignal(bool)
-
-_AUTO_INSTALL_STARTED = False
-
+    refresh_install = pyqtSignal()
 
 class _PromptTextEdit(QTextEdit):
     """Text input that accepts dropping an image file as an attachment (Messenger-like)."""
@@ -268,25 +266,36 @@ class _TypingIndicator(QWidget):
 
 
 class GeminiSettingsDialog(QDialog):
-    """Settings dialog for Gemini chat (API key + model)."""
+    """Settings dialog for the selected AI provider and model."""
 
     def __init__(
         self,
         parent=None,
         initial_key: str = "",
-        initial_model: str = "gemini-1.5-flash",
-        on_save_key: Callable[[str], None] | None = None,
-        on_clear_key: Callable[[], None] | None = None,
-        on_save_model: Callable[[str], None] | None = None,
+        initial_model: str = "google/gemini-2.5-flash",
+        initial_provider: str = "openrouter",
+        on_save_key: Callable[[str, str], None] | None = None,
+        on_clear_key: Callable[[str], None] | None = None,
+        on_save_model: Callable[[str, str], None] | None = None,
+        on_save_provider: Callable[[str], None] | None = None,
     ):
         super().__init__(parent)
-        self.setWindowTitle("Gemini Settings")
+        self.setWindowTitle("AI Settings")
         self.setFixedWidth(520)
         self._on_save_key = on_save_key
         self._on_clear_key = on_clear_key
         self._on_save_model = on_save_model
+        self._on_save_provider = on_save_provider
 
         layout = QVBoxLayout()
+
+        provider_row = QHBoxLayout()
+        provider_row.addWidget(QLabel("Nhà cung cấp:"))
+        self.provider_combo = QComboBox()
+        self.provider_combo.addItem("OpenRouter", "openrouter")
+        self.provider_combo.addItem("Gemini", "gemini")
+        provider_row.addWidget(self.provider_combo, 1)
+        layout.addLayout(provider_row)
 
         # Key row
         key_row = QHBoxLayout()
@@ -309,18 +318,10 @@ class GeminiSettingsDialog(QDialog):
         model_row = QHBoxLayout()
         model_row.addWidget(QLabel("Model:"))
         self.model_combo = QComboBox()
-        self.model_combo.addItems(
-            [
-                "gemini-1.5-flash",
-                "gemini-1.5-pro",
-                "gemini-2.0-flash",
-                "gemini-2.0-flash-lite",
-                "gemini-2.0-pro",
-                "gemini-2.5-flash",
-                "gemini-2.5-pro",
-                "Custom…",
-            ]
-        )
+        self._provider_models = {
+            "openrouter": ["google/gemini-2.5-flash", "openai/gpt-4o-mini", "anthropic/claude-3.5-haiku", "Custom…"],
+            "gemini": ["gemini-2.5-flash", "gemini-2.5-pro", "Custom…"],
+        }
         model_row.addWidget(self.model_combo, 1)
 
         self.custom_model_input = QLineEdit()
@@ -328,16 +329,10 @@ class GeminiSettingsDialog(QDialog):
         model_row.addWidget(self.custom_model_input, 1)
         layout.addLayout(model_row)
 
-        # Init model selection
-        initial_model = (initial_model or "gemini-1.5-flash").strip()
-        idx = self.model_combo.findText(initial_model)
-        if idx >= 0:
-            self.model_combo.setCurrentIndex(idx)
-            self.custom_model_input.setVisible(False)
-        else:
-            self.model_combo.setCurrentText("Custom…")
-            self.custom_model_input.setText(initial_model)
-            self.custom_model_input.setVisible(True)
+        provider_index = self.provider_combo.findData(str(initial_provider or "openrouter").casefold())
+        self.provider_combo.setCurrentIndex(max(0, provider_index))
+        self._set_models(initial_model)
+        self.provider_combo.currentIndexChanged.connect(self._on_provider_changed)
         self.model_combo.currentIndexChanged.connect(self._on_model_changed)
 
         # Bottom buttons
@@ -357,6 +352,33 @@ class GeminiSettingsDialog(QDialog):
             is_custom = False
         self.custom_model_input.setVisible(bool(is_custom))
 
+    def _set_models(self, selected_model: str = ""):
+        provider = self.selected_provider()
+        selected_model = str(selected_model or "").strip()
+        self.model_combo.blockSignals(True)
+        self.model_combo.clear()
+        self.model_combo.addItems(self._provider_models[provider])
+        index = self.model_combo.findText(selected_model)
+        if index >= 0:
+            self.model_combo.setCurrentIndex(index)
+            self.custom_model_input.clear()
+        elif not selected_model:
+            self.model_combo.setCurrentIndex(0)
+            self.custom_model_input.clear()
+        else:
+            self.model_combo.setCurrentText("Custom…")
+            self.custom_model_input.setText(selected_model)
+        self.model_combo.blockSignals(False)
+        self._on_model_changed(0)
+
+    def selected_provider(self) -> str:
+        return str(self.provider_combo.currentData() or "openrouter")
+
+    def _on_provider_changed(self, _index: int) -> None:
+        """Prevent a key for the previous provider from being saved under the new one."""
+        self.key_input.clear()
+        self._set_models()
+
     def selected_model(self) -> str:
         name = str(self.model_combo.currentText() or "").strip()
         if name == "Custom…":
@@ -371,7 +393,7 @@ class GeminiSettingsDialog(QDialog):
             QMessageBox.warning(self, "Thiếu key", "Không có API key để lưu.")
             return
         try:
-            self._on_save_key(k)
+            self._on_save_key(self.selected_provider(), k)
         except Exception as e:
             QMessageBox.warning(self, "Lỗi lưu key", str(e))
 
@@ -379,7 +401,7 @@ class GeminiSettingsDialog(QDialog):
         if self._on_clear_key is None:
             return
         try:
-            self._on_clear_key()
+            self._on_clear_key(self.selected_provider())
             self.key_input.clear()
         except Exception as e:
             QMessageBox.warning(self, "Lỗi xóa key", str(e))
@@ -391,29 +413,32 @@ class GeminiSettingsDialog(QDialog):
         if not name:
             return
         try:
-            self._on_save_model(name)
+            self._on_save_model(self.selected_provider(), name)
         except Exception:
             pass
 
 
 class GeminiChatWidget(QWidget):
-    """A lightweight Gemini chat tab with optional image input and response timing."""
+    """AI chat tab with selectable providers, images, and MCP tools."""
 
     def __init__(
         self,
         parent=None,
         load_saved_key: Callable[[], str] | None = None,
-        save_key: Callable[[str], None] | None = None,
-        clear_saved_key: Callable[[], None] | None = None,
+        save_key: Callable[[str, str], None] | None = None,
+        clear_saved_key: Callable[[str], None] | None = None,
         load_saved_model: Callable[[], str] | None = None,
-        save_model: Callable[[str], None] | None = None,
-        create_ai_process_controller: Callable[[str, str], object] | None = None,
+        save_model: Callable[[str, str], None] | None = None,
+        load_saved_provider: Callable[[], str] | None = None,
+        save_provider: Callable[[str], None] | None = None,
+        create_ai_process_controller: Callable[[str, str, str], object] | None = None,
     ):
         super().__init__(parent)
         self._signals = _Signals()
         self._signals.append_html.connect(self._append_system_text, Qt.ConnectionType.QueuedConnection)
         self._signals.append_message.connect(self._append_message, Qt.ConnectionType.QueuedConnection)
         self._signals.set_busy.connect(self._set_busy, Qt.ConnectionType.QueuedConnection)
+        self._signals.refresh_install.connect(self._refresh_install_button, Qt.ConnectionType.QueuedConnection)
 
         self._chat = None
         self._current_model_name = ""
@@ -424,6 +449,8 @@ class GeminiChatWidget(QWidget):
         self._clear_saved_key_cb = clear_saved_key
         self._load_saved_model = load_saved_model
         self._save_model_cb = save_model
+        self._load_saved_provider = load_saved_provider
+        self._save_provider_cb = save_provider
         self._create_ai_process_controller = create_ai_process_controller
         self._ai_process_controller = None
         self._selected_game_target = None
@@ -432,7 +459,7 @@ class GeminiChatWidget(QWidget):
         self._typing_indicator: _TypingIndicator | None = None
 
         self._build_ui()
-        self._append_system_text("Chọn process game để bắt đầu Gemini Chat.")
+        self._append_system_text("Chọn process game để bắt đầu AI Chat.")
         self._set_chat_available(False)
         QTimer.singleShot(0, self._refresh_processes)
         # More reliable auto-scroll: wait for scroll range to update after layout changes.
@@ -460,7 +487,7 @@ class GeminiChatWidget(QWidget):
 
         # Header (minimal)
         header_row = QHBoxLayout()
-        self.title_lbl = QLabel("<b>Gemini Chat</b>")
+        self.title_lbl = QLabel("<b>AI Chat</b>")
         header_row.addWidget(self.title_lbl, 0)
         header_row.addStretch(1)
         self.status_lbl = QLabel("Not connected")
@@ -521,7 +548,7 @@ class GeminiChatWidget(QWidget):
         input_bar.addWidget(self.attach_btn, 0)
 
         self.install_btn = QPushButton("Cài SDK")
-        self.install_btn.clicked.connect(self._install_gemini_sdk)
+        self.install_btn.clicked.connect(self._install_selected_provider_sdk)
         input_bar.addWidget(self.install_btn, 0)
 
         self.settings_btn = QPushButton("Setting")
@@ -560,9 +587,7 @@ class GeminiChatWidget(QWidget):
             return
 
         try:
-            controller = self._create_ai_process_controller(
-                self._current_key(), self._current_model()
-            )
+            controller = self._create_ai_process_controller(self._current_provider(), self._current_key(), self._current_model())
             targets = controller.list_targets("MU GameThuVN")
         except Exception as error:
             QMessageBox.warning(self, "Không thể chọn process", str(error))
@@ -600,9 +625,7 @@ class GeminiChatWidget(QWidget):
             return
 
         try:
-            controller = self._create_ai_process_controller(
-                self._current_key(), self._current_model()
-            )
+            controller = self._create_ai_process_controller(self._current_provider(), self._current_key(), self._current_model())
             controller.select_target(target)
             prepare_game_window_for_ocr(
                 target.hwnd,
@@ -624,7 +647,7 @@ class GeminiChatWidget(QWidget):
             self._detach_ai_process_controller()
             self._dispose_scenario_tools()
             return
-        if not self._connect_gemini():
+        if not self._connect_ai():
             self._detach_ai_process_controller()
             self._dispose_scenario_tools()
             return
@@ -690,7 +713,7 @@ class GeminiChatWidget(QWidget):
         self._ai_process_controller = None
 
     def _on_game_event(self, event: object):
-        """Show an event and submit it as a serialized Gemini scenario turn."""
+        """Show an event and submit it as a serialized AI scenario turn."""
         event_type = str(getattr(event, "event_type", "unknown") or "unknown")
         target_id = str(getattr(event, "target_id", "") or "")
         changed_fields = tuple(getattr(event, "changed_fields", ()) or ())
@@ -703,7 +726,7 @@ class GeminiChatWidget(QWidget):
         self._dispatch_game_event(event)
 
     def _dispatch_game_event(self, event: object) -> None:
-        """Let Gemini select a catalog scenario for a passive game event."""
+        """Let the selected AI model select a catalog scenario for a passive game event."""
         if not self._chat_ready:
             return
         chat = self._chat
@@ -733,13 +756,12 @@ class GeminiChatWidget(QWidget):
                 with self._chat_turn_lock:
                     if chat is not self._chat or tool_client is not self._scenario_tool_client:
                         return
-                    from src.ai_control.gemini_tool_bridge import run_gemini_mcp_turn
+                    from src.ai_control.ai_tool_bridge import run_ai_mcp_turn
 
-                    result = run_gemini_mcp_turn(
+                    result = run_ai_mcp_turn(
                         chat=chat,
                         initial_content=[event_prompt],
                         mcp_client=tool_client,
-                        genai_module=genai,
                         max_tool_calls=20,
                         on_tool_event=self._on_tool_event,
                     )
@@ -790,7 +812,16 @@ class GeminiChatWidget(QWidget):
                     return k
         except Exception:
             pass
-        return str(os.environ.get("GEMINI_API_KEY", "") or "").strip()
+        env_key = "OPENROUTER_API_KEY" if self._current_provider() == "openrouter" else "GEMINI_API_KEY"
+        return str(os.environ.get(env_key, "") or "").strip()
+
+    def _current_provider(self) -> str:
+        try:
+            if self._load_saved_provider is not None:
+                return str(self._load_saved_provider() or "openrouter").strip().casefold() or "openrouter"
+        except Exception:
+            pass
+        return str(os.environ.get("AI_PROVIDER", "openrouter") or "openrouter").strip().casefold()
 
     def _current_model(self) -> str:
         try:
@@ -800,7 +831,7 @@ class GeminiChatWidget(QWidget):
                     return m
         except Exception:
             pass
-        return "gemini-1.5-flash"
+        return "google/gemini-2.5-flash" if self._current_provider() == "openrouter" else "gemini-2.5-flash"
 
     def _refresh_attachment_ui(self):
         try:
@@ -847,32 +878,31 @@ class GeminiChatWidget(QWidget):
 
     def _refresh_install_button(self):
         try:
-            # Auto-install will run; keep this as a retry button when install fails.
-            self.install_btn.setEnabled((genai is None) and (not self._installing_sdk))
-            self.install_btn.setVisible(genai is None)
+            provider = self._current_provider()
+            missing_sdk = not self._provider_sdk_available(provider)
+            self.install_btn.setText(f"Cài {self._provider_package(provider)}")
+            self.install_btn.setEnabled(missing_sdk and not self._installing_sdk)
+            self.install_btn.setVisible(missing_sdk)
         except Exception:
             pass
 
-    def _auto_install_sdk_if_missing(self):
-        global _AUTO_INSTALL_STARTED
-        if genai is not None:
-            self._refresh_install_button()
-            return
-        # Avoid auto-install loops across multiple widget instances.
-        if _AUTO_INSTALL_STARTED:
-            self._signals.append_html.emit("SDK chưa có. Bạn có thể bấm 'Cài Gemini SDK' để thử lại.")
-            self._refresh_install_button()
-            return
-        _AUTO_INSTALL_STARTED = True
-        self._install_gemini_sdk(auto=True)
+    @staticmethod
+    def _provider_package(provider: str) -> str:
+        return "openai" if provider == "openrouter" else "google-generativeai"
 
-    def _try_import_sdk(self) -> bool:
-        """Try importing Gemini SDK and PIL after a pip install (no restart)."""
+    @staticmethod
+    def _provider_sdk_available(provider: str) -> bool:
+        return importlib.util.find_spec("openai" if provider == "openrouter" else "google.generativeai") is not None
+
+    def _try_import_sdk(self, provider: str) -> bool:
+        """Import a newly installed provider SDK without restarting the app."""
         global genai, Image
         ok = True
         try:
-            if genai is None:
+            if provider == "gemini" and genai is None:
                 genai = importlib.import_module("google.generativeai")
+            elif provider == "openrouter":
+                importlib.import_module("openai")
         except Exception:
             ok = False
         try:
@@ -881,15 +911,15 @@ class GeminiChatWidget(QWidget):
         except Exception:
             # PIL is optional for text-only usage
             pass
-        self._refresh_install_button()
+        self._signals.refresh_install.emit()
         return ok
 
-    def _install_gemini_sdk(self, auto: bool = False):
-        """Install Gemini SDK via pip using current Python executable.
+    def _install_selected_provider_sdk(self) -> None:
+        self._install_provider_sdk(self._current_provider())
 
-        auto=True: used on first open; keep UI fully hands-off.
-        """
-        if genai is not None:
+    def _install_provider_sdk(self, provider: str) -> None:
+        """Install the selected provider SDK after the user explicitly approves it."""
+        if self._provider_sdk_available(provider):
             self._signals.append_html.emit("SDK đã có sẵn.")
             self._refresh_install_button()
             return
@@ -898,7 +928,8 @@ class GeminiChatWidget(QWidget):
 
         self._installing_sdk = True
         self._signals.set_busy.emit(True)
-        self._signals.append_html.emit("Đang cài Gemini SDK (pip)..." if not auto else "Thiếu SDK → đang tự cài (pip)...")
+        package = self._provider_package(provider)
+        self._signals.append_html.emit(f"Đang cài {package} (pip)...")
         self._refresh_install_button()
 
         def _worker():
@@ -911,7 +942,7 @@ class GeminiChatWidget(QWidget):
                     "install",
                     "--disable-pip-version-check",
                     "--no-input",
-                    "google-generativeai",
+                    package,
                 ]
                 p = subprocess.run(cmd, capture_output=True, text=True)
                 dt_ms = (time.perf_counter() - t0) * 1000.0
@@ -920,17 +951,17 @@ class GeminiChatWidget(QWidget):
                     self._signals.append_html.emit(f"[pip failed] {msg}\n(time: {dt_ms/1000.0:.2f}s)")
                     return
 
-                ok = self._try_import_sdk()
+                ok = self._try_import_sdk(provider)
                 if not ok:
                     self._signals.append_html.emit("[import failed] Cài xong nhưng không import được SDK. Hãy thử cài lại hoặc restart app.")
                     return
-                self._signals.append_html.emit(f"Cài xong. Bạn bấm Kết nối lại. (time: {dt_ms/1000.0:.2f}s)")
+                self._signals.append_html.emit(f"Cài xong {package}. Bạn bấm Kết nối lại. (time: {dt_ms/1000.0:.2f}s)")
             except Exception as e:
                 self._signals.append_html.emit(f"[pip error] {str(e)}")
             finally:
                 self._installing_sdk = False
                 self._signals.set_busy.emit(False)
-                self._refresh_install_button()
+                self._signals.refresh_install.emit()
 
         threading.Thread(target=_worker, daemon=True).start()
 
@@ -939,15 +970,18 @@ class GeminiChatWidget(QWidget):
             parent=self,
             initial_key=self._current_key(),
             initial_model=self._current_model(),
+            initial_provider=self._current_provider(),
             on_save_key=self._save_key_cb,
             on_clear_key=self._clear_saved_key_cb,
             on_save_model=self._save_model_cb,
+            on_save_provider=self._save_provider_cb,
         )
         if dlg.exec():
-            # Save selected model & reconnect
             try:
+                if self._save_provider_cb is not None:
+                    self._save_provider_cb(dlg.selected_provider())
                 if self._save_model_cb is not None:
-                    self._save_model_cb(dlg.selected_model())
+                    self._save_model_cb(dlg.selected_provider(), dlg.selected_model())
             except Exception:
                 pass
             self._ensure_connected(force_reconnect=True)
@@ -1002,7 +1036,7 @@ class GeminiChatWidget(QWidget):
             self.send_btn.setEnabled(not busy)
             self.attach_btn.setEnabled(not busy)
             self.settings_btn.setEnabled(not busy)
-            self.install_btn.setEnabled((not busy) and (genai is None) and (not self._installing_sdk))
+            self._refresh_install_button()
             if busy:
                 self._show_typing_indicator()
             else:
@@ -1029,24 +1063,30 @@ class GeminiChatWidget(QWidget):
         indicator.deleteLater()
 
     def _ensure_sdk(self) -> bool:
-        if genai is None:
-            # Auto-trigger install; user doesn't need to do anything.
-            self._auto_install_sdk_if_missing()
-            return False
-        return True
+        provider = self._current_provider()
+        if self._provider_sdk_available(provider):
+            return True
+        package = self._provider_package(provider)
+        answer = QMessageBox.question(
+            self,
+            "Cài AI SDK",
+            f"Provider {provider} cần package '{package}' nhưng runtime hiện chưa có. Bạn có muốn cài ngay không?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            self._install_provider_sdk(provider)
+        else:
+            self._append_system_text(f"Chưa cài {package}; không thể kết nối {provider}.")
+        return False
 
-    def _connect_gemini(self) -> bool:
+    def _connect_ai(self) -> bool:
         if not self._ensure_sdk():
-            QMessageBox.warning(
-                self,
-                "Không thể kết nối AI",
-                "Gemini SDK chưa sẵn sàng. Hãy chờ cài xong rồi chọn lại process.",
-            )
             return False
 
         key = self._current_key()
         if not key:
-            QMessageBox.warning(self, "Thiếu API key", "Bạn hãy nhập API key (hoặc set GEMINI_API_KEY).")
+            QMessageBox.warning(self, "Thiếu API key", "Bạn hãy nhập API key của provider đã chọn.")
             return False
 
         model_name = self._current_model()
@@ -1062,30 +1102,29 @@ class GeminiChatWidget(QWidget):
             return False
 
         try:
-            genai.configure(api_key=key)
-            # Light validation: ensure model exists/accessible (no generation call)
-            try:
-                if hasattr(genai, "get_model"):
-                    genai.get_model(f"models/{model_name}")  # type: ignore
-            except Exception as e:
-                raise RuntimeError(f"Model không dùng được: {e}") from e
-            from src.ai_control.gemini_tool_bridge import build_gemini_tool_declarations
+            from src.ai_control.ai_models import create_default_ai_model_factory
 
             scenario_snapshot = self._scenario_tool_client.load_scenario_snapshot()
             if not bool(scenario_snapshot.get("ok")):
                 raise RuntimeError(str(scenario_snapshot.get("error") or "Could not load scenarios."))
             tools = self._scenario_tool_client.refresh_tools(timeout_seconds=8.0)
-            declarations = build_gemini_tool_declarations(genai, tools)
-            model = genai.GenerativeModel(
-                model_name,
-                tools=[{"function_declarations": declarations}],
-                system_instruction=self._scenario_system_prompt(scenario_snapshot),
+            provider = self._current_provider()
+            adapter = create_default_ai_model_factory().create(
+                provider,
+                model_name=model_name,
+                api_key=key,
+                sdk_module=genai,
             )
-            self._chat = model.start_chat(history=[])
+            adapter.validate()
+            self._chat = adapter.start_chat(
+                system_prompt=self._scenario_system_prompt(scenario_snapshot),
+                tools=tools,
+                history=[],
+            )
             self._current_model_name = model_name
-            self._append_system_text(f"Connected: {model_name}")
+            self._append_system_text(f"Connected: {provider} / {model_name}")
             try:
-                self.status_lbl.setText(f"Connected | {model_name}")
+                self.status_lbl.setText(f"Connected | {provider} / {model_name}")
             except Exception:
                 pass
             return True
@@ -1116,7 +1155,7 @@ class GeminiChatWidget(QWidget):
             except Exception:
                 pass
             return
-        self._connect_gemini()
+        self._connect_ai()
 
     def showEvent(self, event):
         try:
@@ -1139,13 +1178,13 @@ class GeminiChatWidget(QWidget):
             QMessageBox.warning(
                 self,
                 "Chưa sẵn sàng",
-                "Hãy chọn process và kết nối Gemini trước khi chat.",
+                "Hãy chọn process và kết nối AI trước khi chat.",
             )
             return
         if not self._ensure_sdk():
             return
         if self._chat is None:
-            self._connect_gemini()
+            self._connect_ai()
             if self._chat is None:
                 return
         tool_client = self._scenario_tool_client
@@ -1185,14 +1224,13 @@ class GeminiChatWidget(QWidget):
                 if not parts:
                     parts = [prompt or ""]
 
-                from src.ai_control.gemini_tool_bridge import run_gemini_mcp_turn
+                from src.ai_control.ai_tool_bridge import run_ai_mcp_turn
 
                 with self._chat_turn_lock:
-                    tool_result = run_gemini_mcp_turn(
+                    tool_result = run_ai_mcp_turn(
                         chat=chat,
                         initial_content=parts,
                         mcp_client=tool_client,
-                        genai_module=genai,
                         max_tool_calls=20,
                         on_tool_event=self._on_tool_event,
                     )
@@ -1228,12 +1266,28 @@ class GeminiChatWidget(QWidget):
         elif phase == "success":
             text = f"Tool hoàn tất: {name}"
         elif phase == "error":
-            text = f"Tool lỗi: {name}"
+            text = self._format_tool_error(name, event.get("result"))
         elif phase == "limit":
             text = "Đã đạt giới hạn số lần gọi tool."
         else:
             return
         self._signals.append_message.emit({"side": "tool", "text": text})
+
+    @staticmethod
+    def _format_tool_error(name: str, result: object) -> str:
+        """Render the tool's failure payload immediately, without waiting for the AI reply."""
+        if not isinstance(result, dict):
+            return f"Tool lỗi: {name}\nLý do: Tool không trả về chi tiết lỗi."
+
+        error = str(result.get("error") or "Tool không trả về chi tiết lỗi.")
+        debug = result.get("debug")
+        if not isinstance(debug, dict) or not debug:
+            return f"Tool lỗi: {name}\nLý do: {error}"
+
+        details = json.dumps(debug, ensure_ascii=False, default=str)
+        if len(details) > 2000:
+            details = details[:2000] + "…"
+        return f"Tool lỗi: {name}\nLý do: {error}\nDebug: {details}"
 
     @staticmethod
     def _prepare_image_for_vision(img_path: str):

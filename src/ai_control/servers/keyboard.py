@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import traceback
 import os
 from pathlib import Path
 import sys
@@ -412,10 +413,23 @@ def _run_companion_tool(action: Callable[..., dict[str, Any]], **arguments: Any)
             wake_up = _wake_selected_window(windows[0])
             result = action(windows[0], **arguments)
     except Exception as error:
-        result = {"success": False, "error": str(error)}
+        result = {
+            "success": False,
+            "error": str(error),
+            "debug": {
+                "stage": "run_selected_window_tool",
+                "action": getattr(action, "__name__", str(action)),
+                "exception_type": type(error).__name__,
+                "traceback": traceback.format_exc(limit=5),
+            },
+        }
     if wake_up is not None:
         result["wake_up"] = wake_up
     result.setdefault("selection_required", False)
+    if result.get("success") is False:
+        debug = result.setdefault("debug", {})
+        debug.setdefault("action", getattr(action, "__name__", str(action)))
+        debug.setdefault("target", result.get("target") or (windows[0] if 'windows' in locals() and len(windows) == 1 else None))
     logs = captured_stdout.getvalue().splitlines()
     if logs:
         result["logs"] = logs[-20:]

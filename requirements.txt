@@ -5,7 +5,7 @@ opencv-python
 numpy
 Pillow
 winsdk
-google-generativeai
+openai
 pynput
 pytesseract
 easyocr

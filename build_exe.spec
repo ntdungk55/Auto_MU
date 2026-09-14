@@ -23,7 +23,7 @@ hiddenimports = [
     'win32api',
     'ctypes',
     'pytesseract',
-    'google.generativeai',
+    'openai',
     'requests',
 ]
 

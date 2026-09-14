@@ -31,7 +31,28 @@ def run_ai_mcp_turn(
     max_tool_calls: int = MAX_TOOL_CALLS_PER_MESSAGE,
     on_tool_event: Callable[[dict[str, Any]], None] | None = None,
 ) -> AIMCPResult:
-    """Run one provider-neutral AI turn with a strict MCP call limit."""
+    """Run one scenario turn and clear its dynamic context at every terminal outcome."""
+    try:
+        return _run_ai_mcp_turn(
+            chat=chat,
+            initial_content=initial_content,
+            mcp_client=mcp_client,
+            max_tool_calls=max_tool_calls,
+            on_tool_event=on_tool_event,
+        )
+    finally:
+        chat.reset_scenario()
+
+
+def _run_ai_mcp_turn(
+    *,
+    chat: AIChatSession,
+    initial_content: Any,
+    mcp_client: Any,
+    max_tool_calls: int = MAX_TOOL_CALLS_PER_MESSAGE,
+    on_tool_event: Callable[[dict[str, Any]], None] | None = None,
+) -> AIMCPResult:
+    """Execute one scenario while retaining its dynamic messages for tool sequencing."""
     call_limit = max(1, int(max_tool_calls))
     tool_call_count = 0
     limit_reached = False

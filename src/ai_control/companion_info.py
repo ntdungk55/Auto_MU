@@ -17,38 +17,63 @@ from src.ai_control.dialog_actions import close_taught_dialog
 from src.logic.system_executor.ocr_engine import EasyOCREngine, WinRTOCREngine
 
 
-def _normalize_field_value(field: str, raw_text: str) -> str | None:
-    """Return a clean companion value only when its field-specific format is credible."""
-    text = " ".join(str(raw_text or "").split()).strip()
-    if not text:
+class CompanionValueNormalizer:
+    """Normalize OCR text using the format taught for each companion field."""
+
+    _DEFAULT_LEVEL_NORMALIZATION = {
+        "discardParenthesizedText": True,
+        "acceptedSuffixes": ["lv", "mt"],
+        "suffixCorrections": {"1v": "lv", "iv": "lv"},
+    }
+
+    def __init__(self, definition: dict[str, Any] | None = None) -> None:
+        self._definition = definition or {}
+
+    def normalize(self, field: str, raw_text: str) -> str | None:
+        text = " ".join(str(raw_text or "").split()).strip()
+        if not text:
+            return None
+        if field == "name":
+            return text if re.fullmatch(r"[A-Za-z0-9_\-]{2,32}", text) else None
+        if field == "server":
+            match = re.fullmatch(r"\d{1,3}", text)
+            return match.group(0) if match else None
+        if field == "map":
+            match = re.fullmatch(r"([A-Za-z][A-Za-z '\-]{1,40})\s*\(\s*(\d{1,3})\s*[,.;]\s*(\d{1,3})\s*\)", text)
+            return f"{match.group(1).strip()} ({match.group(2)},{match.group(3)})" if match else None
+        if field == "level":
+            return self._normalize_level(text)
+        if field == "reset":
+            match = re.search(r"(?i)(?<!\d)(\d{1,5})\s*[.,]\s*rs\b", text)
+            return f"{match.group(1)}.rs" if match else None
+        if field == "status":
+            return text if not any(character.isdigit() for character in text) and sum(
+                character.isalpha() for character in text
+            ) >= 3 else None
         return None
-    if field == "name":
-        return text if re.fullmatch(r"[A-Za-z0-9_\-]{2,32}", text) else None
-    if field == "server":
-        match = re.fullmatch(r"\d{1,3}", text)
-        return match.group(0) if match else None
-    if field == "map":
-        match = re.fullmatch(r"([A-Za-z][A-Za-z '\-]{1,40})\s*\(\s*(\d{1,3})\s*[,.;]\s*(\d{1,3})\s*\)", text)
-        return f"{match.group(1).strip()} ({match.group(2)},{match.group(3)})" if match else None
-    if field == "level":
-        match = re.search(
-            r"(?i)(?<![A-Za-z0-9])([oO]|\d{1,4})\s*[.,]\s*(mt|lv)\s*"
-            r"\(\s*([\d.,]+)\s*%\s*\)",
-            text,
-        )
-        if not match:
+
+    def _normalize_level(self, text: str) -> str | None:
+        rules = self._definition.get("normalization", self._DEFAULT_LEVEL_NORMALIZATION)
+        if not isinstance(rules, dict):
+            return None
+        if rules.get("discardParenthesizedText"):
+            text = text.split("(", 1)[0].strip()
+
+        match = re.fullmatch(r"(?i)([oO]|\d{1,4})\s*[.,]\s*([A-Za-z0-9]{2})", text)
+        if match is None:
             return None
         number = "0" if match.group(1).casefold() == "o" else match.group(1)
-        percent = match.group(3).replace(",", ".")
-        return f"{number}.{match.group(2).lower()} ({percent}%)"
-    if field == "reset":
-        match = re.search(r"(?i)(?<!\d)(\d{1,5})\s*[.,]\s*rs\b", text)
-        return f"{match.group(1)}.rs" if match else None
-    if field == "status":
-        return text if not any(character.isdigit() for character in text) and sum(
-            character.isalpha() for character in text
-        ) >= 3 else None
-    return None
+        suffix = match.group(2).casefold()
+        corrections = rules.get("suffixCorrections", {})
+        if isinstance(corrections, dict):
+            suffix = str(corrections.get(suffix, suffix)).casefold()
+        accepted = {str(value).casefold() for value in rules.get("acceptedSuffixes", [])}
+        return f"{number}.{suffix}" if suffix in accepted else None
+
+
+def _normalize_field_value(field: str, raw_text: str, definition: dict[str, Any] | None = None) -> str | None:
+    """Compatibility wrapper for callers that normalize a taught companion field."""
+    return CompanionValueNormalizer(definition).normalize(field, raw_text)
 
 
 def _read_fields(image: Any, title: dict[str, Any], layout: dict[str, Any]) -> dict[str, Any]:
@@ -83,7 +108,7 @@ def _read_fields(image: Any, title: dict[str, Any], layout: dict[str, Any]) -> d
         crop = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
         winrt_raw = " ".join(engine.recognize(crop).split())
         raw = winrt_raw
-        value = _normalize_field_value(field, raw)
+        value = _normalize_field_value(field, raw, region)
         method, confidence = "winrt", None
         attempts = {"winrt": winrt_raw}
         if value is None:
@@ -96,7 +121,7 @@ def _read_fields(image: Any, title: dict[str, Any], layout: dict[str, Any]) -> d
                               key=lambda item: float(item[0][0][0]))
             easyocr_raw = " ".join(str(item[1]).strip() for item in accepted).strip()
             attempts["easyocr"] = easyocr_raw
-            easyocr_value = _normalize_field_value(field, easyocr_raw)
+            easyocr_value = _normalize_field_value(field, easyocr_raw, region)
             if easyocr_value is not None:
                 raw, value = easyocr_raw, easyocr_value
             method = "easyocr"
@@ -113,24 +138,29 @@ def get_companion_information(target: dict[str, Any], *, dialog_timeout_seconds:
 
     result: dict[str, Any] = {"success": False, "target": dict(target), "character": None}
     dialog_verified = False
+    stage = "validate_selected_window"
     try:
         hwnd = int(target["hwnd"])
         if not win32gui.IsWindow(hwnd) or not win32gui.IsWindowVisible(hwnd):
             raise RuntimeError("Selected game window is no longer visible")
+        stage = "load_companion_dialog_config"
         layout = json.loads(TEACHING_PATH.read_text(encoding="utf-8-sig"))["dialogs"]["dialog.companion_management.opened"]["layout"]
         anchor = layout["Anchor"]
         threshold = float(anchor["templateThreshold"])
         template = _load_template(PROJECT_ROOT / str(anchor["titleImagePath"]))
         if not 0 < threshold <= 1 or float(template.std()) < 1e-6:
             raise ValueError("Invalid companion title template or threshold")
+        stage = "capture_game_window"
         capture = GameWindowCapture()
         image = capture.capture(hwnd)
         if image is None:
             raise RuntimeError("Could not capture the selected game window")
+        stage = "detect_companion_dialog"
         title = _match(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY), template, "Manage Sub-Characters title")
         already_open = title["score"] >= threshold
         result["dialog_already_open"] = already_open
         if not already_open:
+            stage = "read_companion_slot_state"
             state = get_companion_summoned_state(hwnd)
             result.update(state)
             if state["companion_summoned"] is False:
@@ -141,6 +171,7 @@ def get_companion_information(target: dict[str, Any], *, dialog_timeout_seconds:
             x, y = _open_button_center()
             MouseController(target_window_hwnd=hwnd).click_at_client(x, y)
             result["action"] = {"open_companion_management": {"x": x, "y": y}}
+            stage = "wait_for_companion_dialog"
             deadline = time.monotonic() + dialog_timeout_seconds
             while time.monotonic() < deadline:
                 image = capture.capture(hwnd)
@@ -155,6 +186,7 @@ def get_companion_information(target: dict[str, Any], *, dialog_timeout_seconds:
         result["companion_summoned"] = True
         result["verification"] = {"method": "template_matching", "score": title["score"],
                                   "threshold": threshold, "bbox": title["bbox"]}
+        stage = "read_companion_fields"
         fields = _read_fields(image, title, layout)
         result["fields"] = fields
         result["character"] = {key: field["value"] for key, field in fields.items()}
@@ -163,7 +195,11 @@ def get_companion_information(target: dict[str, Any], *, dialog_timeout_seconds:
         if not result["success"]:
             result["error"] = "Could not read all companion fields: " + ", ".join(result["missing_fields"])
     except Exception as error:
-        result.update(success=False, error=str(error))
+        result.update(
+            success=False,
+            error=str(error),
+            debug={"stage": stage, "exception_type": type(error).__name__},
+        )
     finally:
         if dialog_verified:
             try:

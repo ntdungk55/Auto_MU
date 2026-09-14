@@ -38,6 +38,8 @@ Thực hiện theo thứ tự sau:
 
 Phải phân biệt mục tiêu chỉ đọc với mục tiêu hành động. Yêu cầu chỉ đọc/xem/kiểm tra thông tin nhân vật phụ luôn chọn scenario `get_companion_summoned_state`; scenario này không có điều kiện Level và không đổi nhân vật. Chỉ chọn `switch_to_companion_if_level_400` khi người dùng yêu cầu rõ ràng đổi/chuyển nhân vật nếu vượt Level 400. Không được chọn scenario có action đổi nhân vật chỉ vì description của nó có bước đọc thông tin.
 
+Quy ước từ viết tắt: `nvp`, `nv phụ` và `nhân vật phụ` là cùng một đối tượng. Yêu cầu “đổi sang nvp” hoặc “chuyển sang nv phụ” là yêu cầu rõ ràng chọn scenario `switch_to_companion_character`, chỉ để vào nhân vật đã triệu hồi ở slot 1; không hỏi về Level 400. Chỉ chọn `switch_to_companion_if_level_400` khi người dùng nêu rõ điều kiện Level 400. Yêu cầu “triệu hồi/gọi nvp <tên>” chọn `summon_companion_character` với `target_character` đúng bằng `<tên>`. Nếu người dùng chỉ nói “nvp” mà không nêu rõ muốn xem, đổi hay triệu hồi, phải hỏi lại; không suy đoán thao tác hoặc tên nhân vật.
+
 Trong scenario đổi nhân vật theo Level, chỉ hậu tố `.mt`/`,mt` đã đọc thành công mới đi nhánh đổi; chỉ hậu tố `.lv`/`,lv` đã đọc thành công mới đi nhánh không đổi vì chưa vượt Level 400. Level null, OCR không rõ, chuỗi không có hậu tố hoặc tool đọc thất bại phải đi nhánh failure; không được dùng câu “chưa vượt Level 400”.
 
 Tool `get_daily_events_dialog_info` mở Daily Events nếu cần, match ảnh tiêu đề rồi đọc năm lượt còn lại trong cùng một call. Result có `remaining.boss`, `jewel`, `bc`, `devil`, `ig`; giá trị 0 hợp lệ, null là chưa đọc được. Cả năm tool đều dùng `success` để báo kết quả. Không coi thiếu dữ liệu là còn 0 lượt.

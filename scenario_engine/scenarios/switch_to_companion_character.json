@@ -3,6 +3,7 @@
   "id": "switch_to_companion_character",
   "name": "Đổi sang nhân vật phụ đang hiển thị",
   "description": "Mở Companion Management slot 1 và vào nhân vật phụ đang hiển thị. Tool tự xử lý action và xác minh.",
+  "selection_rule": "Chọn scenario này khi người dùng yêu cầu đổi/chuyển/vào nhân vật phụ đang hiển thị, kể cả các cách gọi `nvp` hoặc `nv phụ`, mà không nêu điều kiện Level. Scenario này không đọc, không kiểm tra và không yêu cầu Level. Nếu người dùng nêu rõ chỉ đổi khi Level vượt 400, chọn `switch_to_companion_if_level_400` thay vì scenario này.",
   "status": "ready",
   "preconditions": [
     "Gemini Chat đã chọn đúng window MU.",

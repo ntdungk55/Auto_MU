@@ -251,7 +251,7 @@ def test_info_tool_reads_six_fields_from_verified_dialog(game: dict, already_ope
     assert result["success"] is True
     assert result["character"] == {
         "name": "NTD3001", "server": "19", "map": "Loren Market (233,30)",
-        "level": "0.mt (0.000%)", "reset": "137.rs", "status": "Waiting for control",
+        "level": "0.mt", "reset": "137.rs", "status": "Waiting for control",
     }
     assert game["clicks"] == ([(761, 114)] if already_open else [(656, 545), (761, 114)])
     assert result["dialog_close"]["closed"] is True
@@ -300,7 +300,7 @@ def test_info_ocr_fallback_and_numeric_level_correction(game: dict, monkeypatch:
     assert result["success"] is True
     assert result["character"]["reset"] == "137.rs"
     assert result["fields"]["reset"]["method"] == "easyocr"
-    assert result["character"]["level"] == "0.mt (0.000%)"
+    assert result["character"]["level"] == "0.mt"
     assert result["fields"]["level"]["raw_text"] == "o.mt (0.000%)"
     assert game["ocr_calls"] == 1
 
@@ -323,7 +323,7 @@ def test_info_uses_taught_scale_and_digit_allowlist_for_small_fields(
     result = keyboard.get_companion_summoned_state()
     assert result["success"] is True
     assert result["character"]["server"] == "6"
-    assert result["character"]["level"] == "0.mt (0.000%)"
+    assert result["character"]["level"] == "0.mt"
     assert requests[0]["options"]["allowlist"] == "0123456789"
     assert requests[0]["shape"] == (112, 572)
     assert "allowlist" not in requests[1]["options"]
@@ -337,8 +337,10 @@ def test_info_uses_taught_scale_and_digit_allowlist_for_small_fields(
         ("server", "19", "19"),
         ("map", "Kanturu (144146j¯", None),
         ("map", "Kanturu (144.146)", "Kanturu (144,146)"),
-        ("level", "0.mt (0.000%Y1 OT Dinorari", None),
-        ("level", "0.mt (0.000%)Y1 OT Dinorari", "0.mt (0.000%)"),
+        ("level", "0.mt (0.000%Y1 OT Dinorari", "0.mt"),
+        ("level", "0.mt (0.000%)Y1 OT Dinorari", "0.mt"),
+        ("level", "347.1v (56.42%)", "347.lv"),
+        ("level", "347.Iv (56.42%)", "347.lv"),
         ("reset", "Reset 60.rs extra", "60.rs"),
         ("status", "vent 71", None),
         ("status", "Automatically attacking", "Automatically attacking"),

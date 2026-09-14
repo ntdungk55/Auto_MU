@@ -2367,3 +2367,260 @@ None.
 ### Request
 
 Keep 50 percent as a maximum width for conversation bubbles, not a fixed width.
+
+## REVIEW 2026-09-14 06:57:53
+
+- Review ID: REV-20260914-065753
+- Reviewer: Codex
+- Scope: Move AI chat and OCR post-processing to OpenRouter with selectable provider and model
+- Target Diff: Provider adapter, AI settings persistence, chat/MCP loop, OCR processor, package/build dependencies, requirements, and tests
+- Status: resolved
+
+### Conclusion
+
+AI Chat now defaults to OpenRouter and uses the OpenAI-compatible API for text, image content, and MCP function calls. The settings dialog selects a provider and its matching model list, persists each provider's API key separately with DPAPI, and clears the displayed key when the provider changes. Gemini remains an optional compatibility provider; the default runtime and OCR post-processing no longer call Gemini directly.
+
+### Findings
+
+None.
+
+### Verification
+
+53 focused companion, scenario, UI, MCP, OpenRouter adapter, and provider-settings tests passed. The OpenRouter adapter test verifies tool-call IDs and tool results are preserved across the chat-completions loop. The provider-settings test verifies changing provider clears the previous provider key and replaces the model list. `compileall` and `git diff --check` passed.
+
+### Open Questions
+
+An actual OpenRouter API key is required for the user to perform the final live connection check.
+
+### Request
+
+Configure an OpenRouter API key in AI Provider Settings, choose a tool-capable model, select a game window, and send a read-only request followed by a tool request.
+
+## REVIEW 2026-09-14 06:59:31
+
+- Review ID: REV-20260914-065931
+- Reviewer: Codex
+- Scope: Persist models independently for each AI provider
+- Target Diff: AI settings callbacks, app-state model persistence, requirements, and provider-settings test
+- Status: resolved
+
+### Conclusion
+
+Each provider now persists its own model name as well as its own DPAPI-protected API key. Changing provider resets the model selector to that provider's first compatible default when no saved model is available, so an OpenRouter model is not accidentally submitted to Gemini or vice versa.
+
+### Findings
+
+None.
+
+### Verification
+
+53 focused tests passed, including the provider-settings test that verifies the selected provider is supplied with its model callback. `compileall` and `git diff --check` passed.
+
+### Open Questions
+
+None.
+
+### Request
+
+Use AI Provider Settings to enter the OpenRouter key and choose the desired model for the first live connection.
+
+## REVIEW 2026-09-14 11:52:53
+
+- Review ID: REV-20260914-115253
+- Reviewer: Codex
+- Scope: Ask before installing a missing provider SDK
+- Target Diff: AI chat provider SDK detection, installation prompt, background installer, and tests
+- Status: resolved
+
+### Conclusion
+
+When the selected provider SDK is unavailable, AI Chat now asks the user whether to install its exact package. Choosing Yes runs `pip install` through the same Python runtime as the app; choosing No leaves the runtime unchanged and stops the connection attempt. The installer supports `openai` for OpenRouter and `google-generativeai` for the optional Gemini provider.
+
+### Findings
+
+None.
+
+### Verification
+
+54 focused tests passed, including provider-specific SDK package selection. `compileall` and `git diff --check` passed.
+
+### Open Questions
+
+None.
+
+### Request
+
+When the prompt appears, choose Yes to install the package for the selected provider, then reconnect after the installation completes.
+
+## REVIEW 2026-09-14 11:58:06
+
+- Review ID: REV-20260914-115806
+- Reviewer: Codex
+- Scope: Limit OpenRouter output tokens
+- Target Diff: OpenRouter chat adapter, OCR processor, requirements, and adapter test
+- Status: resolved
+
+### Conclusion
+
+All OpenRouter chat and OCR requests now explicitly use `max_tokens=4996`, avoiding OpenRouter's model-default output allowance of 65535 tokens.
+
+### Findings
+
+None.
+
+### Verification
+
+Nine focused OpenRouter adapter and AI settings/UI tests passed. The adapter test asserts the exact 4996 token limit. `compileall` and `git diff --check` passed.
+
+### Open Questions
+
+None.
+
+### Request
+
+Reconnect AI Chat and retry the request with the same OpenRouter model.
+
+## REVIEW 2026-09-14 12:02:25
+
+- Review ID: REV-20260914-120225
+- Reviewer: Codex
+- Scope: Enforce scenario-bounded AI context
+- Target Diff: Scenario orchestration requirements and current OpenRouter history behavior
+- Status: open
+
+### Conclusion
+
+The new requirement correctly defines dynamic context as one scenario turn, but the current implementation does not yet meet it. `OpenRouterChatSession` retains every user turn, event, assistant response, and MCP result in `_history` until reconnecting the chat.
+
+### Findings
+
+#### Major
+
+- Finding ID: F-001
+- Severity: Major
+- Status: open
+- Location: `src/ai_control/ai_models/openrouter_adapter.py`, `OpenRouterChatSession._history`
+- Steering Source: `.kiro/specs/event-ai-chatting/requirements.md`, section 6.2.1
+- Issue: Dynamic history is never cleared at scenario completion.
+- Impact: Input tokens and stale game data grow across scenarios; a later scenario can be influenced by prior OCR, images, events, or tool results.
+- Required Update: Create a fresh scenario-scoped history for each user/event turn while retaining only the immutable system prompt, scenario catalog, and tool schema between turns.
+
+### Open Questions
+
+None.
+
+### Request
+
+Implement a scenario-scoped chat reset and test that a completed scenario's dynamic messages are absent from the next scenario request.
+
+## REVIEW 2026-09-14 12:05:42
+
+- Review ID: REV-20260914-120542
+- Reviewer: Codex
+- Scope: Implement OpenRouter scenario-bounded context
+- Target Diff: Shared AI/MCP turn wrapper, OpenRouter chat session, adapter tests, and context requirement
+- Status: resolved
+
+### Conclusion
+
+`run_ai_mcp_turn()` now resets a scenario after every terminal outcome through `finally`. The OpenRouter session restores its history to immutable system context only, while the current scenario retains its tool calls and tool results until a final response, failure, or tool limit occurs.
+
+### Findings
+
+None.
+
+### Verification
+
+55 focused tests passed. The OpenRouter integration test executes a tool scenario followed by a second scenario and verifies that the second API request contains only the system prompt and its own user input, with no prior scenario text, tool result, or tool-call ID. `compileall` and `git diff --check` passed.
+
+### Open Questions
+
+None.
+
+### Request
+
+Reconnect AI Chat and verify two separate requests do not increase the dynamic context from the previous scenario.
+
+## REVIEW 2026-09-14 12:13:38
+
+- Review ID: REV-20260914-121338
+- Reviewer: Codex
+- Scope: Recognize `nvp` as the companion-character alias
+- Target Diff: Scenario system prompt, requirements, and scenario selection test
+- Status: resolved
+
+### Conclusion
+
+The system prompt now treats `nvp`, `nv phụ`, and `nhân vật phụ` as equivalent. It maps switch phrasing to the currently summoned companion, summon phrasing with a name to the named companion tool, and requires clarification for an ambiguous standalone alias.
+
+### Findings
+
+None.
+
+### Verification
+
+Ten focused scenario selection, OpenRouter adapter, and MCP integration tests passed. The new prompt test verifies the alias and both permitted actions are present.
+
+### Open Questions
+
+None.
+
+### Request
+
+Reconnect AI Chat and try “đổi sang nvp” after selecting a game window with a summoned companion.
+
+## REVIEW 2026-09-14 12:16:24
+
+- Review ID: REV-20260914-121624
+- Reviewer: Codex
+- Scope: Route direct NVP switch commands deterministically
+- Target Diff: Local scenario-intent parser, AI chat request construction, requirements, and tests
+- Status: resolved
+
+### Conclusion
+
+The ambiguous model-only scenario selection has been removed for direct NVP switch phrasing. A local parser now appends a trusted routing instruction for “đổi/chuyển sang nvp”, while requests that explicitly mention Level 400 continue through normal conditional-scenario selection.
+
+### Findings
+
+None.
+
+### Verification
+
+Fourteen focused intent, scenario selection, OpenRouter adapter, and chat UI tests passed. Intent tests cover direct NVP switching, the Level-400 exception, and non-switch companion requests.
+
+### Open Questions
+
+None.
+
+### Request
+
+Try “đổi sang nvp” again after reconnecting AI Chat.
+
+## REVIEW 2026-09-14 12:18:33
+
+- Review ID: REV-20260914-121833
+- Reviewer: Codex
+- Scope: Revert local NVP scenario routing and retain AI scenario selection
+- Target Diff: AI chat request construction, scenario prompt, requirements, and tests
+- Status: resolved
+
+### Conclusion
+
+The local parser and hidden routing directive have been removed. AI again owns scenario selection, with the system prompt and catalog explicitly requiring direct switching for “đổi/chuyển sang nvp” and reserving the Level-400 scenario for requests that state that condition.
+
+### Findings
+
+None.
+
+### Verification
+
+Eleven focused scenario selection, OpenRouter adapter, and chat UI tests passed. A repository search found no remaining local scenario-intent parser or routing directive.
+
+### Open Questions
+
+None.
+
+### Request
+
+Reconnect AI Chat before testing the updated system prompt.

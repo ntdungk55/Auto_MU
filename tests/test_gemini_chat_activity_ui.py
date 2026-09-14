@@ -7,7 +7,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QSizePolicy, QVBoxLayout, QWidget
 
-from src.ui.gemini_chat_widget import _BouncingDots, _ChatBubble, GeminiChatWidget
+from src.ui.gemini_chat_widget import _BouncingDots, _ChatBubble, GeminiChatWidget, GeminiSettingsDialog
 
 
 APP = QApplication.instance() or QApplication([])
@@ -26,6 +26,17 @@ def test_bouncing_dots_advance_through_animation_phases() -> None:
         dots._advance()
         phases.append(dots._phase)
     assert phases == [1, 2, 3, 4, 5, 0]
+
+
+def test_tool_error_message_includes_tool_error_and_debug_details() -> None:
+    text = GeminiChatWidget._format_tool_error(
+        "get_companion_summoned_state",
+        {"success": False, "error": "Could not capture the selected game window", "debug": {"stage": "capture_game_window"}},
+    )
+
+    assert "Tool lỗi: get_companion_summoned_state" in text
+    assert "Could not capture the selected game window" in text
+    assert '"stage": "capture_game_window"' in text
 
 
 def test_busy_indicator_stays_below_left_aligned_tool_bubbles() -> None:

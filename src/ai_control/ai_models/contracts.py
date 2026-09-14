@@ -43,6 +43,10 @@ class AIChatSession(ABC):
     def send_tool_results(self, results: list[AIToolResult]) -> AIResponse:
         raise NotImplementedError
 
+    def reset_scenario(self) -> None:
+        """Discard dynamic scenario context while preserving provider session defaults."""
+        return None
+
 
 class AIModelAdapter(ABC):
     """Provider adapter created by :class:`AIModelFactory`."""
@@ -70,4 +74,3 @@ class AIModelAdapter(ABC):
         history: list[Any] | None = None,
     ) -> AIChatSession:
         raise NotImplementedError
-
