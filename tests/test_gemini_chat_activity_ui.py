@@ -127,6 +127,24 @@ def test_pending_message_bubble_overlays_the_bottom_of_the_chat_viewport() -> No
     assert bubble.geometry().bottom() <= widget.scroll.viewport().rect().bottom() - 7
 
 
+def test_running_automatic_messages_have_a_left_overlay_bubble() -> None:
+    widget = GeminiChatWidget()
+    widget.scroll.viewport().resize(600, 300)
+    widget._auto_rules = [{"id": "rule-1", "text": "Kiem tra", "kind": "interval", "interval_seconds": 300, "enabled": True}]
+    widget._reset_auto_schedule()
+    widget._position_queue_bubble()
+
+    automatic = widget._auto_status_bubble
+    queue = widget._queue_bubble
+    assert automatic is not None and queue is not None
+    assert automatic.parentWidget() is widget.scroll.viewport()
+    assert automatic.geometry().left() < queue.geometry().left()
+
+    widget._toggle_auto_status_bubble()
+    assert automatic.height() > 22
+    assert not widget._queue_expanded
+
+
 def test_system_bubble_is_centered_and_wraps_at_eighty_percent_maximum() -> None:
     _application()
     container = QWidget()

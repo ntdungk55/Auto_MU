@@ -707,6 +707,8 @@ class GeminiChatWidget(QWidget):
         self._auto_next_due: dict[str, float] = {}
         self._queue_bubble: QPushButton | None = None
         self._queue_expanded = False
+        self._auto_status_bubble: QPushButton | None = None
+        self._auto_status_expanded = False
         self._signals.turn_finished.connect(self._on_turn_finished, Qt.ConnectionType.QueuedConnection)
 
         self._build_ui()
@@ -1510,9 +1512,11 @@ class GeminiChatWidget(QWidget):
         enabled = [rule for rule in self._auto_rules if rule.get("enabled", False)]
         if not enabled:
             self.auto_schedule_status.setText("Tự động: chưa có lịch đang bật")
+            self._refresh_auto_status_bubble()
             return
         due = min(self._auto_next_due.values(), default=time.time())
         self.auto_schedule_status.setText(f"Tự động: {len(enabled)} lịch đang chạy · lần tiếp {datetime.fromtimestamp(due):%H:%M:%S}")
+        self._refresh_auto_status_bubble()
 
     def _auto_rule_status(self, rule: dict) -> str:
         if not rule.get("enabled", False): return "Đã dừng"
@@ -1545,32 +1549,81 @@ class GeminiChatWidget(QWidget):
         self._queue_bubble.setStyleSheet(
             "text-align:left;background:#202a36;color:#cfe5ff;border:1px solid #426583;border-radius:10px;padding:7px;font-size:11px;"
             if self._queue_expanded else
-            "text-align:left;background:transparent;color:#a9bfd3;border:0;padding:2px 5px;font-size:10px;"
+            "text-align:left;background:#202a36;color:#cfe5ff;border:1px solid #426583;border-radius:9px;padding:3px 6px;font-size:10px;"
         )
         self._queue_bubble.setVisible(True)
         self._position_queue_bubble()
 
     def _toggle_queue_bubble(self) -> None:
         self._queue_expanded = not self._queue_expanded
+        if self._queue_expanded:
+            self._auto_status_expanded = False
+        self._refresh_queue_bubble()
+        self._refresh_auto_status_bubble()
+
+    def _refresh_auto_status_bubble(self) -> None:
+        enabled = [rule for rule in self._auto_rules if rule.get("enabled", False)]
+        if not enabled:
+            if self._auto_status_bubble is not None:
+                self._auto_status_bubble.hide()
+            return
+        if self._auto_status_bubble is None:
+            self._auto_status_bubble = QPushButton(self.scroll.viewport())
+            self._auto_status_bubble.setCheckable(True)
+            self._auto_status_bubble.clicked.connect(self._toggle_auto_status_bubble)
+            self.scroll.viewport().installEventFilter(self)
+        title = f"Tự động ({len(enabled)})"
+        detail = "\n".join(f"• {rule.get('text', '')}: {self._auto_rule_status(rule)}" for rule in enabled)
+        bubble = self._auto_status_bubble
+        bubble.setText(title + ("\n" + detail if self._auto_status_expanded else ""))
+        bubble.setChecked(self._auto_status_expanded)
+        bubble.setStyleSheet(
+            "text-align:left;background:#243322;color:#d5f3cd;border:1px solid #568951;border-radius:10px;padding:7px;font-size:11px;"
+            if self._auto_status_expanded else
+            "text-align:left;background:#243322;color:#d5f3cd;border:1px solid #568951;border-radius:9px;padding:3px 6px;font-size:10px;"
+        )
+        bubble.show()
+        self._position_queue_bubble()
+
+    def _toggle_auto_status_bubble(self) -> None:
+        self._auto_status_expanded = not self._auto_status_expanded
+        if self._auto_status_expanded:
+            self._queue_expanded = False
+        self._refresh_auto_status_bubble()
         self._refresh_queue_bubble()
 
     def _position_queue_bubble(self) -> None:
-        bubble = self._queue_bubble
-        if bubble is None:
-            return
         viewport = self.scroll.viewport()
         available_width = max(1, viewport.width() - 16)
         available_height = max(1, viewport.height() - 16)
-        if self._queue_expanded:
-            width = min(380, available_width)
-            line_count = max(1, len(self._message_queue.pending()) + 1)
-            height = min(220, max(40, 20 + line_count * 26), available_height)
-        else:
-            width = min(available_width, max(96, bubble.fontMetrics().horizontalAdvance(bubble.text()) + 12))
-            height = 22
-        bubble.setFixedSize(width, height)
-        bubble.move(max(8, viewport.width() - width - 8), max(8, viewport.height() - height - 8))
-        bubble.raise_()
+        queue = self._queue_bubble
+        queue_width = 0
+        if queue is not None:
+            queue_width, queue_height = self._overlay_bubble_size(
+                queue, self._queue_expanded, len(self._message_queue.pending()) + 1,
+                available_width, available_height,
+            )
+            queue.setFixedSize(queue_width, queue_height)
+            queue.move(max(8, viewport.width() - queue_width - 8), max(8, viewport.height() - queue_height - 8))
+            queue.raise_()
+
+        automatic = self._auto_status_bubble
+        if automatic is not None and not automatic.isHidden():
+            auto_width, auto_height = self._overlay_bubble_size(
+                automatic, self._auto_status_expanded,
+                len([rule for rule in self._auto_rules if rule.get("enabled", False)]) + 1,
+                available_width, available_height,
+            )
+            automatic.setFixedSize(auto_width, auto_height)
+            automatic.move(max(8, viewport.width() - queue_width - auto_width - 14), max(8, viewport.height() - auto_height - 8))
+            automatic.raise_()
+
+    @staticmethod
+    def _overlay_bubble_size(bubble: QPushButton, expanded: bool, line_count: int,
+                             available_width: int, available_height: int) -> tuple[int, int]:
+        if expanded:
+            return min(380, available_width), min(220, max(40, 20 + line_count * 26), available_height)
+        return min(available_width, max(96, bubble.fontMetrics().horizontalAdvance(bubble.text()) + 12)), 22
 
     def eventFilter(self, watched, event):
         if watched is self.scroll.viewport() and event.type() == QEvent.Type.Resize:
