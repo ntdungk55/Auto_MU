@@ -5,10 +5,12 @@ import subprocess
 import sys
 import importlib
 import json
+import uuid
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Callable
 
-from PyQt6.QtCore import Qt, pyqtSignal, QObject, QTimer, QRectF
+from PyQt6.QtCore import Qt, pyqtSignal, QObject, QTimer, QRectF, QTime
 from PyQt6.QtGui import QPixmap, QKeyEvent, QColor, QPainter
 from PyQt6.QtWidgets import (
     QWidget,
@@ -25,9 +27,13 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QDialog,
     QSizePolicy,
+    QListWidget,
+    QSpinBox,
+    QTimeEdit,
 )
 
 from src.ai_control.scenario_tool_client import ScenarioToolClient
+from src.ai_control.chat_message_queue import ChatMessageQueue, QueuedChatMessage
 from src.ai_control.game_window_initializer import prepare_game_window_for_ocr
 
 try:
@@ -47,6 +53,7 @@ class _Signals(QObject):
     append_message = pyqtSignal(object)
     set_busy = pyqtSignal(bool)
     refresh_install = pyqtSignal()
+    turn_finished = pyqtSignal()
 
 class _PromptTextEdit(QTextEdit):
     """Text input that accepts dropping an image file as an attachment (Messenger-like)."""
@@ -163,6 +170,11 @@ class _ChatBubble(QWidget):
             bubble.setStyleSheet("background:#1b74e4;color:#fff;border-radius:14px;")
             outer.addStretch(1)
             outer.addWidget(bubble, 0)
+        elif side == "automatic":
+            label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+            bubble.setStyleSheet("background:#5d3b87;color:#fff;border:1px solid #8d69b8;border-radius:14px;")
+            outer.addStretch(1)
+            outer.addWidget(bubble, 0)
         elif side == "tool":
             outer.setContentsMargins(0, 2, 6, 2)
             label.setStyleSheet("color:#b9dcff;")
@@ -190,7 +202,7 @@ class _ChatBubble(QWidget):
     def resizeEvent(self, event):
         """Size chat bubbles from content and wrap them at the configured row fraction."""
         super().resizeEvent(event)
-        maximum_fraction = {"system": 0.8, "tool": 0.8, "left": 0.5, "right": 0.5}.get(self.side)
+        maximum_fraction = {"system": 0.8, "tool": 0.8, "left": 0.5, "right": 0.5, "automatic": 0.5}.get(self.side)
         if maximum_fraction is None:
             return
         margins = self.layout().contentsMargins()
@@ -418,6 +430,75 @@ class GeminiSettingsDialog(QDialog):
             pass
 
 
+class AutoMessageDialog(QDialog):
+    """Create, update and remove recurring automatic chat messages."""
+
+    def __init__(self, rules: list[dict], parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Tin nhắn tự động")
+        self.setMinimumWidth(520)
+        self.rules = [dict(rule) for rule in rules]
+        layout = QVBoxLayout(self)
+        self.list = QListWidget()
+        self.list.currentRowChanged.connect(self._load_selected)
+        layout.addWidget(self.list)
+        self.text = QTextEdit()
+        self.text.setPlaceholderText("Nội dung tin nhắn tự động")
+        self.text.setFixedHeight(80)
+        layout.addWidget(self.text)
+        row = QHBoxLayout()
+        self.kind = QComboBox(); self.kind.addItems(["Theo chu kỳ", "Theo giờ"])
+        self.value = QSpinBox(); self.value.setRange(1, 86400); self.value.setValue(300); self.value.setSuffix(" giây")
+        self.clock = QTimeEdit(); self.clock.setDisplayFormat("HH:mm")
+        row.addWidget(self.kind); row.addWidget(self.value); row.addWidget(self.clock)
+        layout.addLayout(row)
+        buttons = QHBoxLayout()
+        add = QPushButton("Thêm mới"); add.clicked.connect(self._new)
+        save = QPushButton("Lưu mục"); save.clicked.connect(self._save)
+        delete = QPushButton("Xóa"); delete.clicked.connect(self._delete)
+        close = QPushButton("Đóng"); close.clicked.connect(self.accept)
+        for button in (add, save, delete, close): buttons.addWidget(button)
+        layout.addLayout(buttons)
+        self.kind.currentIndexChanged.connect(lambda _: self._update_kind_ui())
+        self._refresh(); self._update_kind_ui()
+
+    def _refresh(self):
+        current = self.list.currentRow()
+        self.list.clear()
+        for rule in self.rules:
+            schedule = f"mỗi {rule.get('interval_seconds', 300)}s" if rule.get("kind") == "interval" else f"{rule.get('time', '00:00')} mỗi ngày"
+            self.list.addItem(f"{schedule} — {rule.get('text', '')}")
+        if self.rules: self.list.setCurrentRow(max(0, min(current, len(self.rules) - 1)))
+
+    def _update_kind_ui(self):
+        interval = self.kind.currentIndex() == 0
+        self.value.setVisible(interval); self.clock.setVisible(not interval)
+
+    def _new(self):
+        self.list.setCurrentRow(-1); self.text.clear(); self.kind.setCurrentIndex(0); self.value.setValue(300)
+
+    def _load_selected(self, index: int):
+        if not 0 <= index < len(self.rules): return
+        rule = self.rules[index]
+        self.text.setPlainText(str(rule.get("text", "")))
+        self.kind.setCurrentIndex(0 if rule.get("kind") == "interval" else 1)
+        self.value.setValue(int(rule.get("interval_seconds", 300)))
+        self.clock.setTime(QTime.fromString(str(rule.get("time", "00:00")), "HH:mm"))
+
+    def _save(self):
+        text = self.text.toPlainText().strip()
+        if not text: return
+        index = self.list.currentRow()
+        rule = self.rules[index] if 0 <= index < len(self.rules) else {"id": uuid.uuid4().hex, "enabled": True}
+        rule.update({"text": text, "kind": "interval" if self.kind.currentIndex() == 0 else "time", "interval_seconds": self.value.value(), "time": self.clock.time().toString("HH:mm")})
+        if not 0 <= index < len(self.rules): self.rules.append(rule)
+        self._refresh(); self.list.setCurrentRow(self.rules.index(rule))
+
+    def _delete(self):
+        index = self.list.currentRow()
+        if 0 <= index < len(self.rules): self.rules.pop(index); self._refresh()
+
+
 class GeminiChatWidget(QWidget):
     """AI chat tab with selectable providers, images, and MCP tools."""
 
@@ -431,6 +512,8 @@ class GeminiChatWidget(QWidget):
         save_model: Callable[[str, str], None] | None = None,
         load_saved_provider: Callable[[], str] | None = None,
         save_provider: Callable[[str], None] | None = None,
+        load_auto_messages: Callable[[], list[dict]] | None = None,
+        save_auto_messages: Callable[[list[dict]], None] | None = None,
         create_ai_process_controller: Callable[[str, str, str], object] | None = None,
     ):
         super().__init__(parent)
@@ -451,14 +534,28 @@ class GeminiChatWidget(QWidget):
         self._save_model_cb = save_model
         self._load_saved_provider = load_saved_provider
         self._save_provider_cb = save_provider
+        self._load_auto_messages = load_auto_messages
+        self._save_auto_messages = save_auto_messages
         self._create_ai_process_controller = create_ai_process_controller
         self._ai_process_controller = None
         self._selected_game_target = None
         self._scenario_tool_client: ScenarioToolClient | None = None
         self._chat_ready = False
         self._typing_indicator: _TypingIndicator | None = None
+        self._turn_running = False
+        self._message_queue = ChatMessageQueue()
+        self._auto_rules = self._load_auto_rules()
+        self._auto_next_due: dict[str, float] = {}
+        self._queue_bubble: _ChatBubble | None = None
+        self._queue_expanded = False
+        self._signals.turn_finished.connect(self._on_turn_finished, Qt.ConnectionType.QueuedConnection)
 
         self._build_ui()
+        self._reset_auto_schedule()
+        self._auto_timer = QTimer(self)
+        self._auto_timer.setInterval(1000)
+        self._auto_timer.timeout.connect(self._enqueue_due_auto_messages)
+        self._auto_timer.start()
         self._append_system_text("Chọn process game để bắt đầu AI Chat.")
         self._set_chat_available(False)
         QTimer.singleShot(0, self._refresh_processes)
@@ -551,9 +648,9 @@ class GeminiChatWidget(QWidget):
         self.install_btn.clicked.connect(self._install_selected_provider_sdk)
         input_bar.addWidget(self.install_btn, 0)
 
-        self.settings_btn = QPushButton("Setting")
-        self.settings_btn.clicked.connect(self._open_settings)
-        input_bar.addWidget(self.settings_btn, 0)
+        self.auto_messages_btn = QPushButton("Tự động")
+        self.auto_messages_btn.clicked.connect(self._open_auto_messages)
+        input_bar.addWidget(self.auto_messages_btn, 0)
 
         self.send_btn = QPushButton("Gửi")
         self.send_btn.clicked.connect(self._send)
@@ -803,6 +900,8 @@ class GeminiChatWidget(QWidget):
         self.attach_row.setVisible(available and bool(self._attach_path))
         if not available:
             self.status_lbl.setText("Chọn process và kết nối AI")
+        elif hasattr(self, "_message_queue"):
+            QTimer.singleShot(0, self._start_next_queued_turn)
 
     def _current_key(self) -> str:
         try:
@@ -1035,7 +1134,7 @@ class GeminiChatWidget(QWidget):
         try:
             self.send_btn.setEnabled(not busy)
             self.attach_btn.setEnabled(not busy)
-            self.settings_btn.setEnabled(not busy)
+            self.auto_messages_btn.setEnabled(not busy)
             self._refresh_install_button()
             if busy:
                 self._show_typing_indicator()
@@ -1173,7 +1272,95 @@ class GeminiChatWidget(QWidget):
         except Exception:
             pass
 
+    def _load_auto_rules(self) -> list[dict]:
+        try:
+            rules = self._load_auto_messages() if self._load_auto_messages else []
+            return [dict(rule) for rule in rules if isinstance(rule, dict) and rule.get("text")]
+        except Exception:
+            return []
+
+    def _save_auto_rules(self) -> None:
+        if self._save_auto_messages:
+            self._save_auto_messages([dict(rule) for rule in self._auto_rules])
+
+    def _reset_auto_schedule(self) -> None:
+        now = time.time()
+        self._auto_next_due = {}
+        for rule in self._auto_rules:
+            rule_id = str(rule.get("id") or uuid.uuid4().hex)
+            rule["id"] = rule_id
+            if rule.get("kind") == "time":
+                hour, minute = (int(value) for value in str(rule.get("time", "00:00")).split(":"))
+                due = datetime.now().replace(hour=hour, minute=minute, second=0, microsecond=0)
+                if due.timestamp() <= now: due += timedelta(days=1)
+                self._auto_next_due[rule_id] = due.timestamp()
+            else:
+                self._auto_next_due[rule_id] = now + max(1, int(rule.get("interval_seconds", 300)))
+
+    def _open_auto_messages(self) -> None:
+        dialog = AutoMessageDialog(self._auto_rules, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self._auto_rules = dialog.rules
+            self._save_auto_rules(); self._reset_auto_schedule(); self._refresh_queue_bubble()
+
+    def _enqueue_due_auto_messages(self) -> None:
+        now = time.time()
+        for rule in self._auto_rules:
+            if not rule.get("enabled", True): continue
+            rule_id = str(rule.get("id"))
+            if now < self._auto_next_due.get(rule_id, now + 1): continue
+            self._message_queue.enqueue_automatic(str(rule.get("text", "")), rule_id)
+            if rule.get("kind") == "time": self._auto_next_due[rule_id] += 86400
+            else: self._auto_next_due[rule_id] = now + max(1, int(rule.get("interval_seconds", 300)))
+        self._refresh_queue_bubble(); self._start_next_queued_turn()
+
+    def _refresh_queue_bubble(self) -> None:
+        pending = self._message_queue.pending()
+        if self._queue_bubble is None:
+            self._queue_bubble = QPushButton()
+            self._queue_bubble.setCheckable(True)
+            self._queue_bubble.clicked.connect(self._toggle_queue_bubble)
+            self._queue_bubble.setStyleSheet("text-align:left;background:#202a36;color:#cfe5ff;border:1px solid #426583;border-radius:10px;padding:7px;")
+            self.chat_layout.insertWidget(max(0, self.chat_layout.indexOf(self._chat_spacer)), self._queue_bubble)
+        if not pending:
+            self._queue_bubble.setVisible(False); return
+        title = f"Tin nhắn chờ ({len(pending)})"
+        detail = "\n".join(f"• {'Người dùng' if item.source == 'manual' else 'Tự động'}: {item.text}" for item in pending)
+        self._queue_bubble.setText(title + ("\n" + detail if self._queue_expanded else ""))
+        self._queue_bubble.setVisible(True)
+
+    def _toggle_queue_bubble(self) -> None:
+        self._queue_expanded = not self._queue_expanded
+        self._refresh_queue_bubble()
+
+    def _start_next_queued_turn(self) -> None:
+        if self._turn_running or not self._chat_ready: return
+        queued = self._message_queue.pop_next()
+        if queued is None: return
+        self._turn_running = True
+        self._refresh_queue_bubble()
+        if queued.source == "automatic":
+            self._append_bubble(queued.text, side="automatic", meta="Tự động")
+        self._dispatch_turn(queued)
+
+    def _on_turn_finished(self) -> None:
+        self._turn_running = False
+        self._start_next_queued_turn()
+
     def _send(self):
+        prompt = (self.prompt.toPlainText() or "").strip()
+        image_path = self._attach_path
+        if not prompt and not image_path:
+            return
+        self.prompt.clear()
+        self._attach_path = None
+        self._refresh_attachment_ui()
+        self._append_bubble(prompt or "", side="right", image_path=image_path)
+        self._message_queue.enqueue_manual(prompt, image_path)
+        self._refresh_queue_bubble()
+        self._start_next_queued_turn()
+
+    def _dispatch_turn(self, queued: QueuedChatMessage):
         if not self._chat_ready:
             QMessageBox.warning(
                 self,
@@ -1193,21 +1380,12 @@ class GeminiChatWidget(QWidget):
             return
         chat = self._chat
 
-        prompt = (self.prompt.toPlainText() or "").strip()
-        img_path = self._attach_path
-        if not prompt and not img_path:
-            return
+        prompt, img_path = queued.text, queued.image_path
 
         # Snapshot inputs (avoid UI thread races)
         model_name = self._current_model_name
 
-        self.prompt.clear()
         self._signals.set_busy.emit(True)
-
-        self._append_bubble(prompt if prompt else "", side="right", image_path=img_path)
-        if img_path:
-            self._attach_path = None
-            self._refresh_attachment_ui()
 
         def _worker():
             t0 = time.perf_counter()
@@ -1254,6 +1432,7 @@ class GeminiChatWidget(QWidget):
                 )
             finally:
                 self._signals.set_busy.emit(False)
+                self._signals.turn_finished.emit()
 
         threading.Thread(target=_worker, daemon=True).start()
 

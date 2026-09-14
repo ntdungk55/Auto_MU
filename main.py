@@ -1512,6 +1512,8 @@ class MainWindow(QMainWindow):
             save_model=self._save_ai_model,
             load_saved_provider=self._get_saved_ai_provider,
             save_provider=self._save_ai_provider,
+            load_auto_messages=lambda: self._load_app_state().get("ai_auto_messages", []),
+            save_auto_messages=self._save_ai_auto_messages,
             create_ai_process_controller=self._create_ai_process_controller,
         )
 
@@ -1543,6 +1545,11 @@ class MainWindow(QMainWindow):
         state["ai_provider"] = provider
         self._save_app_state(state)
         os.environ["AI_PROVIDER"] = provider
+
+    def _save_ai_auto_messages(self, messages: list[dict]) -> None:
+        state = self._load_app_state()
+        state["ai_auto_messages"] = messages
+        self._save_app_state(state)
 
     def _get_saved_ai_key(self, provider: str) -> str:
         provider = str(provider or "openrouter").strip().casefold()
