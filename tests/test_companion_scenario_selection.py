@@ -44,3 +44,5 @@ def test_system_prompt_defines_nvp_alias_and_its_safe_actions() -> None:
     assert "summon_companion_character" in prompt
     assert "phải hỏi lại" in prompt
     assert "không hỏi về Level 400" in prompt
+    assert "chỉ được chọn khi và chỉ khi người dùng nêu rõ điều kiện" in prompt
+    assert "vì Level tool vừa đọc là `.mt`" in prompt
