@@ -56,10 +56,10 @@
     }
   ],
   "result": {
-    "success_message": "Chỉ báo đã đổi khi switch_result.success=true. Nếu Level thật có hậu tố .lv, báo đã đọc thông tin và giữ nguyên nhân vật hiện tại.",
+    "success_message": "Chỉ báo đã đổi khi companion_info.character.level kết thúc bằng `.mt` và switch_result.success=true. Khi đó báo Level đã đọc đúng theo giá trị thực tế, có hậu tố `.mt`, nên đã gọi đổi nhân vật phụ.",
     "failure_message": "Scenario thất bại tại tool hiện tại: ${companion_info.error}${switch_result.error}. selection_required=${companion_info.selection_required}${switch_result.selection_required}. Chỉ yêu cầu chọn lại cửa sổ nếu một tool trả selection_required=true.",
-    "no_switch_message": "Đã đọc Level=${companion_info.character.level}; hậu tố .lv xác nhận nhân vật chưa vượt Level 400 nên không gọi switch_to_companion_character.",
+    "no_switch_message": "Chỉ dùng nguyên văn khi companion_info.character.level kết thúc bằng `.lv`: Đã đọc Level=${companion_info.character.level}; hậu tố .lv xác nhận nhân vật chưa vượt Level 400 nên không gọi switch_to_companion_character.",
     "unrecognized_level_message": "Không nhận diện chắc chắn định dạng Level từ ${companion_info.character.level}; không gọi switch_to_companion_character và không được báo là nhân vật chưa vượt Level 400.",
-    "response_rule": "Chỉ dùng no_switch_message khi companion_info.success=true và Level khớp hậu tố .lv/,lv. Level null, không nhận ra mt/lv, hoặc companion_info.success khác true phải báo failure/unrecognized_level_message."
+    "response_rule": "Ràng buộc bắt buộc: chỉ xử lý nhánh khi companion_info.success=true. Level kết thúc bằng `.mt` phải chạy step `switch_to_companion` trước khi trả lời; tuyệt đối không dùng no_switch_message hoặc nói hậu tố `.lv`. Level kết thúc bằng `.lv` mới được dùng no_switch_message và tuyệt đối không báo đã đổi. Nội dung trả lời phải lặp đúng Level tool trả về; không được thay `.mt` thành `.lv` hoặc ngược lại. Level null, không nhận ra mt/lv, hoặc companion_info.success khác true phải báo failure/unrecognized_level_message."
   }
 }

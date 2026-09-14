@@ -31,6 +31,8 @@ def test_conditional_switch_requires_explicit_mt_or_lv_branch() -> None:
     assert ".lv" in steps["check_companion_level_not_above_400"]["condition"]
     assert steps["check_companion_level_not_above_400"]["on_false"] == "failed"
     assert "companion_info.success=true" in scenario["result"]["response_rule"]
+    assert "Level kết thúc bằng `.mt` phải chạy step `switch_to_companion`" in scenario["result"]["response_rule"]
+    assert "tuyệt đối không dùng no_switch_message" in scenario["result"]["response_rule"]
 
 
 def test_system_prompt_defines_nvp_alias_and_its_safe_actions() -> None:
