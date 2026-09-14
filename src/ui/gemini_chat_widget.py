@@ -27,7 +27,8 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QDialog,
     QSizePolicy,
-    QListWidget,
+    QTableWidget,
+    QTableWidgetItem,
     QSpinBox,
     QTimeEdit,
 )
@@ -442,9 +443,16 @@ class AutoMessageDialog(QDialog):
         self._on_changed = on_changed
         self._rule_status = rule_status
         layout = QVBoxLayout(self)
-        self.list = QListWidget()
-        self.list.currentRowChanged.connect(self._load_selected)
-        layout.addWidget(self.list)
+        self.table = QTableWidget(0, 7)
+        self.table.setHorizontalHeaderLabels(["Nội dung", "Lịch", "Trạng thái", "Còn lại", "Start", "Stop", "Xóa"])
+        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table.itemSelectionChanged.connect(lambda: self._load_selected(self.table.currentRow()))
+        for column, width in enumerate((170, 85, 80, 75, 55, 55, 50)):
+            self.table.setColumnWidth(column, width)
+        layout.addWidget(self.table)
         self.text = QTextEdit()
         self.text.setPlaceholderText("Nội dung tin nhắn tự động")
         self.text.setFixedHeight(80)
@@ -458,11 +466,9 @@ class AutoMessageDialog(QDialog):
         buttons = QHBoxLayout()
         add = QPushButton("Thêm mới"); add.clicked.connect(self._new)
         save = QPushButton("Lưu mục"); save.clicked.connect(self._save)
-        start = QPushButton("Start"); start.clicked.connect(lambda: self._set_enabled(True))
-        stop = QPushButton("Stop"); stop.clicked.connect(lambda: self._set_enabled(False))
         delete = QPushButton("Xóa"); delete.clicked.connect(self._delete)
         close = QPushButton("Đóng"); close.clicked.connect(self.accept)
-        for button in (add, save, start, stop, delete, close): buttons.addWidget(button)
+        for button in (add, save, delete, close): buttons.addWidget(button)
         layout.addLayout(buttons)
         self.kind.currentIndexChanged.connect(lambda _: self._update_kind_ui())
         self._refresh(); self._update_kind_ui()
@@ -470,20 +476,35 @@ class AutoMessageDialog(QDialog):
         self._status_timer.timeout.connect(self._refresh); self._status_timer.start()
 
     def _refresh(self):
-        current = self.list.currentRow()
-        self.list.clear()
-        for rule in self.rules:
+        current = self.table.currentRow()
+        self.table.blockSignals(True)
+        self.table.setRowCount(0)
+        for row, rule in enumerate(self.rules):
+            self.table.insertRow(row)
             schedule = f"mỗi {rule.get('interval_seconds', 300)}s" if rule.get("kind") == "interval" else f"{rule.get('time', '00:00')} mỗi ngày"
             status = self._rule_status(rule) if self._rule_status else ("Đang chạy" if rule.get("enabled", True) else "Đã dừng")
-            self.list.addItem(f"{status} | {schedule} — {rule.get('text', '')}")
-        if self.rules: self.list.setCurrentRow(max(0, min(current, len(self.rules) - 1)))
+            remaining = status.split("còn ", 1)[1] if "còn " in status else "—"
+            self.table.setItem(row, 0, QTableWidgetItem(str(rule.get("text", ""))))
+            self.table.setItem(row, 1, QTableWidgetItem(schedule))
+            self.table.setItem(row, 2, QTableWidgetItem("Đang chạy" if rule.get("enabled", True) else "Đã dừng"))
+            self.table.setItem(row, 3, QTableWidgetItem(remaining))
+            for column, label, enabled in ((4, "Start", True), (5, "Stop", False)):
+                button = QPushButton(label)
+                button.setEnabled(enabled != bool(rule.get("enabled", True)))
+                button.clicked.connect(lambda _=False, index=row, value=enabled: self._set_enabled(index, value))
+                self.table.setCellWidget(row, column, button)
+            delete = QPushButton("Xóa")
+            delete.clicked.connect(lambda _=False, index=row: self._delete(index))
+            self.table.setCellWidget(row, 6, delete)
+        self.table.blockSignals(False)
+        if self.rules: self.table.selectRow(max(0, min(current, len(self.rules) - 1)))
 
     def _update_kind_ui(self):
         interval = self.kind.currentIndex() == 0
         self.value.setVisible(interval); self.clock.setVisible(not interval)
 
     def _new(self):
-        self.list.setCurrentRow(-1); self.text.clear(); self.kind.setCurrentIndex(0); self.value.setValue(300)
+        self.table.clearSelection(); self.text.clear(); self.kind.setCurrentIndex(0); self.value.setValue(300)
 
     def _load_selected(self, index: int):
         if not 0 <= index < len(self.rules): return
@@ -496,25 +517,24 @@ class AutoMessageDialog(QDialog):
     def _save(self):
         text = self.text.toPlainText().strip()
         if not text: return
-        index = self.list.currentRow()
+        index = self.table.currentRow()
         rule = self.rules[index] if 0 <= index < len(self.rules) else {"id": uuid.uuid4().hex, "enabled": True}
         rule.update({"text": text, "kind": "interval" if self.kind.currentIndex() == 0 else "time", "interval_seconds": self.value.value(), "time": self.clock.time().toString("HH:mm")})
         if not 0 <= index < len(self.rules): self.rules.append(rule)
-        self._refresh(); self.list.setCurrentRow(self.rules.index(rule))
+        self._refresh(); self.table.selectRow(self.rules.index(rule))
         if self._on_changed: self._on_changed(self.rules)
 
-    def _delete(self):
-        index = self.list.currentRow()
+    def _delete(self, index: int | None = None):
+        index = self.table.currentRow() if index is None else index
         if 0 <= index < len(self.rules):
             self.rules.pop(index); self._refresh()
             if self._on_changed: self._on_changed(self.rules)
 
-    def _set_enabled(self, enabled: bool):
-        index = self.list.currentRow()
+    def _set_enabled(self, index: int, enabled: bool):
         if not 0 <= index < len(self.rules): return
         self.rules[index]["enabled"] = enabled
         if self._on_changed: self._on_changed(self.rules)
-        self._refresh(); self.list.setCurrentRow(index)
+        self._refresh(); self.table.selectRow(index)
 
 
 class GeminiChatWidget(QWidget):
