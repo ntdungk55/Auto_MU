@@ -99,8 +99,8 @@ def test_ai_activity_button_cancels_the_active_turn() -> None:
 
     assert cancel_event.is_set()
     assert widget._message_queue.pending() == []
-    assert widget.ai_activity_btn.text() == "●"
-    assert not widget.ai_activity_btn.isEnabled()
+    assert widget.ai_activity_btn.text() == "↵"
+    assert widget.ai_activity_btn.isEnabled()
 
 
 def test_pending_message_bubble_is_created_and_shows_an_empty_queue() -> None:

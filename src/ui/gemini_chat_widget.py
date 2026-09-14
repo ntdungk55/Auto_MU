@@ -805,10 +805,10 @@ class GeminiChatWidget(QWidget):
         self.prompt.setViewportMargins(0, 0, 34, 0)
         self.prompt.setStyleSheet("background:#111;color:#e6e6e6;border:1px solid #222;border-radius:12px;")
 
-        self.ai_activity_btn = QPushButton("●")
+        self.ai_activity_btn = QPushButton("↵")
         self.ai_activity_btn.setFixedSize(26, 26)
-        self.ai_activity_btn.setToolTip("AI đang dừng")
-        self.ai_activity_btn.clicked.connect(self._cancel_active_turn)
+        self.ai_activity_btn.setToolTip("Gửi tin nhắn (Enter)")
+        self.ai_activity_btn.clicked.connect(self._handle_input_action)
         prompt_container = _PromptActionContainer(self.prompt, self.ai_activity_btn)
         input_bar.addWidget(prompt_container, 1)
 
@@ -824,9 +824,6 @@ class GeminiChatWidget(QWidget):
         self.auto_messages_btn.clicked.connect(self._open_auto_messages)
         input_bar.addWidget(self.auto_messages_btn, 0)
 
-        self.send_btn = QPushButton("Gửi")
-        self.send_btn.clicked.connect(self._send)
-        input_bar.addWidget(self.send_btn, 0)
         layout.addWidget(self.input_row)
 
         self.setLayout(layout)
@@ -1306,7 +1303,6 @@ class GeminiChatWidget(QWidget):
 
     def _set_busy(self, busy: bool):
         try:
-            self.send_btn.setEnabled(not busy)
             self.attach_btn.setEnabled(not busy)
             self.auto_messages_btn.setEnabled(not busy)
             self._refresh_install_button()
@@ -1324,12 +1320,19 @@ class GeminiChatWidget(QWidget):
             return
         active = self._active_turn_cancel
         running = active is not None and not active.is_set()
-        button.setText("■" if running else "●")
-        button.setEnabled(running)
-        button.setToolTip("Hủy lượt AI hiện tại" if running else "AI đang dừng")
+        button.setText("■" if running else "↵")
+        button.setEnabled(True)
+        button.setToolTip("Hủy lượt AI hiện tại" if running else "Gửi tin nhắn (Enter)")
         button.setStyleSheet(
-            "color:#ff7272;font-size:16px;" if running else "color:#7f8c8d;font-size:16px;"
+            "color:#ff7272;font-size:16px;" if running else "color:#a9bfd3;font-size:18px;"
         )
+
+    def _handle_input_action(self) -> None:
+        active = self._active_turn_cancel
+        if active is not None and not active.is_set():
+            self._cancel_active_turn()
+        else:
+            self._send()
 
     def _cancel_active_turn(self) -> None:
         active = self._active_turn_cancel
