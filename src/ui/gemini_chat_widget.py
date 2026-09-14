@@ -1240,7 +1240,7 @@ class GeminiChatWidget(QWidget):
                     {
                         "side": "left",
                         "text": txt,
-                        "meta": f"{dt_ms/1000.0:.2f}s | {model_name} | {tool_result.tool_call_count} tool(s)",
+                        "meta": self._format_turn_meta(dt_ms, model_name, tool_result),
                     }
                 )
             except Exception as e:
@@ -1272,6 +1272,14 @@ class GeminiChatWidget(QWidget):
         else:
             return
         self._signals.append_message.emit({"side": "tool", "text": text})
+
+    @staticmethod
+    def _format_turn_meta(dt_ms: float, model_name: str, tool_result: object) -> str:
+        usage = getattr(tool_result, "usage", None)
+        total_tokens = getattr(usage, "total_tokens", None)
+        token_text = f"{int(total_tokens):,} token" if total_tokens is not None else "token: không có dữ liệu"
+        tool_call_count = int(getattr(tool_result, "tool_call_count", 0))
+        return f"{dt_ms / 1000.0:.2f}s | {token_text} | {model_name} | {tool_call_count} tool(s)"
 
     @staticmethod
     def _format_tool_error(name: str, result: object) -> str:

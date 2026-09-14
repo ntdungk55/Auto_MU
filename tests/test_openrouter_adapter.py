@@ -12,7 +12,8 @@ class _FakeCompletions:
 
     def create(self, **kwargs):
         self.requests.append(kwargs)
-        return SimpleNamespace(choices=[SimpleNamespace(message=self.responses.pop(0))])
+        response = self.responses.pop(0)
+        return SimpleNamespace(choices=[SimpleNamespace(message=response[0])], usage=response[1])
 
 
 class _FakeClient:
@@ -36,11 +37,18 @@ class _FakeMCPClient:
         return {"ok": True, "name": name, "arguments": arguments}
 
 
-def _message(content="", tool_calls=None):
-    return SimpleNamespace(
+def _message(content="", tool_calls=None, *, prompt_tokens=100, completion_tokens=20):
+    return (
+        SimpleNamespace(
         content=content,
         tool_calls=tool_calls or [],
         model_dump=lambda **_: {"role": "assistant", "content": content},
+        ),
+        SimpleNamespace(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=prompt_tokens + completion_tokens,
+        ),
     )
 
 
@@ -67,6 +75,7 @@ def test_openrouter_adapter_preserves_tool_call_ids_and_results():
 
     assert first.tool_calls[0].call_id == "call-1"
     assert final.text == "Đã kiểm tra."
+    assert first.usage.total_tokens == 120
     _, client = client_class.created[0]
     assert client.chat.completions.requests[0]["tools"][0]["function"]["name"] == "get_companion_summoned_state"
     assert client.chat.completions.requests[0]["max_tokens"] == 4996
@@ -88,7 +97,7 @@ def test_openrouter_context_is_reset_after_a_completed_scenario():
         tools=[{"name": "get_companion_summoned_state", "input_schema": {"type": "object"}}],
     )
 
-    run_ai_mcp_turn(chat=chat, initial_content=["Scenario đầu"], mcp_client=_FakeMCPClient())
+    result = run_ai_mcp_turn(chat=chat, initial_content=["Scenario đầu"], mcp_client=_FakeMCPClient())
     chat.send(["Scenario tiếp theo"])
 
     _, client = client_class.created[0]
@@ -99,3 +108,4 @@ def test_openrouter_context_is_reset_after_a_completed_scenario():
     ]
     assert all("Scenario đầu" not in str(message) for message in next_messages)
     assert all("call-1" not in str(message) for message in next_messages)
+    assert result.usage.total_tokens == 240

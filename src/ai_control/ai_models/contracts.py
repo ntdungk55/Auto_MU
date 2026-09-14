@@ -22,9 +22,19 @@ class AIToolResult:
 
 
 @dataclass(frozen=True)
+class AIUsage:
+    """Provider-reported token usage for one model request."""
+
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    total_tokens: int | None = None
+
+
+@dataclass(frozen=True)
 class AIResponse:
     text: str = ""
     tool_calls: tuple[AIToolCall, ...] = ()
+    usage: AIUsage | None = None
 
 
 class AIChatSession(ABC):

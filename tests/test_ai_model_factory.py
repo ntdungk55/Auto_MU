@@ -67,8 +67,8 @@ def test_factory_rejects_unknown_and_duplicate_provider():
         factory.create("other", model_name="x")
 
 
-def test_default_factory_contains_gemini():
-    assert create_default_ai_model_factory().available_providers() == ("gemini",)
+def test_default_factory_contains_configured_providers():
+    assert create_default_ai_model_factory().available_providers() == ("gemini", "openrouter")
 
 
 def test_system_prompt_loader_reads_utf8_and_returns_checksum(tmp_path):
@@ -159,4 +159,3 @@ def test_gemini_adapter_receives_the_shared_system_prompt():
     assert _FakeGeminiSDK.created["model_name"] == "gemini-test"
     assert chat.history == [{"role": "user"}]
     assert chat.send("hello").text == "ok"
-

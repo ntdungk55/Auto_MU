@@ -8,6 +8,8 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QSizePolicy, QVBoxLayout, QWidget
 
 from src.ui.gemini_chat_widget import _BouncingDots, _ChatBubble, GeminiChatWidget, GeminiSettingsDialog
+from src.ai_control.ai_models.contracts import AIUsage
+from src.ai_control.ai_tool_bridge import AIMCPResult
 
 
 APP = QApplication.instance() or QApplication([])
@@ -37,6 +39,16 @@ def test_tool_error_message_includes_tool_error_and_debug_details() -> None:
     assert "Tool lỗi: get_companion_summoned_state" in text
     assert "Could not capture the selected game window" in text
     assert '"stage": "capture_game_window"' in text
+
+
+def test_turn_meta_shows_provider_reported_token_total_after_duration() -> None:
+    meta = GeminiChatWidget._format_turn_meta(
+        1234,
+        "google/gemini-2.5-flash",
+        AIMCPResult("done", 2, False, AIUsage(input_tokens=100, output_tokens=23, total_tokens=123)),
+    )
+
+    assert meta.startswith("1.23s | 123 token |")
 
 
 def test_busy_indicator_stays_below_left_aligned_tool_bubbles() -> None:

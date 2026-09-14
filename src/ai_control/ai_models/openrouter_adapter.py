@@ -13,6 +13,7 @@ from src.ai_control.ai_models.contracts import (
     AIResponse,
     AIToolCall,
     AIToolResult,
+    AIUsage,
 )
 
 OPENROUTER_MAX_TOKENS = 4996
@@ -59,7 +60,8 @@ class OpenRouterChatSession(AIChatSession):
         return parts or [{"type": "text", "text": ""}]
 
     @staticmethod
-    def _response(message: Any) -> AIResponse:
+    def _response(response: Any) -> AIResponse:
+        message = response.choices[0].message
         calls = []
         for call in list(getattr(message, "tool_calls", None) or []):
             try:
@@ -67,7 +69,15 @@ class OpenRouterChatSession(AIChatSession):
             except json.JSONDecodeError:
                 arguments = {}
             calls.append(AIToolCall(name=call.function.name, arguments=arguments, call_id=call.id))
-        return AIResponse(text=str(getattr(message, "content", "") or ""), tool_calls=tuple(calls))
+        raw_usage = getattr(response, "usage", None)
+        usage = None
+        if raw_usage is not None:
+            usage = AIUsage(
+                input_tokens=getattr(raw_usage, "prompt_tokens", None),
+                output_tokens=getattr(raw_usage, "completion_tokens", None),
+                total_tokens=getattr(raw_usage, "total_tokens", None),
+            )
+        return AIResponse(text=str(getattr(message, "content", "") or ""), tool_calls=tuple(calls), usage=usage)
 
     def _complete(self) -> AIResponse:
         response = self._client.chat.completions.create(
@@ -79,7 +89,7 @@ class OpenRouterChatSession(AIChatSession):
         )
         message = response.choices[0].message
         self._history.append(message.model_dump(exclude_none=True))
-        return self._response(message)
+        return self._response(response)
 
     def send(self, content: Any) -> AIResponse:
         self._history.append({"role": "user", "content": self._content(content)})

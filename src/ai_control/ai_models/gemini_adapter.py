@@ -10,6 +10,7 @@ from src.ai_control.ai_models.contracts import (
     AIResponse,
     AIToolCall,
     AIToolResult,
+    AIUsage,
 )
 from src.ai_control.gemini_tool_bridge import (
     build_gemini_tool_declarations,
@@ -36,7 +37,15 @@ class GeminiChatSession(AIChatSession):
             AIToolCall(name=call["name"], arguments=dict(call.get("arguments") or {}))
             for call in extract_function_calls(response)
         )
-        return AIResponse(text=response_text(response), tool_calls=calls)
+        raw_usage = getattr(response, "usage_metadata", None)
+        usage = None
+        if raw_usage is not None:
+            usage = AIUsage(
+                input_tokens=getattr(raw_usage, "prompt_token_count", None),
+                output_tokens=getattr(raw_usage, "candidates_token_count", None),
+                total_tokens=getattr(raw_usage, "total_token_count", None),
+            )
+        return AIResponse(text=response_text(response), tool_calls=calls, usage=usage)
 
     def send(self, content: Any) -> AIResponse:
         return self._normalize_response(self._raw_chat.send_message(content))
@@ -97,4 +106,3 @@ class GeminiModelAdapter(AIModelAdapter):
             system_instruction=prompt,
         )
         return GeminiChatSession(model.start_chat(history=list(history or [])), self._sdk)
-
