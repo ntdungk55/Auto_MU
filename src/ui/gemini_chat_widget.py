@@ -348,6 +348,15 @@ class GeminiSettingsDialog(QDialog):
         model_row.addWidget(self.custom_model_input, 1)
         layout.addLayout(model_row)
 
+        search_row = QHBoxLayout()
+        self.model_search_label = QLabel("Tìm model:")
+        search_row.addWidget(self.model_search_label)
+        self.model_search_input = QLineEdit()
+        self.model_search_input.setPlaceholderText("Nhập tên, ví dụ: gemini, qwen, deepseek")
+        self.model_search_input.textChanged.connect(self._on_model_search_changed)
+        search_row.addWidget(self.model_search_input, 1)
+        layout.addLayout(search_row)
+
         catalog_row = QHBoxLayout()
         self.model_catalog_status = QLabel("Danh mục OpenRouter chưa tải")
         catalog_row.addWidget(self.model_catalog_status, 1)
@@ -358,6 +367,7 @@ class GeminiSettingsDialog(QDialog):
 
         provider_index = self.provider_combo.findData(str(initial_provider or "openrouter").casefold())
         self.provider_combo.setCurrentIndex(max(0, provider_index))
+        self._set_openrouter_search_visible()
         self._set_models(initial_model)
         self.provider_combo.currentIndexChanged.connect(self._on_provider_changed)
         self.model_combo.currentIndexChanged.connect(self._on_model_changed)
@@ -390,13 +400,13 @@ class GeminiSettingsDialog(QDialog):
         self.model_combo.clear()
         if provider == "openrouter":
             if self._openrouter_models:
-                for model_id, prompt_price, completion_price in self._openrouter_models:
+                for model_id, prompt_price, completion_price in self._filtered_openrouter_models():
                     self.model_combo.addItem(
                         self._openrouter_model_label(model_id, prompt_price, completion_price), model_id
                     )
             else:
                 for model_id in self._provider_models["openrouter"]:
-                    if model_id != "Custom…":
+                    if model_id != "Custom…" and self._model_matches_search(model_id):
                         self.model_combo.addItem(f"{model_id} — đang tải giá", model_id)
             self.model_combo.addItem("Custom…", "custom")
             index = self.model_combo.findData(selected_model)
@@ -421,9 +431,25 @@ class GeminiSettingsDialog(QDialog):
     def _on_provider_changed(self, _index: int) -> None:
         """Prevent a key for the previous provider from being saved under the new one."""
         self.key_input.clear()
+        self._set_openrouter_search_visible()
         self._set_models()
         if self.selected_provider() == "openrouter":
             self._load_openrouter_models()
+
+    def _set_openrouter_search_visible(self) -> None:
+        visible = self.selected_provider() == "openrouter"
+        self.model_search_label.setVisible(visible)
+        self.model_search_input.setVisible(visible)
+
+    def _on_model_search_changed(self, _text: str) -> None:
+        if self.selected_provider() == "openrouter":
+            self._set_models(self.selected_model())
+
+    def _model_matches_search(self, model_id: str) -> bool:
+        return self.model_search_input.text().strip().casefold() in model_id.casefold()
+
+    def _filtered_openrouter_models(self) -> list[tuple[str, float, float]]:
+        return [model for model in self._openrouter_models if self._model_matches_search(model[0])]
 
     def selected_model(self) -> str:
         name = str(self.model_combo.currentText() or "").strip()
@@ -457,7 +483,7 @@ class GeminiSettingsDialog(QDialog):
                 continue
             if model_id and prompt_price >= 0 and completion_price >= 0:
                 models.append((model_id, prompt_price, completion_price))
-        return sorted(models, key=lambda model: (model[1] + model[2], model[0]))
+        return sorted(models, key=lambda model: model[0].casefold())
 
     def _load_openrouter_models(self) -> None:
         if self._is_loading_openrouter_models:
