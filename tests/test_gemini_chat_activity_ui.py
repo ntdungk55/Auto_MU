@@ -51,13 +51,16 @@ def test_turn_meta_shows_provider_reported_token_total_after_duration() -> None:
     assert meta.startswith("1.23s | 123 token |")
 
 
-def test_automatic_message_row_loads_into_the_edit_form_and_starts_stopped() -> None:
+def test_automatic_message_row_is_editable_directly_and_starts_stopped() -> None:
     dialog = AutoMessageDialog([{"id": "rule-1", "text": "Kiểm tra", "kind": "interval", "interval_seconds": 300, "enabled": False}])
-    dialog.table.selectRow(0)
-    APP.processEvents()
 
-    assert dialog.text.toPlainText() == "Kiểm tra"
-    assert dialog.table.item(0, 2).text() == "Đã dừng"
+    assert dialog.table.item(0, 0).text() == "Kiểm tra"
+    assert dialog.table.editTriggers() & dialog.table.EditTrigger.DoubleClicked
+    assert dialog.table.item(0, 3).text() == "Đã dừng"
+
+    dialog.table.item(0, 0).setText("Nội dung mới")
+    APP.processEvents()
+    assert dialog.rules[0]["text"] == "Nội dung mới"
 
 
 def test_busy_indicator_stays_below_left_aligned_tool_bubbles() -> None:

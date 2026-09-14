@@ -27,10 +27,9 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QDialog,
     QSizePolicy,
+    QAbstractItemView,
     QTableWidget,
     QTableWidgetItem,
-    QSpinBox,
-    QTimeEdit,
 )
 
 from src.ai_control.scenario_tool_client import ScenarioToolClient
@@ -443,37 +442,24 @@ class AutoMessageDialog(QDialog):
         self._on_changed = on_changed
         self._rule_status = rule_status
         layout = QVBoxLayout(self)
-        self.table = QTableWidget(0, 7)
-        self.table.setHorizontalHeaderLabels(["Nội dung", "Lịch", "Trạng thái", "Còn lại", "Start", "Stop", "Xóa"])
+        self.table = QTableWidget(0, 8)
+        self.table.setHorizontalHeaderLabels(["Nội dung", "Kiểu", "Chu kỳ / giờ", "Trạng thái", "Còn lại", "Start", "Stop", "Xóa"])
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.table.verticalHeader().setVisible(False)
-        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.table.itemSelectionChanged.connect(lambda: self._load_selected(self.table.currentRow()))
-        for column, width in enumerate((170, 85, 80, 75, 55, 55, 50)):
+        self.table.setEditTriggers(QTableWidget.EditTrigger.DoubleClicked | QTableWidget.EditTrigger.SelectedClicked | QTableWidget.EditTrigger.EditKeyPressed)
+        self.table.itemChanged.connect(self._on_cell_changed)
+        for column, width in enumerate((165, 90, 90, 80, 70, 55, 55, 50)):
             self.table.setColumnWidth(column, width)
         layout.addWidget(self.table)
-        self.text = QTextEdit()
-        self.text.setPlaceholderText("Nội dung tin nhắn tự động")
-        self.text.setFixedHeight(80)
-        layout.addWidget(self.text)
-        row = QHBoxLayout()
-        self.kind = QComboBox(); self.kind.addItems(["Theo chu kỳ", "Theo giờ"])
-        self.value = QSpinBox(); self.value.setRange(1, 86400); self.value.setValue(300); self.value.setSuffix(" giây")
-        self.clock = QTimeEdit(); self.clock.setDisplayFormat("HH:mm")
-        row.addWidget(self.kind); row.addWidget(self.value); row.addWidget(self.clock)
-        layout.addLayout(row)
         buttons = QHBoxLayout()
         add = QPushButton("Thêm mới"); add.clicked.connect(self._new)
-        save = QPushButton("Lưu chỉnh sửa"); save.clicked.connect(self._save)
-        delete = QPushButton("Xóa"); delete.clicked.connect(self._delete)
         close = QPushButton("Đóng"); close.clicked.connect(self.accept)
-        for button in (add, save, delete, close): buttons.addWidget(button)
+        for button in (add, close): buttons.addWidget(button)
         layout.addLayout(buttons)
-        self.kind.currentIndexChanged.connect(lambda _: self._update_kind_ui())
-        self._refresh(); self._update_kind_ui()
+        self._refresh()
         self._status_timer = QTimer(self); self._status_timer.setInterval(1000)
-        self._status_timer.timeout.connect(self._refresh); self._status_timer.start()
+        self._status_timer.timeout.connect(self._refresh_runtime_cells); self._status_timer.start()
 
     def _refresh(self):
         current = self.table.currentRow()
@@ -481,59 +467,81 @@ class AutoMessageDialog(QDialog):
         self.table.setRowCount(0)
         for row, rule in enumerate(self.rules):
             self.table.insertRow(row)
-            schedule = f"mỗi {rule.get('interval_seconds', 300)}s" if rule.get("kind") == "interval" else f"{rule.get('time', '00:00')} mỗi ngày"
             status = self._rule_status(rule) if self._rule_status else ("Đang chạy" if rule.get("enabled", False) else "Đã dừng")
             remaining = status.split("còn ", 1)[1] if "còn " in status else "—"
             self.table.setItem(row, 0, QTableWidgetItem(str(rule.get("text", ""))))
-            self.table.setItem(row, 1, QTableWidgetItem(schedule))
-            self.table.setItem(row, 2, QTableWidgetItem("Đang chạy" if rule.get("enabled", False) else "Đã dừng"))
-            self.table.setItem(row, 3, QTableWidgetItem(remaining))
-            for column, label, enabled in ((4, "Start", True), (5, "Stop", False)):
+            kind = QComboBox(); kind.addItems(["Chu kỳ", "Theo giờ"])
+            kind.setCurrentIndex(0 if rule.get("kind") == "interval" else 1)
+            kind.currentIndexChanged.connect(lambda value, index=row: self._set_kind(index, value))
+            self.table.setCellWidget(row, 1, kind)
+            value = str(rule.get("interval_seconds", 300)) if rule.get("kind") == "interval" else str(rule.get("time", "00:00"))
+            self.table.setItem(row, 2, QTableWidgetItem(value))
+            self.table.setItem(row, 3, QTableWidgetItem("Đang chạy" if rule.get("enabled", False) else "Đã dừng"))
+            self.table.setItem(row, 4, QTableWidgetItem(remaining))
+            for column, label, enabled in ((5, "Start", True), (6, "Stop", False)):
                 button = QPushButton(label)
                 button.setEnabled(enabled != bool(rule.get("enabled", False)))
                 button.clicked.connect(lambda _=False, index=row, value=enabled: self._set_enabled(index, value))
                 self.table.setCellWidget(row, column, button)
             delete = QPushButton("Xóa")
             delete.clicked.connect(lambda _=False, index=row: self._delete(index))
-            self.table.setCellWidget(row, 6, delete)
+            self.table.setCellWidget(row, 7, delete)
         self.table.blockSignals(False)
         if self.rules: self.table.selectRow(max(0, min(current, len(self.rules) - 1)))
 
-    def _update_kind_ui(self):
-        interval = self.kind.currentIndex() == 0
-        self.value.setVisible(interval); self.clock.setVisible(not interval)
+    def _refresh_runtime_cells(self) -> None:
+        """Refresh changing schedule values without interrupting direct cell editing."""
+        if self.table.state() == QAbstractItemView.State.EditingState:
+            return
+        self.table.blockSignals(True)
+        for row, rule in enumerate(self.rules):
+            if row >= self.table.rowCount():
+                break
+            status = self._rule_status(rule) if self._rule_status else ("Đang chạy" if rule.get("enabled", False) else "Đã dừng")
+            remaining = status.split("còn ", 1)[1] if "còn " in status else "—"
+            self.table.item(row, 3).setText("Đang chạy" if rule.get("enabled", False) else "Đã dừng")
+            self.table.item(row, 4).setText(remaining)
+        self.table.blockSignals(False)
 
     def _new(self):
-        self.table.clearSelection(); self.text.clear(); self.kind.setCurrentIndex(0); self.value.setValue(300)
+        self.rules.append({"id": uuid.uuid4().hex, "text": "Nhập nội dung", "kind": "interval", "interval_seconds": 300, "time": "00:00", "enabled": False})
+        self._notify(); self._refresh()
+        row = len(self.rules) - 1; self.table.selectRow(row); self.table.editItem(self.table.item(row, 0))
 
-    def _load_selected(self, index: int):
+    def _on_cell_changed(self, item: QTableWidgetItem):
+        row, column = item.row(), item.column()
+        if not 0 <= row < len(self.rules) or column not in (0, 2): return
+        value = item.text().strip()
+        rule = self.rules[row]
+        if column == 0:
+            if value: rule["text"] = value
+        elif rule.get("kind") == "interval":
+            try: rule["interval_seconds"] = max(1, min(86400, int(value)))
+            except ValueError: self._refresh(); return
+        elif QTime.fromString(value, "HH:mm").isValid():
+            rule["time"] = value
+        else:
+            self._refresh(); return
+        self._notify()
+
+    def _set_kind(self, index: int, value: int):
         if not 0 <= index < len(self.rules): return
-        rule = self.rules[index]
-        self.text.setPlainText(str(rule.get("text", "")))
-        self.kind.setCurrentIndex(0 if rule.get("kind") == "interval" else 1)
-        self.value.setValue(int(rule.get("interval_seconds", 300)))
-        self.clock.setTime(QTime.fromString(str(rule.get("time", "00:00")), "HH:mm"))
+        self.rules[index]["kind"] = "interval" if value == 0 else "time"
+        self._notify(); self._refresh(); self.table.selectRow(index)
 
-    def _save(self):
-        text = self.text.toPlainText().strip()
-        if not text: return
-        index = self.table.currentRow()
-        rule = self.rules[index] if 0 <= index < len(self.rules) else {"id": uuid.uuid4().hex, "enabled": False}
-        rule.update({"text": text, "kind": "interval" if self.kind.currentIndex() == 0 else "time", "interval_seconds": self.value.value(), "time": self.clock.time().toString("HH:mm")})
-        if not 0 <= index < len(self.rules): self.rules.append(rule)
-        self._refresh(); self.table.selectRow(self.rules.index(rule))
+    def _notify(self) -> None:
         if self._on_changed: self._on_changed(self.rules)
 
     def _delete(self, index: int | None = None):
         index = self.table.currentRow() if index is None else index
         if 0 <= index < len(self.rules):
             self.rules.pop(index); self._refresh()
-            if self._on_changed: self._on_changed(self.rules)
+            self._notify()
 
     def _set_enabled(self, index: int, enabled: bool):
         if not 0 <= index < len(self.rules): return
         self.rules[index]["enabled"] = enabled
-        if self._on_changed: self._on_changed(self.rules)
+        self._notify()
         self._refresh(); self.table.selectRow(index)
 
 
