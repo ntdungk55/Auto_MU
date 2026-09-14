@@ -13,7 +13,7 @@ from src.ai_control.mcp_client_manager import MCPClientManager
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-GAME_TOOLS = {"get_daily_events_dialog_info", "open_companion_management_dialog",
+GAME_TOOLS = {"get_daily_events_dialog_info", "open_companion_management_dialog", "get_current_character_map",
               "get_companion_summoned_state", "switch_to_companion_character", "summon_companion_character"}
 
 
@@ -143,7 +143,7 @@ def test_real_stdio_manager_discovers_and_calls_tools_without_keypress():
     assert manager.status_snapshot().state == "stopped"
 
 
-def test_default_manager_exposes_only_five_game_tools():
+def test_default_manager_exposes_only_game_tools():
     manager = MCPClientManager(startup_timeout_seconds=20)
     manager.start()
     try:

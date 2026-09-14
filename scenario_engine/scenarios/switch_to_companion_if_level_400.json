@@ -12,10 +12,27 @@
   "inputs": {},
   "limits": {
     "timeout_seconds": 40,
-    "max_steps": 4,
-    "max_tool_calls": 2
+    "max_steps": 6,
+    "max_tool_calls": 3
   },
   "steps": [
+    {
+      "id": "read_current_character_map",
+      "type": "mcp",
+      "tool": "get_current_character_map",
+      "arguments": {},
+      "save_result_as": "current_map",
+      "assert": ["${current_map.success} == true", "${current_map.map} != null"],
+      "on_success": "check_current_map_is_varka",
+      "on_failure": "failed"
+    },
+    {
+      "id": "check_current_map_is_varka",
+      "type": "condition",
+      "condition": "Chuẩn hóa ${current_map.map} về chữ thường và bỏ khoảng trắng thừa. Điều kiện đúng chỉ khi giá trị đúng bằng `varka`.",
+      "on_true": "complete",
+      "on_false": "read_companion_information"
+    },
     {
       "id": "read_companion_information",
       "type": "mcp",
@@ -56,10 +73,11 @@
     }
   ],
   "result": {
-    "success_message": "Chỉ báo đã đổi khi companion_info.character.level kết thúc bằng `.mt` và switch_result.success=true. Khi đó báo Level đã đọc đúng theo giá trị thực tế, có hậu tố `.mt`, nên đã gọi đổi nhân vật phụ.",
+    "success_message": "Chỉ báo đã đổi khi current_map.map không phải Varka, companion_info.character.level kết thúc bằng `.mt` và switch_result.success=true. Khi đó báo Level đã đọc đúng theo giá trị thực tế, có hậu tố `.mt`, nên đã gọi đổi nhân vật phụ.",
     "failure_message": "Scenario thất bại tại tool hiện tại: ${companion_info.error}${switch_result.error}. selection_required=${companion_info.selection_required}${switch_result.selection_required}. Chỉ yêu cầu chọn lại cửa sổ nếu một tool trả selection_required=true.",
     "no_switch_message": "Chỉ dùng nguyên văn khi companion_info.character.level kết thúc bằng `.lv`: Đã đọc Level=${companion_info.character.level}; hậu tố .lv xác nhận nhân vật chưa vượt Level 400 nên không gọi switch_to_companion_character.",
+    "varka_message": "Nhân vật hiện đang ở map Varka nên không đổi sang nhân vật phụ; không gọi get_companion_summoned_state hoặc switch_to_companion_character.",
     "unrecognized_level_message": "Không nhận diện chắc chắn định dạng Level từ ${companion_info.character.level}; không gọi switch_to_companion_character và không được báo là nhân vật chưa vượt Level 400.",
-    "response_rule": "Ràng buộc bắt buộc: chỉ xử lý nhánh khi companion_info.success=true. Level kết thúc bằng `.mt` phải chạy step `switch_to_companion` trước khi trả lời; tuyệt đối không dùng no_switch_message hoặc nói hậu tố `.lv`. Level kết thúc bằng `.lv` mới được dùng no_switch_message và tuyệt đối không báo đã đổi. Nội dung trả lời phải lặp đúng Level tool trả về; không được thay `.mt` thành `.lv` hoặc ngược lại. Level null, không nhận ra mt/lv, hoặc companion_info.success khác true phải báo failure/unrecognized_level_message."
+    "response_rule": "Ràng buộc bắt buộc: nếu current_map.map là Varka thì dừng ngay, chỉ dùng varka_message và không gọi bất kỳ tool nào khác. Khi map khác Varka, chỉ xử lý nhánh khi companion_info.success=true. Level kết thúc bằng `.mt` phải chạy step `switch_to_companion` trước khi trả lời; tuyệt đối không dùng no_switch_message hoặc nói hậu tố `.lv`. Level kết thúc bằng `.lv` mới được dùng no_switch_message và tuyệt đối không báo đã đổi. Nội dung trả lời phải lặp đúng Level tool trả về; không được thay `.mt` thành `.lv` hoặc ngược lại. Level null, không nhận ra mt/lv, hoặc companion_info.success khác true phải báo failure/unrecognized_level_message."
   }
 }

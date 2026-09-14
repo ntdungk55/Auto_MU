@@ -20,6 +20,7 @@ from src.ai_control.companion_switcher import switch_to_companion_character as r
 from src.ai_control.companion_switcher import verify_and_close_companion_management_dialog as run_open_companion_dialog
 from src.ai_control.companion_info import get_companion_information
 from src.ai_control.companion_summoner import summon_companion_character as run_companion_summon
+from src.ai_control.current_character_info import get_current_character_map as read_current_character_map
 from src.ai_control.daily_events_info import get_daily_events_dialog_info as read_daily_events
 from src.ai_control.servers.process import resolve_selected_process
 from src.logic.action_type import ActionMode, ActionType, AutoAction
@@ -445,6 +446,16 @@ def open_companion_management_dialog() -> dict[str, Any]:
     if the title disappears cannot be verified after the close click.
     """
     return _run_companion_tool(run_open_companion_dialog)
+
+
+@mcp.tool()
+def get_current_character_map() -> dict[str, Any]:
+    """Read the selected active character's current map from the game HUD.
+
+    This is read-only. It returns map and is_varka only when OCR validates the
+    taught mainInfo.map region; it does not open a dialog or change character.
+    """
+    return _run_companion_tool(read_current_character_map)
 
 
 @mcp.tool()
