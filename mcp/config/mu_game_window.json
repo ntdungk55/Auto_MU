@@ -256,10 +256,10 @@
           "minimumConfidence": 0.4
         },
         "textRegions": {
-          "boss": {
-            "description": "Boss remaining entries",
-            "recognitionType": "text",
-            "valuePattern": "Remaining\\s*[:;]\\s*(\\d+)\\s*times?",
+            "boss": {
+              "description": "Boss remaining entries. OCR may append one trailing vertical bar after `times`; that bar is noise and must be ignored.",
+              "recognitionType": "text",
+              "valuePattern": "Remaining\\s*[:;]\\s*(\\d+)\\s*times?\\s*\\|?",
             "roiRelativeToTitle": {
               "x1": -161,
               "y1": 64,

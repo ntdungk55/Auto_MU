@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import threading
 from typing import Any
+
+
+_TARGETED_TOOL_CALL_LOCK = threading.RLock()
 
 
 class ScenarioToolClient:
@@ -18,6 +22,7 @@ class ScenarioToolClient:
     ) -> None:
         self._mcp_client = mcp_client
         self._scenario_directory = scenario_directory
+        self._selected_target: tuple[int, int] | None = None
 
     def start(self) -> None:
         """Start the underlying MCP servers when they are not already running."""
@@ -34,26 +39,42 @@ class ScenarioToolClient:
         return self._mcp_client.refresh_tools(timeout_seconds=timeout_seconds)
 
     def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Forward one Gemini function call to the MCP client."""
+        """Forward one Gemini call while binding the shared MCP selection to this chat tab."""
         clean_name = str(name or "").strip()
         payload = dict(arguments or {})
-        return self._text_result_payload(self._mcp_client.call_tool(clean_name, payload))
+        # Game-control MCP servers resolve their target from one shared runtime store.
+        # Keep selecting and invoking together so another chat tab cannot redirect a call.
+        with _TARGETED_TOOL_CALL_LOCK:
+            self._synchronize_selected_target()
+            return self._text_result_payload(self._mcp_client.call_tool(clean_name, payload))
 
     def load_scenario_snapshot(self) -> dict[str, Any]:
         """Read the catalog once when a Gemini chat session is created."""
         return self._load_scenario_snapshot()
 
     def synchronize_selected_target(self, target: Any) -> None:
-        """Persist Gemini Chat's selected PID/HWND without exposing a selection tool to AI."""
-        from src.ai_control.servers.process import select_game_process
+        """Remember and persist this chat tab's PID/HWND without exposing it to AI."""
+        self._selected_target = self._target_identifiers(target)
+        with _TARGETED_TOOL_CALL_LOCK:
+            self._synchronize_selected_target()
 
+    @staticmethod
+    def _target_identifiers(target: Any) -> tuple[int, int]:
+        """Validate the process/window identity supplied by the owning chat tab."""
         target_id = str(getattr(target, "target_id", "") or "")
         try:
             process_text, window_text = target_id.split(":", 1)
-            process_id = int(process_text)
-            window_handle = int(window_text)
+            return int(process_text), int(window_text)
         except (TypeError, ValueError):
             raise ValueError("selected game target does not contain a valid process id and window handle") from None
+
+    def _synchronize_selected_target(self) -> None:
+        """Write this client's saved target to the process store immediately before a call."""
+        if self._selected_target is None:
+            return
+        from src.ai_control.servers.process import select_game_process
+
+        process_id, window_handle = self._selected_target
         result = select_game_process(pid=process_id, selected_window_hwnd=window_handle)
         if not bool(result.get("ok")):
             errors = result.get("errors") or result.get("error") or result

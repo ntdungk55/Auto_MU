@@ -85,3 +85,29 @@ def test_chat_synchronizes_target_without_a_process_mcp_tool(tmp_path, monkeypat
     with pytest.raises(RuntimeError, match="does not belong"):
         client.synchronize_selected_target(SimpleNamespace(target_id="321:9999"))
     assert store.load()["selected_window_hwnd"] == 1321
+
+
+def test_each_chat_tool_call_restores_its_own_selected_process(tmp_path, monkeypatch):
+    store = SelectedProcessStore(tmp_path / "selected_process.json")
+    monkeypatch.setattr(process_server, "selected_process_store", store)
+    monkeypatch.setattr(process_server, "inspect_process", lambda pid, **_: _candidate(int(pid)))
+
+    class RecordingMCP:
+        def __init__(self) -> None:
+            self.called_with_pids: list[int] = []
+
+        def call_tool(self, _name, _arguments):
+            self.called_with_pids.append(store.load()["pid"])
+            return {"content": [{"type": "text", "text": "{}"}]}
+
+    first_mcp, second_mcp = RecordingMCP(), RecordingMCP()
+    first = ScenarioToolClient(mcp_client=first_mcp, scenario_directory=tmp_path)
+    second = ScenarioToolClient(mcp_client=second_mcp, scenario_directory=tmp_path)
+    first.synchronize_selected_target(SimpleNamespace(target_id="321:1321"))
+    second.synchronize_selected_target(SimpleNamespace(target_id="654:1654"))
+
+    first.call_tool("get_daily_events_dialog_info")
+    second.call_tool("get_daily_events_dialog_info")
+
+    assert first_mcp.called_with_pids == [321]
+    assert second_mcp.called_with_pids == [654]

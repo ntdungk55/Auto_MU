@@ -104,6 +104,16 @@ def test_low_confidence_does_not_invent_counts(game: dict) -> None:
     assert all(value is None for value in result["remaining"].values())
 
 
+def test_boss_counter_accepts_easyocr_trailing_vertical_bar(game: dict) -> None:
+    game["texts"][0] = "Remaining: 34 times|"
+    game["confidence"] = 0.64
+
+    result = keyboard.get_daily_events_dialog_info()
+
+    assert result["success"] is True
+    assert result["remaining"]["boss"] == 34
+
+
 def test_wrong_dialog_never_reads_counters(game: dict) -> None:
     game["frames"] = [cv2.imread(str(ROOT / "assets/character_list_dialog.png"))]
     result = daily.get_daily_events_dialog_info(TARGET, send_key=keyboard._post_single_key, dialog_timeout_seconds=0.05)
