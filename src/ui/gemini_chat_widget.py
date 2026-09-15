@@ -1673,9 +1673,8 @@ class GeminiChatWidget(QWidget):
             self._auto_status_bubble.clicked.connect(self._toggle_auto_status_bubble)
             self.scroll.viewport().installEventFilter(self)
         title = f"Tự động ({len(enabled)})"
-        detail = "\n".join(f"• {rule.get('text', '')}: {self._auto_rule_status(rule)}" for rule in enabled)
         bubble = self._auto_status_bubble
-        bubble.setText(title + ("\n" + detail if self._auto_status_expanded else ""))
+        bubble.setText(self._auto_status_text(title, enabled, max(1, self.scroll.viewport().width() - 16)))
         bubble.setChecked(self._auto_status_expanded)
         bubble.setStyleSheet(
             "text-align:left;background:#243322;color:#d5f3cd;border:1px solid #568951;border-radius:10px;padding:7px;font-size:11px;"
@@ -1684,6 +1683,23 @@ class GeminiChatWidget(QWidget):
         )
         bubble.show()
         self._position_queue_bubble()
+
+
+    def _auto_status_text(self, title: str, enabled: list[dict], width: int) -> str:
+        """Keep every schedule remaining time visible in the overlay bubble."""
+        if not self._auto_status_expanded:
+            return title
+        metrics = self._auto_status_bubble.fontMetrics() if self._auto_status_bubble else self.fontMetrics()
+        content_width = max(1, width - 18)
+        bullet = chr(0x2022) + " "
+        lines: list[str] = []
+        for rule in enabled:
+            status = self._auto_rule_status(rule)
+            suffix = f": {status}"
+            prompt_width = max(1, content_width - metrics.horizontalAdvance(bullet) - metrics.horizontalAdvance(suffix))
+            prompt = metrics.elidedText(str(rule.get("text", "")), Qt.TextElideMode.ElideRight, prompt_width)
+            lines.append(f"{bullet}{prompt}{suffix}")
+        return title + "\n" + "\n".join(lines)
 
     def _toggle_auto_status_bubble(self) -> None:
         self._auto_status_expanded = not self._auto_status_expanded
@@ -1709,11 +1725,15 @@ class GeminiChatWidget(QWidget):
 
         automatic = self._auto_status_bubble
         if automatic is not None and not automatic.isHidden():
+            automatic_available_width = max(1, viewport.width() - queue_width - 22)
             auto_width, auto_height = self._overlay_bubble_size(
                 automatic, self._auto_status_expanded,
                 len([rule for rule in self._auto_rules if rule.get("enabled", False)]) + 1,
-                available_width, available_height,
+                automatic_available_width, available_height,
             )
+            enabled = [rule for rule in self._auto_rules if rule.get("enabled", False)]
+            title = automatic.text().split("\n", 1)[0]
+            automatic.setText(self._auto_status_text(title, enabled, auto_width))
             automatic.setFixedSize(auto_width, auto_height)
             automatic.move(max(8, viewport.width() - queue_width - auto_width - 14), max(8, viewport.height() - auto_height - 8))
             automatic.raise_()

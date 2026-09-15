@@ -168,6 +168,20 @@ def test_running_automatic_messages_have_a_left_overlay_bubble() -> None:
     assert not widget._queue_expanded
 
 
+def test_expanded_automatic_bubble_elides_prompt_without_hiding_remaining_time() -> None:
+    widget = GeminiChatWidget()
+    widget.scroll.viewport().resize(420, 300)
+    long_prompt = "Ná»™i dung tá»± Ä‘á»™ng ráº¥t dÃ i " * 30
+    widget._auto_rules = [{"id": "rule-1", "text": long_prompt, "kind": "interval", "interval_seconds": 300, "enabled": True}]
+    widget._reset_auto_schedule()
+    widget._auto_status_expanded = True
+    text = widget._auto_status_text("Tá»± Ä‘á»™ng (1)", widget._auto_rules, 380)
+
+    assert text.endswith("s")
+    assert "…" in text
+    assert long_prompt not in text
+
+
 def test_system_bubble_is_centered_and_wraps_at_eighty_percent_maximum() -> None:
     _application()
     container = QWidget()
