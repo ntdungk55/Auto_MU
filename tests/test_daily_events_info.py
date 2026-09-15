@@ -104,8 +104,8 @@ def test_low_confidence_does_not_invent_counts(game: dict) -> None:
     assert all(value is None for value in result["remaining"].values())
 
 
-@pytest.mark.parametrize("ocr_text", ["Remaining: 34 times|", "Remaining: 35 tmes"])
-def test_boss_counter_accepts_known_easyocr_suffix_noise(game: dict, ocr_text: str) -> None:
+@pytest.mark.parametrize("ocr_text", ["Remaining: 34 times|", "Remaining: 35 tmes", "Remainlng; 36 tmcs"])
+def test_boss_counter_reads_the_single_integer_despite_anchor_ocr_noise(game: dict, ocr_text: str) -> None:
     game["texts"][0] = ocr_text
     game["confidence"] = 0.64
 

@@ -257,9 +257,9 @@
         },
         "textRegions": {
             "boss": {
-              "description": "Boss remaining entries. OCR may read `times` as `tmes` or append one trailing vertical bar; those are noise and must be ignored.",
+              "description": "Boss remaining entries. The only required value is one integer; `Remaining` and the suffix are positional anchors and may contain OCR noise.",
               "recognitionType": "text",
-              "valuePattern": "Remaining\\s*[:;]\\s*(\\d+)\\s*t(?:imes?|mes)\\s*\\|?",
+              "valuePattern": "\\D*(?<!-)(\\d+)\\D*",
             "roiRelativeToTitle": {
               "x1": -161,
               "y1": 64,
@@ -270,7 +270,7 @@
           "jewel": {
             "description": "Jewel mining remaining entries",
             "recognitionType": "text",
-              "valuePattern": "Remaining\\s*[:;]\\s*(\\d+)\\s*t(?:imes?|mes)\\s*\\|?",
+              "valuePattern": "\\D*(?<!-)(\\d+)\\D*",
             "roiRelativeToTitle": {
               "x1": -161,
               "y1": 96,
@@ -281,7 +281,7 @@
           "bc": {
             "description": "Blood Castle remaining entries",
             "recognitionType": "text",
-              "valuePattern": "Remaining\\s*[:;]\\s*(\\d+)\\s*t(?:imes?|mes)\\s*\\|?",
+              "valuePattern": "\\D*(?<!-)(\\d+)\\D*",
             "roiRelativeToTitle": {
               "x1": -74,
               "y1": 208,
@@ -292,7 +292,7 @@
           "devil": {
             "description": "Demon Square remaining entries",
             "recognitionType": "text",
-              "valuePattern": "Remaining\\s*[:;]\\s*(\\d+)\\s*t(?:imes?|mes)\\s*\\|?",
+              "valuePattern": "\\D*(?<!-)(\\d+)\\D*",
             "roiRelativeToTitle": {
               "x1": -74,
               "y1": 224,
@@ -303,7 +303,7 @@
           "ig": {
             "description": "Imperial Guardian (IG) remaining entries",
             "recognitionType": "text",
-              "valuePattern": "Remaining\\s*[:;]\\s*(\\d+)\\s*t(?:imes?|mes)\\s*\\|?",
+              "valuePattern": "\\D*(?<!-)(\\d+)\\D*",
             "roiRelativeToTitle": {
               "x1": -74,
               "y1": 241,
