@@ -746,6 +746,10 @@ class GeminiChatWidget(QWidget):
         process_row.setContentsMargins(0, 0, 0, 0)
         self.process_label = QLabel("Process game:")
         process_row.addWidget(self.process_label, 0)
+        self.focus_game_btn = QPushButton("Focus game")
+        self.focus_game_btn.setEnabled(False)
+        self.focus_game_btn.clicked.connect(self._focus_selected_game)
+        process_row.addWidget(self.focus_game_btn, 0)
         self.process_combo = QComboBox()
         self.process_combo.setPlaceholderText("Chọn process/window game")
         self.process_combo.currentIndexChanged.connect(self._on_process_combo_changed)
@@ -853,6 +857,7 @@ class GeminiChatWidget(QWidget):
         self._detach_ai_process_controller()
         self._dispose_scenario_tools()
         self._selected_game_target = None
+        self.focus_game_btn.setEnabled(False)
 
         self.process_combo.blockSignals(True)
         self.process_combo.clear()
@@ -894,6 +899,7 @@ class GeminiChatWidget(QWidget):
         self._detach_ai_process_controller()
         self._dispose_scenario_tools()
         self._selected_game_target = None
+        self.focus_game_btn.setEnabled(False)
         if target is None:
             return
 
@@ -934,6 +940,7 @@ class GeminiChatWidget(QWidget):
             return
 
         self._set_chat_available(True)
+        self.focus_game_btn.setEnabled(True)
         self._selected_game_target = target
         self._append_system_text(f"Đã chọn process: {target.window_title}")
 
@@ -944,6 +951,23 @@ class GeminiChatWidget(QWidget):
                 self._on_managed_process_change(self, target)
             return
         self._on_process_selected(index)
+
+    def _focus_selected_game(self) -> None:
+        target = self._selected_game_target
+        if target is None:
+            return
+        try:
+            import win32con
+            import win32gui
+
+            hwnd = int(getattr(target, "hwnd", 0) or 0)
+            if not win32gui.IsWindow(hwnd):
+                raise RuntimeError("Game window không còn tồn tại.")
+            if win32gui.IsIconic(hwnd):
+                win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+            win32gui.SetForegroundWindow(hwnd)
+        except Exception as error:
+            QMessageBox.warning(self, "Không thể focus game", str(error))
 
     def assign_process_target(self, target: object) -> None:
         """Bind this chat instance to one target supplied by the workspace."""
@@ -1108,6 +1132,8 @@ class GeminiChatWidget(QWidget):
 
     def _set_chat_available(self, available: bool):
         self._chat_ready = available
+        if hasattr(self, "focus_game_btn"):
+            self.focus_game_btn.setEnabled(available and self._selected_game_target is not None)
         self.scroll.setVisible(True)
         self.scroll.setEnabled(available)
         self.input_row.setVisible(True)
