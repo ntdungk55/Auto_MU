@@ -692,6 +692,7 @@ class GeminiChatWidget(QWidget):
         create_ai_process_controller: Callable[[str, str, str], object] | None = None,
         managed_process_tab: bool = False,
         on_managed_process_change: Callable[[object, object], None] | None = None,
+        on_managed_process_title_changed: Callable[[object, str], None] | None = None,
     ):
         super().__init__(parent)
         self._signals = _Signals()
@@ -716,6 +717,7 @@ class GeminiChatWidget(QWidget):
         self._create_ai_process_controller = create_ai_process_controller
         self._managed_process_tab = managed_process_tab
         self._on_managed_process_change = on_managed_process_change
+        self._on_managed_process_title_changed = on_managed_process_title_changed
         self._ai_process_controller = None
         self._selected_game_target = None
         self._scenario_tool_client: ScenarioToolClient | None = None
@@ -1734,8 +1736,26 @@ class GeminiChatWidget(QWidget):
     def _on_turn_finished(self) -> None:
         self._turn_running = False
         self._active_turn_cancel = None
+        self._refresh_managed_process_title()
         self._refresh_ai_activity_button()
         self._start_next_queued_turn()
+
+    def _refresh_managed_process_title(self) -> None:
+        """Refresh the browser tab after a tool changes the character in this game window."""
+        if not self._managed_process_tab or self._on_managed_process_title_changed is None:
+            return
+        target = self._selected_game_target
+        hwnd = int(getattr(target, "hwnd", 0) or 0)
+        if not hwnd:
+            return
+        try:
+            import win32gui
+
+            title = str(win32gui.GetWindowText(hwnd) or "").strip()
+            if title:
+                self._on_managed_process_title_changed(self, title)
+        except Exception:
+            pass
 
     def _send(self):
         prompt = (self.prompt.toPlainText() or "").strip()
@@ -1988,6 +2008,7 @@ class AIChatWorkspace(QWidget):
             load_saved_provider=self._load_saved_provider, save_provider=self._save_provider,
             create_ai_process_controller=self._create_ai_process_controller, managed_process_tab=True,
             on_managed_process_change=self._change_tab_process,
+            on_managed_process_title_changed=self._refresh_process_tab_title,
         )
         chat.refresh_process_btn.hide()
         chat.process_label.hide()
@@ -2002,9 +2023,27 @@ class AIChatWorkspace(QWidget):
 
     @staticmethod
     def _character_name(target: object) -> str:
-        title = str(getattr(target, "window_title", "") or "")
+        return AIChatWorkspace._character_name_from_title(str(getattr(target, "window_title", "") or ""))
+
+    @staticmethod
+    def _character_name_from_title(title: str) -> str:
         match = re.search(r"\([^)]*-\s*([^)]+)\)", title)
         return match.group(1).strip() if match else (title or "Game")
+
+    def _refresh_process_tab_title(self, chat: object, window_title: str) -> None:
+        """Keep a process tab label synchronized with the game's live window title."""
+        if not isinstance(chat, GeminiChatWidget):
+            return
+        index = self.tabs.indexOf(chat)
+        if index < 0:
+            return
+        title = self._character_name_from_title(window_title)
+        self.tabs.setTabText(index, title[:28])
+        self.tabs.setTabToolTip(index, title)
+        try:
+            setattr(chat._selected_game_target, "window_title", window_title)
+        except Exception:
+            pass
 
     def _load_rules_for_target(self, target: object) -> list[dict]:
         return self._load_auto_messages_for_target(target) if self._load_auto_messages_for_target else []
@@ -2089,6 +2128,7 @@ class AIChatWorkspace(QWidget):
             load_auto_messages=load_auto, save_auto_messages=save_auto,
             create_ai_process_controller=self._create_ai_process_controller, managed_process_tab=True,
             on_managed_process_change=self._change_tab_process,
+            on_managed_process_title_changed=self._refresh_process_tab_title,
         )
         chat.refresh_process_btn.hide()
         chat.process_label.hide()
