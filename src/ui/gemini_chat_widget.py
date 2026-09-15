@@ -1923,13 +1923,25 @@ class AIChatWorkspace(QWidget):
         self.tabs = QTabWidget()
         self.tabs.setTabsClosable(True)
         self.tabs.tabCloseRequested.connect(self._close_process_tab)
-        self._add_tab_placeholder = QWidget()
-        self._add_tab_index = self.tabs.addTab(self._add_tab_placeholder, "+")
-        self.tabs.tabBar().setTabToolTip(self._add_tab_index, "Thêm process game")
-        self.tabs.tabBar().setTabButton(self._add_tab_index, QTabBar.ButtonPosition.RightSide, None)
-        self._last_process_index = -1
+        self._add_tab_placeholder: GeminiChatWidget | None = None
+        self._create_add_tab()
         self.tabs.currentChanged.connect(self._on_tab_changed)
         layout.addWidget(self.tabs)
+        QTimer.singleShot(0, self._refresh_available_targets)
+
+    def _create_add_tab(self) -> None:
+        chat = GeminiChatWidget(
+            load_saved_key=self._load_saved_key, save_key=self._save_key, clear_saved_key=self._clear_saved_key,
+            load_saved_model=self._load_saved_model, save_model=self._save_model,
+            load_saved_provider=self._load_saved_provider, save_provider=self._save_provider,
+            create_ai_process_controller=self._create_ai_process_controller, managed_process_tab=True,
+            on_managed_process_change=self._change_tab_process,
+        )
+        chat.refresh_process_btn.hide()
+        self._add_tab_placeholder = chat
+        index = self.tabs.addTab(chat, "+")
+        self.tabs.tabBar().setTabToolTip(index, "Thêm process game")
+        self.tabs.tabBar().setTabButton(index, QTabBar.ButtonPosition.RightSide, None)
 
     @staticmethod
     def _target_key(target: object) -> int:
@@ -1974,12 +1986,15 @@ class AIChatWorkspace(QWidget):
             self._add_process_tab(combo.currentData())
 
     def _on_tab_changed(self, index: int) -> None:
-        if self.tabs.widget(index) is not self._add_tab_placeholder:
-            self._last_process_index = index
+        if self.tabs.widget(index) is self._add_tab_placeholder:
+            self._refresh_available_targets()
+
+    def _refresh_available_targets(self) -> None:
+        try:
+            self._discover_targets()
+        except Exception:
             return
-        self._open_process_picker()
-        if self.tabs.currentWidget() is self._add_tab_placeholder and self._last_process_index >= 0:
-            self.tabs.setCurrentIndex(self._last_process_index)
+        self._refresh_process_dropdowns()
 
     def _add_process_tab(self, target: object) -> None:
         key = self._target_key(target)
@@ -2029,7 +2044,10 @@ class AIChatWorkspace(QWidget):
 
     def _refresh_process_dropdowns(self) -> None:
         assigned_keys = set(self._assigned)
-        for chat in self._assigned.values():
+        chats = [*self._assigned.values()]
+        if self._add_tab_placeholder is not None:
+            chats.append(self._add_tab_placeholder)
+        for chat in chats:
             current = chat._selected_game_target
             current_key = self._target_key(current)
             chat.process_combo.blockSignals(True)
@@ -2054,10 +2072,27 @@ class AIChatWorkspace(QWidget):
         if not new_key or new_key == old_key or new_key in self._assigned:
             self._refresh_process_dropdowns()
             return
+        is_add_tab = chat is self._add_tab_placeholder
+        if is_add_tab:
+            chat._load_auto_messages = (
+                lambda target=target: self._load_auto_messages_for_target(target)
+            ) if self._load_auto_messages_for_target else None
+            chat._save_auto_messages = (
+                lambda rules, target=target: self._save_auto_messages_for_target(target, rules)
+            ) if self._save_auto_messages_for_target else None
+            chat._auto_rules = chat._load_auto_rules()
+            chat._reset_auto_schedule()
         chat.assign_process_target(target)
         if self._selected_target_is(chat, target):
             self._assigned.pop(old_key, None)
             self._assigned[new_key] = chat
+            if is_add_tab:
+                index = self.tabs.indexOf(chat)
+                title = str(getattr(target, "window_title", "Game") or "Game")
+                self.tabs.setTabText(index, title[:28])
+                self.tabs.setTabToolTip(index, title)
+                self._add_tab_placeholder = None
+                self._create_add_tab()
         elif old_target is not None:
             chat.assign_process_target(old_target)
         self._refresh_process_dropdowns()
