@@ -32,6 +32,7 @@ from PyQt6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
+    QTabBar,
 )
 
 from src.ai_control.scenario_tool_client import ScenarioToolClient
@@ -1922,11 +1923,12 @@ class AIChatWorkspace(QWidget):
         self.tabs = QTabWidget()
         self.tabs.setTabsClosable(True)
         self.tabs.tabCloseRequested.connect(self._close_process_tab)
-        self.add_tab_btn = QPushButton("+")
-        self.add_tab_btn.setFixedWidth(28)
-        self.add_tab_btn.setToolTip("Thêm process game")
-        self.add_tab_btn.clicked.connect(self._open_process_picker)
-        self.tabs.setCornerWidget(self.add_tab_btn, Qt.Corner.TopRightCorner)
+        self._add_tab_placeholder = QWidget()
+        self._add_tab_index = self.tabs.addTab(self._add_tab_placeholder, "+")
+        self.tabs.tabBar().setTabToolTip(self._add_tab_index, "Thêm process game")
+        self.tabs.tabBar().setTabButton(self._add_tab_index, QTabBar.ButtonPosition.RightSide, None)
+        self._last_process_index = -1
+        self.tabs.currentChanged.connect(self._on_tab_changed)
         layout.addWidget(self.tabs)
 
     @staticmethod
@@ -1971,6 +1973,14 @@ class AIChatWorkspace(QWidget):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self._add_process_tab(combo.currentData())
 
+    def _on_tab_changed(self, index: int) -> None:
+        if self.tabs.widget(index) is not self._add_tab_placeholder:
+            self._last_process_index = index
+            return
+        self._open_process_picker()
+        if self.tabs.currentWidget() is self._add_tab_placeholder and self._last_process_index >= 0:
+            self.tabs.setCurrentIndex(self._last_process_index)
+
     def _add_process_tab(self, target: object) -> None:
         key = self._target_key(target)
         if not key:
@@ -1998,13 +2008,15 @@ class AIChatWorkspace(QWidget):
             QMessageBox.warning(self, "Không thể thêm process", str(error))
             return
         title = str(getattr(target, "window_title", "Game") or "Game")
-        index = self.tabs.addTab(chat, title[:28])
+        index = self.tabs.insertTab(self.tabs.indexOf(self._add_tab_placeholder), chat, title[:28])
         self.tabs.setTabToolTip(index, title)
         self.tabs.setCurrentIndex(index)
         self._assigned[key] = chat
         self._refresh_process_dropdowns()
 
     def _close_process_tab(self, index: int) -> None:
+        if self.tabs.widget(index) is self._add_tab_placeholder:
+            return
         chat = self.tabs.widget(index)
         if not isinstance(chat, GeminiChatWidget):
             return
