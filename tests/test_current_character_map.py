@@ -26,8 +26,8 @@ def test_current_map_reader_marks_varka_without_opening_a_dialog(monkeypatch) ->
     assert result["success"] is True
     assert result["map"] == "Varka"
     assert result["position"] == {"x": 199, "y": 156}
-    assert result["coordinates"] == "199,156"
-    assert result["is_varka"] is True
+    assert "coordinates" not in result
+    assert "is_varka" not in result
     assert result["ocr"]["roi"] == {"x1": 55, "y1": 0, "x2": 116, "y2": 20}
     assert result["position_ocr"]["roi"] == {"x1": 115, "y1": 0, "x2": 162, "y2": 20}
 

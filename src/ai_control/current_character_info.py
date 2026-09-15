@@ -74,7 +74,7 @@ def get_current_character_map(target: dict[str, Any]) -> dict[str, Any]:
 
     result: dict[str, Any] = {
         "success": False, "target": dict(target), "map": None,
-        "position": None, "coordinates": None,
+        "position": None,
     }
     stage = "validate_selected_window"
     try:
@@ -95,9 +95,7 @@ def get_current_character_map(target: dict[str, Any]) -> dict[str, Any]:
         position, result["position_ocr"] = _read_taught_hud_text(image, main_info["position"], _normalize_position)
         if position is None:
             raise RuntimeError("Could not read the current character coordinates")
-        result.update(success=True, map=value, position=position,
-                      coordinates=f"{position['x']},{position['y']}",
-                      is_varka=value.casefold() == "varka")
+        result.update(success=True, map=value, position=position)
     except Exception as error:
         result.update(success=False, error=str(error), debug={"stage": stage, "exception_type": type(error).__name__, "traceback": traceback.format_exc(limit=5)})
     return result
