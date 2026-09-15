@@ -29,6 +29,21 @@ def _capture(hwnd: int) -> Any:
     return image
 
 
+def _wake_target(hwnd: int) -> None:
+    """Dismiss the game power-saving overlay before any taught-icon capture."""
+    import win32con
+    import win32gui
+
+    if not win32gui.IsWindow(hwnd) or not win32gui.IsWindowVisible(hwnd):
+        raise RuntimeError("Selected game window is no longer visible")
+    # Client coordinate (1, 1) is intentionally outside all taught game controls.
+    lparam = (1 << 16) | 1
+    win32gui.PostMessage(hwnd, win32con.WM_MOUSEMOVE, 0, lparam)
+    win32gui.PostMessage(hwnd, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, lparam)
+    win32gui.PostMessage(hwnd, win32con.WM_LBUTTONUP, 0, lparam)
+    time.sleep(0.1)
+
+
 def _load_template(path: str) -> Any:
     template = cv2.imread(str(PROJECT_ROOT / path), cv2.IMREAD_GRAYSCALE)
     if template is None or template.size == 0:
@@ -129,6 +144,7 @@ def set_main_character_auto_z(target: dict[str, Any], running: bool) -> dict[str
     target_result = dict(target)
     try:
         hwnd = int(target_result["hwnd"])
+        _wake_target(hwnd)
         expected = "running" if running else "stopped"
         before = _main_state(hwnd, "autoState")
         if before["state"] is None:
@@ -185,6 +201,7 @@ def start_autoplay_management(target: dict[str, Any]) -> dict[str, Any]:
     target_result = dict(target)
     try:
         hwnd = int(target_result["hwnd"])
+        _wake_target(hwnd)
         before = _main_state(hwnd, "autoPlayManagement")
         if before["state"] is None:
             raise RuntimeError("Could not identify the Autoplay Management state from its taught icons")
@@ -220,6 +237,7 @@ def get_companion_training_state(target: dict[str, Any]) -> dict[str, Any]:
     target_result = dict(target)
     try:
         hwnd = int(target_result["hwnd"])
+        _wake_target(hwnd)
         config = _config()["mainInfo"]["companionManagement1"]
         result = _state_from_templates(_capture(hwnd), config["roi"], config["trainingStateTemplates"])
         if result["state"] is None:
