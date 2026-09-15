@@ -107,9 +107,19 @@
       }
     },
     "autoPlayManagement": {
-      "description": "Button AutoPlayManagement",
+      "description": "Button AutoPlayManagement. A crown means stopped; two vertical bars mean running.",
       "recognitionType": "image",
       "clickable": true,
+      "stateTemplates": {
+        "stopped": {
+          "path": "assets/autoplay_management_stopped.png",
+          "threshold": 0.7
+        },
+        "running": {
+          "path": "assets/autoplay_management_running.png",
+          "threshold": 0.7
+        }
+      },
       "roi": {
         "x1": 143,
         "y1": 18,
@@ -175,9 +185,19 @@
       }
     },
     "autoState": {
-      "description": "Button AutoState",
+      "description": "Button AutoState. A right-pointing triangle means stopped; two vertical bars mean running.",
       "recognitionType": "image",
       "clickable": true,
+      "stateTemplates": {
+        "stopped": {
+          "path": "assets/auto_state_stopped.png",
+          "threshold": 0.7
+        },
+        "running": {
+          "path": "assets/auto_state_running.png",
+          "threshold": 0.7
+        }
+      },
       "roi": {
         "x1": 418,
         "y1": 516,
@@ -215,6 +235,16 @@
           "threshold": 0.7
         }
       ],
+      "trainingStateTemplates": {
+        "training": {
+          "path": "assets/companion_summoned_play_indicator.png",
+          "threshold": 0.7
+        },
+        "not_training": {
+          "path": "assets/companion_summoned_pause_indicator.png",
+          "threshold": 0.7
+        }
+      },
       "roi": {
         "x1": 640,
         "y1": 529,
@@ -321,6 +351,29 @@
               "y1": -3,
               "x2": 263,
               "y2": 19
+            }
+          }
+        }
+      }
+    },
+    "dialog.autoplay_management.opened": {
+      "text": "Autoplay Management",
+      "layout": {
+        "Anchor": {
+          "description": "Autoplay Management dialog title",
+          "titleImagePath": "assets/autoplay_management_title.png",
+          "templateThreshold": 0.7
+        },
+        "buttons": {
+          "saveAndStart": {
+            "description": "Save and Start button",
+            "templateImagePath": "assets/autoplay_management_save_and_start.png",
+            "templateThreshold": 0.7,
+            "roiRelativeToTitle": {
+              "x1": -8,
+              "y1": 312,
+              "x2": 142,
+              "y2": 372
             }
           }
         }

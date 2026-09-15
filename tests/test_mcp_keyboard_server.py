@@ -11,7 +11,8 @@ from src.ai_control.server_registry import default_server_specs
 GAME_TOOLS = {
     "get_daily_events_dialog_info", "open_companion_management_dialog",
     "get_current_character_map", "get_companion_summoned_state", "switch_to_companion_character",
-    "summon_companion_character",
+    "summon_companion_character", "set_main_character_auto_z", "start_autoplay_management",
+    "get_companion_training_state",
 }
 
 

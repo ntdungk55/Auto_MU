@@ -14,7 +14,8 @@ from src.ai_control.mcp_client_manager import MCPClientManager
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 GAME_TOOLS = {"get_daily_events_dialog_info", "open_companion_management_dialog", "get_current_character_map",
-              "get_companion_summoned_state", "switch_to_companion_character", "summon_companion_character"}
+              "get_companion_summoned_state", "switch_to_companion_character", "summon_companion_character",
+              "set_main_character_auto_z", "start_autoplay_management", "get_companion_training_state"}
 
 
 def _tool_call_response(calls):

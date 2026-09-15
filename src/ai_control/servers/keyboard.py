@@ -22,6 +22,11 @@ from src.ai_control.companion_info import get_companion_information
 from src.ai_control.companion_summoner import summon_companion_character as run_companion_summon
 from src.ai_control.current_character_info import get_current_character_map as read_current_character_map
 from src.ai_control.daily_events_info import get_daily_events_dialog_info as read_daily_events
+from src.ai_control.auto_play_control import (
+    get_companion_training_state as read_companion_training_state,
+    set_main_character_auto_z as set_auto_z_state,
+    start_autoplay_management as run_start_autoplay_management,
+)
 from src.ai_control.servers.process import resolve_selected_process
 from src.logic.action_type import ActionMode, ActionType, AutoAction
 
@@ -456,6 +461,38 @@ def get_current_character_map() -> dict[str, Any]:
     taught mainInfo.map region; it does not open a dialog or change character.
     """
     return _run_companion_tool(read_current_character_map)
+
+
+@mcp.tool()
+def set_main_character_auto_z(running: bool) -> dict[str, Any]:
+    """Ensure the selected main character's Auto Z is running or stopped.
+
+    `running=true` starts Auto Z and `running=false` stops it. The tool matches
+    the taught triangle/pause icons before and after clicking, and fails when
+    the icon does not reach the requested state.
+    """
+    return _run_companion_tool(set_auto_z_state, running=bool(running))
+
+
+@mcp.tool()
+def start_autoplay_management() -> dict[str, Any]:
+    """Start Autoplay Management for the selected main character.
+
+    If it is already running, the tool first stops it. It then verifies the
+    Autoplay Management title and Save and Start button before clicking that
+    button, and verifies the running icon afterwards.
+    """
+    return _run_companion_tool(run_start_autoplay_management)
+
+
+@mcp.tool()
+def get_companion_training_state() -> dict[str, Any]:
+    """Read whether the selected character's slot-1 companion is training.
+
+    A right-pointing triangle means `training`; two vertical bars mean
+    `not_training`. This tool only captures and matches the taught icon.
+    """
+    return _run_companion_tool(read_companion_training_state)
 
 
 @mcp.tool()

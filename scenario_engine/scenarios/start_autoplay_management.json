@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "start_autoplay_management",
+  "name": "Bắt đầu Autoplay Management",
+  "description": "Dừng autoplay nếu đang chạy, mở dialog Autoplay Management, match Save and Start, click và xác minh icon chạy.",
+  "selection_rule": "Chọn khi người dùng yêu cầu bật autoplay hoặc tự động di chuyển đến bãi.",
+  "status": "ready",
+  "preconditions": ["Gemini Chat đã chọn đúng window MU."],
+  "inputs": {},
+  "limits": {"timeout_seconds": 20, "max_steps": 1, "max_tool_calls": 1},
+  "steps": [{"id": "start_autoplay", "type": "mcp", "tool": "start_autoplay_management", "arguments": {}, "save_result_as": "autoplay", "assert": ["${autoplay.success} == true"], "on_success": "complete", "on_failure": "failed"}],
+  "result": {"success_message": "Đã bật Autoplay Management.", "failure_message": "Không bật được Autoplay Management; xem lỗi xác minh trong ${autoplay.error}."}
+}

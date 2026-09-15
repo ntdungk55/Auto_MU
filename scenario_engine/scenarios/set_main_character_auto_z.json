@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "set_main_character_auto_z",
+  "name": "Bật hoặc tắt Auto Z nhân vật chính",
+  "description": "Đặt Auto Z của nhân vật chính về trạng thái chạy hoặc dừng, rồi xác minh icon trạng thái đã đổi.",
+  "selection_rule": "Chọn khi người dùng yêu cầu bật/chạy hoặc tắt/dừng Auto Z của nhân vật chính.",
+  "status": "ready",
+  "preconditions": ["Gemini Chat đã chọn đúng window MU."],
+  "inputs": {"running": {"type": "boolean", "required": true}},
+  "limits": {"timeout_seconds": 15, "max_steps": 1, "max_tool_calls": 1},
+  "steps": [{"id": "set_auto_z", "type": "mcp", "tool": "set_main_character_auto_z", "arguments": {"running": "${inputs.running}"}, "save_result_as": "auto_z", "assert": ["${auto_z.success} == true"], "on_success": "complete", "on_failure": "failed"}],
+  "result": {"success_message": "Đã đặt Auto Z về trạng thái ${auto_z.state}.", "failure_message": "Không đổi được trạng thái Auto Z; xem lỗi xác minh icon trong ${auto_z.error}."}
+}
