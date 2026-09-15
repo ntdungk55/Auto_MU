@@ -1557,13 +1557,40 @@ class MainWindow(QMainWindow):
 
     def _load_ai_auto_messages_for_target(self, target: object) -> list[dict]:
         state = self._load_app_state()
-        rules = state.get("ai_auto_messages_by_process", {}).get(self._ai_process_key(target), [])
-        return rules if isinstance(rules, list) else []
+        definitions = state.get("ai_auto_messages", [])
+        schedules = state.get("ai_auto_schedules_by_process", {}).get(self._ai_process_key(target), {})
+        legacy_rules = state.get("ai_auto_messages_by_process", {}).get(self._ai_process_key(target), [])
+        if not isinstance(definitions, list):
+            definitions = []
+        if not isinstance(schedules, dict):
+            schedules = {}
+        if not definitions and isinstance(legacy_rules, list):
+            definitions = legacy_rules
+            schedules = {str(rule.get("id")): dict(rule) for rule in legacy_rules if isinstance(rule, dict) and rule.get("id")}
+        rules = []
+        for definition in definitions:
+            if not isinstance(definition, dict) or not definition.get("id") or not definition.get("text"):
+                continue
+            rule_id = str(definition["id"])
+            rules.append({"id": rule_id, "text": str(definition["text"]), **dict(schedules.get(rule_id, {}))})
+        return rules
 
     def _save_ai_auto_messages_for_target(self, target: object, messages: list[dict]) -> None:
         state = self._load_app_state()
-        by_process = state.setdefault("ai_auto_messages_by_process", {})
-        by_process[self._ai_process_key(target)] = messages
+        state["ai_auto_messages"] = [
+            {"id": str(rule.get("id") or ""), "text": str(rule.get("text") or "")}
+            for rule in messages if rule.get("id") and rule.get("text")
+        ]
+        by_process = state.setdefault("ai_auto_schedules_by_process", {})
+        by_process[self._ai_process_key(target)] = {
+            str(rule["id"]): {
+                "enabled": bool(rule.get("enabled", False)),
+                "kind": str(rule.get("kind", "interval")),
+                "interval_seconds": int(rule.get("interval_seconds", 300)),
+                "time": str(rule.get("time", "00:00")),
+            }
+            for rule in messages if rule.get("id")
+        }
         self._save_app_state(state)
 
     def _get_saved_ai_key(self, provider: str) -> str:

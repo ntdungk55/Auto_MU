@@ -6,6 +6,7 @@ import sys
 import importlib
 import json
 import uuid
+import re
 from urllib.request import urlopen
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -1929,6 +1930,7 @@ class AIChatWorkspace(QWidget):
         self.tabs = QTabWidget()
         self.tabs.setTabsClosable(True)
         self.tabs.tabCloseRequested.connect(self._close_process_tab)
+        self.tabs.tabBar().installEventFilter(self)
         self._add_tab_placeholder: GeminiChatWidget | None = None
         self._create_add_tab()
         self.tabs.currentChanged.connect(self._on_tab_changed)
@@ -1946,13 +1948,31 @@ class AIChatWorkspace(QWidget):
         chat.refresh_process_btn.hide()
         chat.process_label.hide()
         self._add_tab_placeholder = chat
-        index = self.tabs.addTab(chat, "+")
+        index = self.tabs.addTab(chat, "Process mới +")
         self.tabs.tabBar().setTabToolTip(index, "Thêm process game")
         self.tabs.tabBar().setTabButton(index, QTabBar.ButtonPosition.RightSide, None)
 
     @staticmethod
     def _target_key(target: object) -> int:
         return int(getattr(target, "hwnd", 0) or 0)
+
+    @staticmethod
+    def _character_name(target: object) -> str:
+        title = str(getattr(target, "window_title", "") or "")
+        match = re.search(r"\([^)]*-\s*([^)]+)\)", title)
+        return match.group(1).strip() if match else (title or "Game")
+
+    def _load_rules_for_target(self, target: object) -> list[dict]:
+        return self._load_auto_messages_for_target(target) if self._load_auto_messages_for_target else []
+
+    def _save_rules_for_target(self, target: object, rules: list[dict]) -> None:
+        if self._save_auto_messages_for_target:
+            self._save_auto_messages_for_target(target, rules)
+        for chat in self._assigned.values():
+            if chat._selected_game_target is target:
+                continue
+            chat._auto_rules = [dict(rule) for rule in self._load_rules_for_target(chat._selected_game_target)]
+            chat._reset_auto_schedule()
 
     def _discover_targets(self) -> list[object]:
         if self._create_ai_process_controller is None:
@@ -2011,8 +2031,8 @@ class AIChatWorkspace(QWidget):
         if existing is not None:
             self.tabs.setCurrentWidget(existing)
             return
-        load_auto = (lambda target=target: self._load_auto_messages_for_target(target)) if self._load_auto_messages_for_target else None
-        save_auto = (lambda rules, target=target: self._save_auto_messages_for_target(target, rules)) if self._save_auto_messages_for_target else None
+        load_auto = lambda target=target: self._load_rules_for_target(target)
+        save_auto = lambda rules, target=target: self._save_rules_for_target(target, rules)
         chat = GeminiChatWidget(
             load_saved_key=self._load_saved_key, save_key=self._save_key, clear_saved_key=self._clear_saved_key,
             load_saved_model=self._load_saved_model, save_model=self._save_model,
@@ -2030,7 +2050,7 @@ class AIChatWorkspace(QWidget):
             chat.deleteLater()
             QMessageBox.warning(self, "Không thể thêm process", str(error))
             return
-        title = str(getattr(target, "window_title", "Game") or "Game")
+        title = self._character_name(target)
         index = self.tabs.insertTab(self.tabs.indexOf(self._add_tab_placeholder), chat, title[:28])
         self.tabs.setTabToolTip(index, title)
         self.tabs.setCurrentIndex(index)
@@ -2049,6 +2069,15 @@ class AIChatWorkspace(QWidget):
         self._assigned.pop(key, None)
         chat.deleteLater()
         self._refresh_process_dropdowns()
+
+    def eventFilter(self, watched, event):
+        if watched is self.tabs.tabBar() and event.type() == QEvent.Type.MouseButtonRelease:
+            if event.button() == Qt.MouseButton.MiddleButton:
+                index = self.tabs.tabBar().tabAt(event.pos())
+                if index >= 0:
+                    self._close_process_tab(index)
+                    return True
+        return super().eventFilter(watched, event)
 
     def _refresh_process_dropdowns(self) -> None:
         assigned_keys = set(self._assigned)
@@ -2084,12 +2113,8 @@ class AIChatWorkspace(QWidget):
             return
         is_add_tab = chat is self._add_tab_placeholder
         if is_add_tab:
-            chat._load_auto_messages = (
-                lambda target=target: self._load_auto_messages_for_target(target)
-            ) if self._load_auto_messages_for_target else None
-            chat._save_auto_messages = (
-                lambda rules, target=target: self._save_auto_messages_for_target(target, rules)
-            ) if self._save_auto_messages_for_target else None
+            chat._load_auto_messages = lambda target=target: self._load_rules_for_target(target)
+            chat._save_auto_messages = lambda rules, target=target: self._save_rules_for_target(target, rules)
             chat._auto_rules = chat._load_auto_rules()
             chat._reset_auto_schedule()
         chat.assign_process_target(target)
@@ -2098,7 +2123,7 @@ class AIChatWorkspace(QWidget):
             self._assigned[new_key] = chat
             if is_add_tab:
                 index = self.tabs.indexOf(chat)
-                title = str(getattr(target, "window_title", "Game") or "Game")
+                title = self._character_name(target)
                 self.tabs.setTabText(index, title[:28])
                 self.tabs.setTabToolTip(index, title)
                 self._add_tab_placeholder = None

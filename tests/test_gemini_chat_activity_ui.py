@@ -2,13 +2,14 @@
 
 import os
 import threading
+from types import SimpleNamespace
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QSizePolicy, QVBoxLayout, QWidget
 
-from src.ui.gemini_chat_widget import AutoMessageDialog, _BouncingDots, _ChatBubble, GeminiChatWidget, GeminiSettingsDialog
+from src.ui.gemini_chat_widget import AIChatWorkspace, AutoMessageDialog, _BouncingDots, _ChatBubble, GeminiChatWidget, GeminiSettingsDialog
 from src.ai_control.ai_models.contracts import AIUsage
 from src.ai_control.ai_tool_bridge import AIMCPResult
 
@@ -110,6 +111,12 @@ def test_pending_message_bubble_is_created_and_shows_an_empty_queue() -> None:
     assert widget._queue_bubble is not None
     assert not widget._queue_bubble.isHidden()
     assert "(0)" in widget._queue_bubble.text()
+
+
+def test_process_tab_title_uses_the_character_name_from_window_title() -> None:
+    target = SimpleNamespace(window_title="MU GameThuVN - Season 21 (Golden - NTD3001)")
+
+    assert AIChatWorkspace._character_name(target) == "NTD3001"
 
 
 def test_pending_message_bubble_overlays_the_bottom_of_the_chat_viewport() -> None:
