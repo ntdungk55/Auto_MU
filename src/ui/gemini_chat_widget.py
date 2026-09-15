@@ -1932,7 +1932,11 @@ class AIChatWorkspace(QWidget):
         self.tabs.tabCloseRequested.connect(self._close_process_tab)
         self.tabs.tabBar().installEventFilter(self)
         self._add_tab_placeholder: GeminiChatWidget | None = None
+        self._new_tab_control = QWidget()
         self._create_add_tab()
+        new_index = self.tabs.addTab(self._new_tab_control, "Process mới +")
+        self.tabs.tabBar().setTabToolTip(new_index, "Tạo tab chọn process")
+        self.tabs.tabBar().setTabButton(new_index, QTabBar.ButtonPosition.RightSide, None)
         self.tabs.currentChanged.connect(self._on_tab_changed)
         layout.addWidget(self.tabs)
         QTimer.singleShot(0, self._refresh_available_targets)
@@ -1948,9 +1952,9 @@ class AIChatWorkspace(QWidget):
         chat.refresh_process_btn.hide()
         chat.process_label.hide()
         self._add_tab_placeholder = chat
-        index = self.tabs.addTab(chat, "Process mới +")
-        self.tabs.tabBar().setTabToolTip(index, "Thêm process game")
-        self.tabs.tabBar().setTabButton(index, QTabBar.ButtonPosition.RightSide, None)
+        insert_at = self.tabs.indexOf(self._new_tab_control)
+        index = self.tabs.insertTab(insert_at if insert_at >= 0 else self.tabs.count(), chat, "Chọn process")
+        self.tabs.tabBar().setTabToolTip(index, "Chọn process game")
 
     @staticmethod
     def _target_key(target: object) -> int:
@@ -2013,6 +2017,11 @@ class AIChatWorkspace(QWidget):
             self._add_process_tab(combo.currentData())
 
     def _on_tab_changed(self, index: int) -> None:
+        if self.tabs.widget(index) is self._new_tab_control:
+            self._create_add_tab()
+            self.tabs.setCurrentWidget(self._add_tab_placeholder)
+            self._refresh_available_targets()
+            return
         if self.tabs.widget(index) is self._add_tab_placeholder:
             self._refresh_available_targets()
 
@@ -2058,7 +2067,7 @@ class AIChatWorkspace(QWidget):
         self._refresh_process_dropdowns()
 
     def _close_process_tab(self, index: int) -> None:
-        if self.tabs.widget(index) is self._add_tab_placeholder:
+        if self.tabs.widget(index) is self._add_tab_placeholder or self.tabs.widget(index) is self._new_tab_control:
             return
         chat = self.tabs.widget(index)
         if not isinstance(chat, GeminiChatWidget):
@@ -2127,7 +2136,6 @@ class AIChatWorkspace(QWidget):
                 self.tabs.setTabText(index, title[:28])
                 self.tabs.setTabToolTip(index, title)
                 self._add_tab_placeholder = None
-                self._create_add_tab()
         elif old_target is not None:
             chat.assign_process_target(old_target)
         self._refresh_process_dropdowns()
