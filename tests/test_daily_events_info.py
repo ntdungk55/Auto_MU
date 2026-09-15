@@ -104,14 +104,15 @@ def test_low_confidence_does_not_invent_counts(game: dict) -> None:
     assert all(value is None for value in result["remaining"].values())
 
 
-def test_boss_counter_accepts_easyocr_trailing_vertical_bar(game: dict) -> None:
-    game["texts"][0] = "Remaining: 34 times|"
+@pytest.mark.parametrize("ocr_text", ["Remaining: 34 times|", "Remaining: 35 tmes"])
+def test_boss_counter_accepts_known_easyocr_suffix_noise(game: dict, ocr_text: str) -> None:
+    game["texts"][0] = ocr_text
     game["confidence"] = 0.64
 
     result = keyboard.get_daily_events_dialog_info()
 
     assert result["success"] is True
-    assert result["remaining"]["boss"] == 34
+    assert result["remaining"]["boss"] == int(ocr_text.split()[1])
 
 
 def test_wrong_dialog_never_reads_counters(game: dict) -> None:
