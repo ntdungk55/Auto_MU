@@ -147,7 +147,8 @@ class _PromptActionContainer(QWidget):
 
 
 class _ChatBubble(QWidget):
-    def __init__(self, text: str, side: str = "left", image_path: str | None = None, meta: str | None = None, parent=None):
+    def __init__(self, text: str, side: str = "left", image_path: str | None = None,
+                 meta: str | None = None, timestamp: str | None = None, parent=None):
         super().__init__(parent)
         outer = QHBoxLayout()
         outer.setContentsMargins(6, 1, 6, 1)
@@ -186,6 +187,13 @@ class _ChatBubble(QWidget):
             meta_lbl.setStyleSheet("color:#9aa0a6;font-size:11px;")
             self._copy_targets.append(meta_lbl)
             bubble_l.addWidget(meta_lbl)
+
+        self.timestamp_label: QLabel | None = None
+        if timestamp:
+            self.timestamp_label = QLabel(timestamp)
+            self.timestamp_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            self.timestamp_label.setStyleSheet("color:#aeb8c5;font-size:10px;")
+            bubble_l.addWidget(self.timestamp_label)
 
         bubble.setLayout(bubble_l)
 
@@ -1099,8 +1107,6 @@ class GeminiChatWidget(QWidget):
             "execute only its declared steps; otherwise state that no scenario matches and call no tool.\n\n"
             f"GameEvent:\n{json.dumps(event_payload, ensure_ascii=False, default=str)}"
         )
-        model_name = self._current_model_name
-
         def _worker() -> None:
             try:
                 with self._chat_turn_lock:
@@ -1119,7 +1125,7 @@ class GeminiChatWidget(QWidget):
                     {
                         "side": "left",
                         "text": result.text,
-                        "meta": f"Event {event_payload['event_type']} | {model_name} | {result.tool_call_count} tool(s)",
+                        "meta": f"Event {event_payload['event_type']} | {result.tool_call_count} tool(s)",
                     }
                 )
             except Exception as error:
@@ -1137,12 +1143,10 @@ class GeminiChatWidget(QWidget):
         """Queue future controller AI responses into the chat UI."""
         error = str(getattr(response, "error", "") or "")
         text = str(getattr(response, "text", "") or "")
-        model_name = str(getattr(response, "model_name", "") or "")
         self._signals.append_message.emit(
             {
                 "text": text or error or "AI không trả về nội dung.",
                 "side": "left",
-                "meta": model_name or "AI Process Controller",
             }
         )
 
@@ -1349,7 +1353,10 @@ class GeminiChatWidget(QWidget):
             idx = self.chat_layout.indexOf(anchor)
             if idx < 0:
                 idx = max(0, self.chat_layout.count() - 1)
-            self.chat_layout.insertWidget(idx, _ChatBubble(text=text, side=side, image_path=image_path, meta=meta))
+            timestamp = datetime.now().strftime("%H:%M:%S") if side in {"left", "right", "automatic"} else None
+            self.chat_layout.insertWidget(
+                idx, _ChatBubble(text=text, side=side, image_path=image_path, meta=meta, timestamp=timestamp),
+            )
             self._pending_scroll_to_bottom = True
             QTimer.singleShot(0, self._scroll_to_bottom)
             QTimer.singleShot(30, self._scroll_to_bottom)
@@ -1875,7 +1882,7 @@ class GeminiChatWidget(QWidget):
         total_tokens = getattr(usage, "total_tokens", None)
         token_text = f"{int(total_tokens):,} token" if total_tokens is not None else "token: không có dữ liệu"
         tool_call_count = int(getattr(tool_result, "tool_call_count", 0))
-        return f"{dt_ms / 1000.0:.2f}s | {token_text} | {model_name} | {tool_call_count} tool(s)"
+        return f"{dt_ms / 1000.0:.2f}s | {token_text} | {tool_call_count} tool(s)"
 
     @staticmethod
     def _format_tool_error(name: str, result: object) -> str:

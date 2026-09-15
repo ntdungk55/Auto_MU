@@ -52,6 +52,20 @@ def test_turn_meta_shows_provider_reported_token_total_after_duration() -> None:
     )
 
     assert meta.startswith("1.23s | 123 token |")
+    assert "google/gemini-2.5-flash" not in meta
+
+
+def test_chat_timestamps_are_shown_only_for_user_ai_and_automatic_messages() -> None:
+    _application()
+    user_message = _ChatBubble("User", side="right", timestamp="12:34:56")
+    ai_message = _ChatBubble("AI", side="left", timestamp="12:34:56")
+    automatic_message = _ChatBubble("Automatic", side="automatic", timestamp="12:34:56")
+    tool_message = _ChatBubble("Tool", side="tool")
+
+    for message in (user_message, ai_message, automatic_message):
+        assert message.timestamp_label is not None
+        assert message.timestamp_label.text() == "12:34:56"
+    assert tool_message.timestamp_label is None
 
 
 def test_automatic_message_row_is_editable_directly_and_starts_stopped() -> None:
