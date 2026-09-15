@@ -305,6 +305,25 @@ def test_info_ocr_fallback_and_numeric_level_correction(game: dict, monkeypatch:
     assert game["ocr_calls"] == 1
 
 
+def test_info_retries_shifted_level_row_and_rejects_coordinates(
+    game: dict, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A displaced Level ROI must never accept the map coordinates below it."""
+    game["frames"] = [cv2.imread(str(ROOT / "assets/companion_management_ntd3006.png"))]
+    values = iter([
+        "NTD3001", "19", "Kanturu (199,156)", "(199,156)",
+        "401.mt (0.000%)", "137.rs", "Waiting for control",
+    ])
+    monkeypatch.setattr(WinRTOCREngine, "recognize", lambda self, image: next(values))
+    result = keyboard.get_companion_summoned_state()
+
+    assert result["success"] is True
+    assert result["character"]["level"] == "401.mt"
+    assert result["fields"]["level"]["attempts"]["winrt"] == "(199,156)"
+    assert result["fields"]["level"]["attempts"]["winrt_offset_+13"] == "401.mt (0.000%)"
+    assert result["fields"]["level"]["roi"]["y1"] == 208
+
+
 def test_info_uses_taught_scale_and_digit_allowlist_for_small_fields(
     game: dict, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

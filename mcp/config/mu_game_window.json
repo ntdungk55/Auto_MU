@@ -243,11 +243,11 @@
       ],
       "trainingStateTemplates": {
         "training": {
-          "path": "assets/companion_summoned_play_indicator.png",
+          "path": "assets/companion_training_state_icon.png",
           "threshold": 0.7
         },
         "not_training": {
-          "path": "assets/companion_summoned_pause_indicator.png",
+          "path": "assets/companion_not_training_state_icon.png",
           "threshold": 0.7
         }
       },
@@ -404,7 +404,7 @@
           "clickable": false,
           "text": "Manage Sub-Characters",
           "titleImagePath": "assets/companion_management_title.png",
-          "templateThreshold": 0.75,
+          "templateThreshold": 0.8,
           "detectedRoi": {
             "x1": 501,
             "y1": 105,
@@ -465,6 +465,7 @@
               }
             },
             "scale": 4,
+            "fallbackVerticalOffsets": [13, -13],
             "roiRelativeToTitle": {
               "x1": 151,
               "y1": 90,

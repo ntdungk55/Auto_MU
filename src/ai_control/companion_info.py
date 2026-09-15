@@ -126,6 +126,31 @@ def _read_fields(image: Any, title: dict[str, Any], layout: dict[str, Any]) -> d
                 raw, value = easyocr_raw, easyocr_value
             method = "easyocr"
             confidence = min((float(item[2]) for item in accepted), default=None)
+        if value is None and field == "level":
+            # A title match can be a few pixels high or low on different HUD scales.
+            # Try only taught neighbouring rows and accept them only when the `.lv`/`.mt`
+            # normalization succeeds; coordinates alone can never become a Level.
+            for offset in region.get("fallbackVerticalOffsets", []):
+                try:
+                    shifted_y1, shifted_y2 = y1 + int(offset), y2 + int(offset)
+                    if not (0 <= shifted_y1 < shifted_y2 <= image.shape[0]):
+                        continue
+                    alternate = cv2.copyMakeBorder(
+                        image[shifted_y1:shifted_y2, x1:x2], padding, padding, padding, padding,
+                        cv2.BORDER_CONSTANT, value=(0, 0, 0),
+                    )
+                    alternate = cv2.resize(alternate, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+                    alternate_raw = " ".join(engine.recognize(alternate).split())
+                    attempts[f"winrt_offset_{offset:+d}"] = alternate_raw
+                    alternate_value = _normalize_field_value(field, alternate_raw, region)
+                    if alternate_value is not None:
+                        raw, value, roi = alternate_raw, alternate_value, {
+                            **roi, "y1": shifted_y1, "y2": shifted_y2,
+                        }
+                        method = "winrt"
+                        break
+                except Exception:
+                    continue
         fields[field] = {"value": value, "raw_text": raw, "method": method,
                          "confidence": confidence, "roi": roi, "attempts": attempts}
     return fields
