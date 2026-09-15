@@ -88,6 +88,7 @@ def test_busy_indicator_stays_below_left_aligned_tool_bubbles() -> None:
 
 def test_ai_activity_button_cancels_the_active_turn() -> None:
     widget = GeminiChatWidget()
+    widget._set_chat_available(True)
     cancel_event = threading.Event()
     widget._message_queue.enqueue_manual("Tin dang cho")
     widget._active_turn_cancel = cancel_event

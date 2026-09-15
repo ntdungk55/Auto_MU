@@ -723,7 +723,8 @@ class GeminiChatWidget(QWidget):
         self._auto_timer.setInterval(1000)
         self._auto_timer.timeout.connect(self._enqueue_due_auto_messages)
         self._auto_timer.start()
-        self._append_system_text("Chọn process game để bắt đầu AI Chat.")
+        if not self._managed_process_tab:
+            self._append_system_text("Chọn process game để bắt đầu AI Chat.")
         self._set_chat_available(False)
         if not self._managed_process_tab:
             QTimer.singleShot(0, self._refresh_processes)
@@ -742,7 +743,8 @@ class GeminiChatWidget(QWidget):
         self.process_row = QWidget()
         process_row = QHBoxLayout(self.process_row)
         process_row.setContentsMargins(0, 0, 0, 0)
-        process_row.addWidget(QLabel("Process game:"), 0)
+        self.process_label = QLabel("Process game:")
+        process_row.addWidget(self.process_label, 0)
         self.process_combo = QComboBox()
         self.process_combo.setPlaceholderText("Chọn process/window game")
         self.process_combo.currentIndexChanged.connect(self._on_process_combo_changed)
@@ -836,7 +838,8 @@ class GeminiChatWidget(QWidget):
         layout.addWidget(self.input_row)
 
         self.setLayout(layout)
-        self._append_system_text("Sẵn sàng. Kéo‑thả ảnh vào ô nhập để đính kèm, rồi bấm Gửi.")
+        if not self._managed_process_tab:
+            self._append_system_text("Sẵn sàng. Kéo‑thả ảnh vào ô nhập để đính kèm, rồi bấm Gửi.")
         self._refresh_attachment_ui()
         self._refresh_install_button()
         self._refresh_ai_activity_button()
@@ -1104,9 +1107,12 @@ class GeminiChatWidget(QWidget):
 
     def _set_chat_available(self, available: bool):
         self._chat_ready = available
-        self.scroll.setVisible(available)
-        self.input_row.setVisible(available)
-        self.attach_row.setVisible(available and bool(self._attach_path))
+        self.scroll.setVisible(True)
+        self.scroll.setEnabled(available)
+        self.input_row.setVisible(True)
+        self.input_row.setEnabled(available)
+        self.attach_row.setVisible(bool(self._attach_path))
+        self.attach_row.setEnabled(available)
         if not available:
             self.status_lbl.setText("Chọn process và kết nối AI")
         elif hasattr(self, "_message_queue"):
@@ -1938,6 +1944,7 @@ class AIChatWorkspace(QWidget):
             on_managed_process_change=self._change_tab_process,
         )
         chat.refresh_process_btn.hide()
+        chat.process_label.hide()
         self._add_tab_placeholder = chat
         index = self.tabs.addTab(chat, "+")
         self.tabs.tabBar().setTabToolTip(index, "Thêm process game")
@@ -2015,6 +2022,7 @@ class AIChatWorkspace(QWidget):
             on_managed_process_change=self._change_tab_process,
         )
         chat.refresh_process_btn.hide()
+        chat.process_label.hide()
         try:
             chat.assign_process_target(target)
         except Exception as error:
@@ -2054,6 +2062,8 @@ class AIChatWorkspace(QWidget):
             chat.process_combo.clear()
             if current is not None:
                 self._add_target_to_combo(chat.process_combo, current)
+            else:
+                chat.process_combo.addItem("", None)
             for key, target in self._known_targets.items():
                 if key != current_key and key not in assigned_keys:
                     self._add_target_to_combo(chat.process_combo, target)
