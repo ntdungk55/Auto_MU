@@ -675,6 +675,7 @@ class GeminiChatWidget(QWidget):
         save_auto_messages: Callable[[list[dict]], None] | None = None,
         create_ai_process_controller: Callable[[str, str, str], object] | None = None,
         managed_process_tab: bool = False,
+        on_managed_process_change: Callable[[object, object], None] | None = None,
     ):
         super().__init__(parent)
         self._signals = _Signals()
@@ -698,6 +699,7 @@ class GeminiChatWidget(QWidget):
         self._save_auto_messages = save_auto_messages
         self._create_ai_process_controller = create_ai_process_controller
         self._managed_process_tab = managed_process_tab
+        self._on_managed_process_change = on_managed_process_change
         self._ai_process_controller = None
         self._selected_game_target = None
         self._scenario_tool_client: ScenarioToolClient | None = None
@@ -742,7 +744,7 @@ class GeminiChatWidget(QWidget):
         process_row.addWidget(QLabel("Process game:"), 0)
         self.process_combo = QComboBox()
         self.process_combo.setPlaceholderText("Chọn process/window game")
-        self.process_combo.currentIndexChanged.connect(self._on_process_selected)
+        self.process_combo.currentIndexChanged.connect(self._on_process_combo_changed)
         process_row.addWidget(self.process_combo, 1)
         self.refresh_process_btn = QPushButton("Làm mới")
         self.refresh_process_btn.clicked.connect(self._refresh_processes)
@@ -927,7 +929,16 @@ class GeminiChatWidget(QWidget):
             return
 
         self._set_chat_available(True)
+        self._selected_game_target = target
         self._append_system_text(f"Đã chọn process: {target.window_title}")
+
+    def _on_process_combo_changed(self, index: int) -> None:
+        target = self.process_combo.itemData(index)
+        if self._managed_process_tab:
+            if target is not None and self._on_managed_process_change is not None:
+                self._on_managed_process_change(self, target)
+            return
+        self._on_process_selected(index)
 
     def assign_process_target(self, target: object) -> None:
         """Bind this chat instance to one target supplied by the workspace."""
@@ -1904,6 +1915,7 @@ class AIChatWorkspace(QWidget):
         self._save_auto_messages_for_target = save_auto_messages_for_target
         self._create_ai_process_controller = create_ai_process_controller
         self._assigned: dict[int, GeminiChatWidget] = {}
+        self._known_targets: dict[int, object] = {}
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -1928,7 +1940,9 @@ class AIChatWorkspace(QWidget):
         key = str(self._load_saved_key() if self._load_saved_key else "")
         model = str(self._load_saved_model() if self._load_saved_model else "")
         controller = self._create_ai_process_controller(provider, key, model)
-        return list(controller.list_targets("MU GameThuVN"))
+        targets = list(controller.list_targets("MU GameThuVN"))
+        self._known_targets = {self._target_key(target): target for target in targets if self._target_key(target)}
+        return targets
 
     def _open_process_picker(self) -> None:
         try:
@@ -1973,8 +1987,9 @@ class AIChatWorkspace(QWidget):
             load_saved_provider=self._load_saved_provider, save_provider=self._save_provider,
             load_auto_messages=load_auto, save_auto_messages=save_auto,
             create_ai_process_controller=self._create_ai_process_controller, managed_process_tab=True,
+            on_managed_process_change=self._change_tab_process,
         )
-        chat.process_row.hide()
+        chat.refresh_process_btn.hide()
         try:
             chat.assign_process_target(target)
         except Exception as error:
@@ -1987,6 +2002,7 @@ class AIChatWorkspace(QWidget):
         self.tabs.setTabToolTip(index, title)
         self.tabs.setCurrentIndex(index)
         self._assigned[key] = chat
+        self._refresh_process_dropdowns()
 
     def _close_process_tab(self, index: int) -> None:
         chat = self.tabs.widget(index)
@@ -1997,6 +2013,46 @@ class AIChatWorkspace(QWidget):
         self.tabs.removeTab(index)
         self._assigned.pop(key, None)
         chat.deleteLater()
+        self._refresh_process_dropdowns()
+
+    def _refresh_process_dropdowns(self) -> None:
+        assigned_keys = set(self._assigned)
+        for chat in self._assigned.values():
+            current = chat._selected_game_target
+            current_key = self._target_key(current)
+            chat.process_combo.blockSignals(True)
+            chat.process_combo.clear()
+            if current is not None:
+                self._add_target_to_combo(chat.process_combo, current)
+            for key, target in self._known_targets.items():
+                if key != current_key and key not in assigned_keys:
+                    self._add_target_to_combo(chat.process_combo, target)
+            chat.process_combo.setCurrentIndex(0 if chat.process_combo.count() else -1)
+            chat.process_combo.blockSignals(False)
+
+    @staticmethod
+    def _add_target_to_combo(combo: QComboBox, target: object) -> None:
+        title = str(getattr(target, "window_title", "Game window") or "Game window")
+        process_name = str(getattr(target, "process_name", "unknown") or "unknown")
+        combo.addItem(f"{title} [{process_name}]", target)
+
+    def _change_tab_process(self, chat: GeminiChatWidget, target: object) -> None:
+        old_target = chat._selected_game_target
+        old_key, new_key = self._target_key(old_target), self._target_key(target)
+        if not new_key or new_key == old_key or new_key in self._assigned:
+            self._refresh_process_dropdowns()
+            return
+        chat.assign_process_target(target)
+        if self._selected_target_is(chat, target):
+            self._assigned.pop(old_key, None)
+            self._assigned[new_key] = chat
+        elif old_target is not None:
+            chat.assign_process_target(old_target)
+        self._refresh_process_dropdowns()
+
+    @classmethod
+    def _selected_target_is(cls, chat: GeminiChatWidget, target: object) -> bool:
+        return cls._target_key(chat._selected_game_target) == cls._target_key(target)
 
     def _open_settings(self) -> None:
         active = self.tabs.currentWidget()
