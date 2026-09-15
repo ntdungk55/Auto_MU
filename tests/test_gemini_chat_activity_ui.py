@@ -7,6 +7,7 @@ from types import SimpleNamespace
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtCore import Qt
+from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication, QSizePolicy, QVBoxLayout, QWidget
 
 from src.ui.gemini_chat_widget import AIChatWorkspace, AutoMessageDialog, _BouncingDots, _ChatBubble, GeminiChatWidget, GeminiSettingsDialog
@@ -261,3 +262,19 @@ def test_user_and_ai_bubbles_use_content_width_up_to_half_of_chat_width() -> Non
     assert short_user.bubble.width() / short_user.width() < 0.2
     short_user_left = short_user.bubble.mapTo(short_user, short_user.bubble.rect().topLeft()).x()
     assert short_user.width() - short_user_left - short_user.bubble.width() <= 7
+
+
+def test_double_clicking_any_chat_bubble_text_copies_the_message() -> None:
+    _application()
+    container = QWidget()
+    layout = QVBoxLayout(container)
+    message = _ChatBubble("Nội dung cần sao chép", side="automatic")
+    layout.addWidget(message)
+    container.show()
+    APP.processEvents()
+
+    QTest.mouseDClick(message.label, Qt.MouseButton.LeftButton)
+    APP.processEvents()
+
+    assert QApplication.clipboard().text() == "Nội dung cần sao chép"
+    assert "#9a3412" in message.bubble.styleSheet()

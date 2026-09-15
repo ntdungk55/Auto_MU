@@ -34,6 +34,7 @@ from PyQt6.QtWidgets import (
     QTableWidgetItem,
     QTabWidget,
     QTabBar,
+    QApplication,
 )
 
 from src.ai_control.scenario_tool_client import ScenarioToolClient
@@ -159,6 +160,7 @@ class _ChatBubble(QWidget):
         bubble_l.setSpacing(4)
 
         self._plain_text = str(text or "")
+        self._copy_targets: list[QWidget] = [self, bubble]
         display_text = self._plain_text.replace("_", "_\u200b")
         label = QLabel(display_text)
         self.label = label
@@ -166,6 +168,7 @@ class _ChatBubble(QWidget):
         label.setWordWrap(True)
         label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self._copy_targets.append(label)
         bubble_l.addWidget(label)
 
         if image_path:
@@ -175,11 +178,13 @@ class _ChatBubble(QWidget):
                 img.setPixmap(pm.scaled(240, 180, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
             else:
                 img.setText(os.path.basename(image_path))
+            self._copy_targets.append(img)
             bubble_l.addWidget(img)
 
         if meta:
             meta_lbl = QLabel(meta)
             meta_lbl.setStyleSheet("color:#9aa0a6;font-size:11px;")
+            self._copy_targets.append(meta_lbl)
             bubble_l.addWidget(meta_lbl)
 
         bubble.setLayout(bubble_l)
@@ -193,7 +198,7 @@ class _ChatBubble(QWidget):
             outer.addWidget(bubble, 0)
         elif side == "automatic":
             label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-            bubble.setStyleSheet("background:#5d3b87;color:#fff;border:1px solid #8d69b8;border-radius:14px;")
+            bubble.setStyleSheet("background:#9a3412;color:#ffedd5;border:1px solid #fb923c;border-radius:14px;")
             outer.addStretch(1)
             outer.addWidget(bubble, 0)
         elif side == "tool":
@@ -219,6 +224,15 @@ class _ChatBubble(QWidget):
             outer.addStretch(1)
 
         self.setLayout(outer)
+        for copy_target in self._copy_targets:
+            copy_target.installEventFilter(self)
+
+    def eventFilter(self, watched, event):
+        if watched in self._copy_targets and event.type() == QEvent.Type.MouseButtonDblClick:
+            QApplication.clipboard().setText(self._plain_text)
+            event.accept()
+            return True
+        return super().eventFilter(watched, event)
 
     def resizeEvent(self, event):
         """Size chat bubbles from content and wrap them at the configured row fraction."""
@@ -1714,7 +1728,7 @@ class GeminiChatWidget(QWidget):
         self._turn_running = True
         self._refresh_queue_bubble()
         if queued.source == "automatic":
-            self._append_bubble(queued.text, side="automatic", meta="Tự động")
+            self._append_bubble(queued.text, side="automatic")
         self._dispatch_turn(queued)
 
     def _on_turn_finished(self) -> None:
