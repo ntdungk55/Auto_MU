@@ -21,8 +21,8 @@ def test_state_reader_returns_the_best_taught_icon(tmp_path) -> None:
     result = control._state_from_templates(
         image,
         {"x1": 0, "y1": 0, "x2": 20, "y2": 20},
-        {"stopped": {"path": str(stopped), "threshold": 0.7},
-         "running": {"path": str(running), "threshold": 0.7}},
+        {"stopped": {"path": str(stopped), "threshold": 0.7, "minimumScoreMargin": 0.0},
+         "running": {"path": str(running), "threshold": 0.7, "minimumScoreMargin": 0.0}},
     )
 
     assert result["state"] == "running"

@@ -51,10 +51,15 @@ def _state_from_templates(image: Any, roi: dict[str, Any], templates: dict[str, 
         scores[state] = round(float(score), 6)
     state = max(scores, key=scores.get, default="")
     threshold = float(templates.get(state, {}).get("threshold", 1.0))
+    runner_up = max((score for name, score in scores.items() if name != state), default=-1.0)
+    score_margin = round(scores.get(state, -1.0) - runner_up, 6)
+    minimum_margin = float(next(iter(templates.values()), {}).get("minimumScoreMargin", 0.05))
     return {
-        "state": state if state and scores[state] >= threshold else None,
+        "state": state if state and scores[state] >= threshold and score_margin >= minimum_margin else None,
         "scores": scores,
         "threshold": threshold,
+        "score_margin": score_margin,
+        "minimum_score_margin": minimum_margin,
         "roi": {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
     }
 
