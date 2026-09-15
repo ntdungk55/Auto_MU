@@ -51,21 +51,34 @@ def _load_template(path: str) -> Any:
     return template
 
 
-def _state_from_templates(image: Any, roi: dict[str, Any], templates: dict[str, Any]) -> dict[str, Any]:
+def _state_from_templates(image: Any, roi: dict[str, Any], templates: dict[str, Any], *,
+                          icon_roi_relative: dict[str, Any] | None = None,
+                          edge_matching: bool = False,
+                          threshold_override: float | None = None) -> dict[str, Any]:
     x1, y1, x2, y2 = (int(roi[axis]) for axis in ("x1", "y1", "x2", "y2"))
     if not (0 <= x1 < x2 <= image.shape[1] and 0 <= y1 < y2 <= image.shape[0]):
         raise ValueError("The taught state ROI lies outside the captured window")
     crop = cv2.cvtColor(image[y1:y2, x1:x2], cv2.COLOR_BGR2GRAY)
+    if icon_roi_relative is not None:
+        ix1, iy1, ix2, iy2 = (int(icon_roi_relative[axis]) for axis in ("x1", "y1", "x2", "y2"))
+        if not (0 <= ix1 < ix2 <= crop.shape[1] and 0 <= iy1 < iy2 <= crop.shape[0]):
+            raise ValueError("The taught central icon ROI lies outside its control")
+        crop = crop[iy1:iy2, ix1:ix2]
+        x1, y1, x2, y2 = x1 + ix1, y1 + iy1, x1 + ix2, y1 + iy2
+    if edge_matching:
+        crop = cv2.Canny(cv2.GaussianBlur(crop, (3, 3), 0), 35, 100)
     scores: dict[str, float] = {}
     for state, definition in templates.items():
         template = _load_template(str(definition["path"]))
+        if edge_matching:
+            template = cv2.Canny(cv2.GaussianBlur(template, (3, 3), 0), 35, 100)
         if template.shape[0] > crop.shape[0] or template.shape[1] > crop.shape[1]:
             scores[state] = -1.0
             continue
         _, score, _, _ = cv2.minMaxLoc(cv2.matchTemplate(crop, template, cv2.TM_CCOEFF_NORMED))
         scores[state] = round(float(score), 6)
     state = max(scores, key=scores.get, default="")
-    threshold = float(templates.get(state, {}).get("threshold", 1.0))
+    threshold = float(threshold_override if threshold_override is not None else templates.get(state, {}).get("threshold", 1.0))
     runner_up = max((score for name, score in scores.items() if name != state), default=-1.0)
     score_margin = round(scores.get(state, -1.0) - runner_up, 6)
     minimum_margin = float(next(iter(templates.values()), {}).get("minimumScoreMargin", 0.05))
@@ -81,7 +94,12 @@ def _state_from_templates(image: Any, roi: dict[str, Any], templates: dict[str, 
 
 def _main_state(hwnd: int, control_name: str) -> dict[str, Any]:
     control = _config()["mainInfo"][control_name]
-    result = _state_from_templates(_capture(hwnd), control["roi"], control["stateTemplates"])
+    result = _state_from_templates(
+        _capture(hwnd), control["roi"], control["stateTemplates"],
+        icon_roi_relative=control.get("iconRoiRelative"),
+        edge_matching=bool(control.get("edgeMatching", False)),
+        threshold_override=control.get("edgeThreshold"),
+    )
     result["control"] = control_name
     return result
 
@@ -239,7 +257,12 @@ def get_companion_training_state(target: dict[str, Any]) -> dict[str, Any]:
         hwnd = int(target_result["hwnd"])
         _wake_target(hwnd)
         config = _config()["mainInfo"]["companionManagement1"]
-        result = _state_from_templates(_capture(hwnd), config["roi"], config["trainingStateTemplates"])
+        result = _state_from_templates(
+            _capture(hwnd), config["roi"], config["trainingStateTemplates"],
+            icon_roi_relative=config.get("trainingIconRoiRelative"),
+            edge_matching=bool(config.get("edgeMatching", False)),
+            threshold_override=config.get("edgeThreshold"),
+        )
         if result["state"] is None:
             return {"success": False, "target": target_result, **result,
                     "error": "Could not identify the companion training icon."}

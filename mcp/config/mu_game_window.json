@@ -110,6 +110,9 @@
       "description": "Button AutoPlayManagement. A crown means stopped; two vertical bars mean running.",
       "recognitionType": "image",
       "clickable": true,
+      "iconRoiRelative": {"x1": 8, "y1": 8, "x2": 23, "y2": 23},
+      "edgeMatching": true,
+      "edgeThreshold": 0.5,
       "stateTemplates": {
         "stopped": {
           "path": "assets/autoplay_management_stopped.png",
@@ -188,6 +191,9 @@
       "description": "Button AutoState. A right-pointing triangle means stopped; two vertical bars mean running.",
       "recognitionType": "image",
       "clickable": true,
+      "iconRoiRelative": {"x1": 4, "y1": 4, "x2": 29, "y2": 30},
+      "edgeMatching": true,
+      "edgeThreshold": 0.5,
       "stateTemplates": {
         "stopped": {
           "path": "assets/auto_state_stopped.png",
@@ -245,6 +251,9 @@
           "threshold": 0.7
         }
       },
+      "trainingIconRoiRelative": {"x1": 19, "y1": 18, "x2": 32, "y2": 32},
+      "edgeMatching": true,
+      "edgeThreshold": 0.5,
       "roi": {
         "x1": 640,
         "y1": 529,
