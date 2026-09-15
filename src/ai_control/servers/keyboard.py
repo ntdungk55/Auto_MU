@@ -455,10 +455,11 @@ def open_companion_management_dialog() -> dict[str, Any]:
 
 @mcp.tool()
 def get_current_character_map() -> dict[str, Any]:
-    """Read the selected active character's current map from the game HUD.
+    """Read the selected active character's current map and coordinates from the HUD.
 
-    This is read-only. It returns map and is_varka only when OCR validates the
-    taught mainInfo.map region; it does not open a dialog or change character.
+    This is read-only. It returns map, position, coordinates, and is_varka only
+    when OCR validates the taught mainInfo.map and mainInfo.position regions.
+    It does not open a dialog or change character.
     """
     return _run_companion_tool(read_current_character_map)
 
