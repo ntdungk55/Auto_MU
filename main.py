@@ -56,7 +56,7 @@ from src.logic.window_detector import WindowDetector
 from src.logic.tool_manager import ToolManager, Tool
 from src.ui.tool_editor_window import ToolEditorWindow
 from src.ui.tool_settings_dialog import ToolSettingsDialog
-from src.ui.gemini_chat_widget import GeminiChatWidget
+from src.ui.gemini_chat_widget import AIChatWorkspace
 from src.ui.image_preprocessing_widget import ImagePreprocessingWidget
 from src.logic.dpapi import protect_to_b64, unprotect_from_b64
 
@@ -1504,7 +1504,7 @@ class MainWindow(QMainWindow):
 
     def create_gemini_widget(self):
         """Tạo widget cho màn hình AI Chat."""
-        return GeminiChatWidget(
+        return AIChatWorkspace(
             load_saved_key=lambda: self._get_saved_ai_key(self._get_saved_ai_provider()),
             save_key=self._save_ai_key,
             clear_saved_key=self._clear_saved_ai_key,
@@ -1512,8 +1512,8 @@ class MainWindow(QMainWindow):
             save_model=self._save_ai_model,
             load_saved_provider=self._get_saved_ai_provider,
             save_provider=self._save_ai_provider,
-            load_auto_messages=lambda: self._load_app_state().get("ai_auto_messages", []),
-            save_auto_messages=self._save_ai_auto_messages,
+            load_auto_messages_for_target=self._load_ai_auto_messages_for_target,
+            save_auto_messages_for_target=self._save_ai_auto_messages_for_target,
             create_ai_process_controller=self._create_ai_process_controller,
         )
 
@@ -1549,6 +1549,21 @@ class MainWindow(QMainWindow):
     def _save_ai_auto_messages(self, messages: list[dict]) -> None:
         state = self._load_app_state()
         state["ai_auto_messages"] = messages
+        self._save_app_state(state)
+
+    @staticmethod
+    def _ai_process_key(target: object) -> str:
+        return str(int(getattr(target, "hwnd", 0) or 0))
+
+    def _load_ai_auto_messages_for_target(self, target: object) -> list[dict]:
+        state = self._load_app_state()
+        rules = state.get("ai_auto_messages_by_process", {}).get(self._ai_process_key(target), [])
+        return rules if isinstance(rules, list) else []
+
+    def _save_ai_auto_messages_for_target(self, target: object, messages: list[dict]) -> None:
+        state = self._load_app_state()
+        by_process = state.setdefault("ai_auto_messages_by_process", {})
+        by_process[self._ai_process_key(target)] = messages
         self._save_app_state(state)
 
     def _get_saved_ai_key(self, provider: str) -> str:

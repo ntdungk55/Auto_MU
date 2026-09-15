@@ -31,6 +31,7 @@ from PyQt6.QtWidgets import (
     QAbstractItemView,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
 )
 
 from src.ai_control.scenario_tool_client import ScenarioToolClient
@@ -673,6 +674,7 @@ class GeminiChatWidget(QWidget):
         load_auto_messages: Callable[[], list[dict]] | None = None,
         save_auto_messages: Callable[[list[dict]], None] | None = None,
         create_ai_process_controller: Callable[[str, str, str], object] | None = None,
+        managed_process_tab: bool = False,
     ):
         super().__init__(parent)
         self._signals = _Signals()
@@ -695,6 +697,7 @@ class GeminiChatWidget(QWidget):
         self._load_auto_messages = load_auto_messages
         self._save_auto_messages = save_auto_messages
         self._create_ai_process_controller = create_ai_process_controller
+        self._managed_process_tab = managed_process_tab
         self._ai_process_controller = None
         self._selected_game_target = None
         self._scenario_tool_client: ScenarioToolClient | None = None
@@ -719,7 +722,8 @@ class GeminiChatWidget(QWidget):
         self._auto_timer.start()
         self._append_system_text("Chọn process game để bắt đầu AI Chat.")
         self._set_chat_available(False)
-        QTimer.singleShot(0, self._refresh_processes)
+        if not self._managed_process_tab:
+            QTimer.singleShot(0, self._refresh_processes)
         # More reliable auto-scroll: wait for scroll range to update after layout changes.
         self._pending_scroll_to_bottom = False
         try:
@@ -732,7 +736,9 @@ class GeminiChatWidget(QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
 
-        process_row = QHBoxLayout()
+        self.process_row = QWidget()
+        process_row = QHBoxLayout(self.process_row)
+        process_row.setContentsMargins(0, 0, 0, 0)
         process_row.addWidget(QLabel("Process game:"), 0)
         self.process_combo = QComboBox()
         self.process_combo.setPlaceholderText("Chọn process/window game")
@@ -741,7 +747,7 @@ class GeminiChatWidget(QWidget):
         self.refresh_process_btn = QPushButton("Làm mới")
         self.refresh_process_btn.clicked.connect(self._refresh_processes)
         process_row.addWidget(self.refresh_process_btn, 0)
-        layout.addLayout(process_row)
+        layout.addWidget(self.process_row)
 
         # Header (minimal)
         header_row = QHBoxLayout()
@@ -922,6 +928,26 @@ class GeminiChatWidget(QWidget):
 
         self._set_chat_available(True)
         self._append_system_text(f"Đã chọn process: {target.window_title}")
+
+    def assign_process_target(self, target: object) -> None:
+        """Bind this chat instance to one target supplied by the workspace."""
+        self.process_combo.blockSignals(True)
+        self.process_combo.clear()
+        self.process_combo.addItem("Chọn process/window game", None)
+        title = str(getattr(target, "window_title", "Game window") or "Game window")
+        process_name = str(getattr(target, "process_name", "") or "")
+        self.process_combo.addItem(f"{title} [{process_name or 'unknown'}]", target)
+        self.process_combo.setCurrentIndex(1)
+        self.process_combo.blockSignals(False)
+        self._on_process_selected(1)
+
+    def release_process_target(self) -> None:
+        """Stop all resources that belong to this process tab without closing the game."""
+        self._cancel_active_turn()
+        self._message_queue.clear()
+        self._auto_timer.stop()
+        self._detach_ai_process_controller()
+        self._dispose_scenario_tools()
 
     def _prepare_scenario_tools(self):
         """Start MCP discovery and expose scenario/controller functions to Gemini."""
@@ -1466,7 +1492,7 @@ class GeminiChatWidget(QWidget):
             super().showEvent(event)
         except Exception:
             pass
-        if self.process_combo.count() <= 1:
+        if not self._managed_process_tab and self.process_combo.count() <= 1:
             QTimer.singleShot(0, self._refresh_processes)
         QTimer.singleShot(0, self._scroll_to_bottom)
 
@@ -1857,3 +1883,122 @@ class GeminiChatWidget(QWidget):
             )
         except Exception:
             return ""
+
+
+class AIChatWorkspace(QWidget):
+    """Browser-like workspace: one isolated AI chat tab per game window."""
+
+    def __init__(self, parent=None, *, load_saved_key=None, save_key=None, clear_saved_key=None,
+                 load_saved_model=None, save_model=None, load_saved_provider=None, save_provider=None,
+                 load_auto_messages_for_target=None, save_auto_messages_for_target=None,
+                 create_ai_process_controller=None):
+        super().__init__(parent)
+        self._load_saved_key = load_saved_key
+        self._save_key = save_key
+        self._clear_saved_key = clear_saved_key
+        self._load_saved_model = load_saved_model
+        self._save_model = save_model
+        self._load_saved_provider = load_saved_provider
+        self._save_provider = save_provider
+        self._load_auto_messages_for_target = load_auto_messages_for_target
+        self._save_auto_messages_for_target = save_auto_messages_for_target
+        self._create_ai_process_controller = create_ai_process_controller
+        self._assigned: dict[int, GeminiChatWidget] = {}
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.tabs = QTabWidget()
+        self.tabs.setTabsClosable(True)
+        self.tabs.tabCloseRequested.connect(self._close_process_tab)
+        self.add_tab_btn = QPushButton("+")
+        self.add_tab_btn.setFixedWidth(28)
+        self.add_tab_btn.setToolTip("Thêm process game")
+        self.add_tab_btn.clicked.connect(self._open_process_picker)
+        self.tabs.setCornerWidget(self.add_tab_btn, Qt.Corner.TopRightCorner)
+        layout.addWidget(self.tabs)
+
+    @staticmethod
+    def _target_key(target: object) -> int:
+        return int(getattr(target, "hwnd", 0) or 0)
+
+    def _discover_targets(self) -> list[object]:
+        if self._create_ai_process_controller is None:
+            raise RuntimeError("AI Process Controller chưa được khởi tạo.")
+        provider = str(self._load_saved_provider() if self._load_saved_provider else "openrouter")
+        key = str(self._load_saved_key() if self._load_saved_key else "")
+        model = str(self._load_saved_model() if self._load_saved_model else "")
+        controller = self._create_ai_process_controller(provider, key, model)
+        return list(controller.list_targets("MU GameThuVN"))
+
+    def _open_process_picker(self) -> None:
+        try:
+            targets = [target for target in self._discover_targets() if self._target_key(target) not in self._assigned]
+        except Exception as error:
+            QMessageBox.warning(self, "Không thể tìm process", str(error))
+            return
+        if not targets:
+            QMessageBox.information(self, "Thêm process", "Không có game window nào chưa được quản lý bởi tab AI Chat.")
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Thêm process game")
+        dialog.setMinimumWidth(520)
+        layout = QVBoxLayout(dialog)
+        combo = QComboBox()
+        for target in targets:
+            title = str(getattr(target, "window_title", "Game window") or "Game window")
+            process_name = str(getattr(target, "process_name", "unknown") or "unknown")
+            combo.addItem(f"{title} [{process_name}]", target)
+        layout.addWidget(combo)
+        buttons = QHBoxLayout()
+        cancel = QPushButton("Hủy"); cancel.clicked.connect(dialog.reject)
+        confirm = QPushButton("Thêm"); confirm.clicked.connect(dialog.accept)
+        buttons.addStretch(1); buttons.addWidget(cancel); buttons.addWidget(confirm)
+        layout.addLayout(buttons)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self._add_process_tab(combo.currentData())
+
+    def _add_process_tab(self, target: object) -> None:
+        key = self._target_key(target)
+        if not key:
+            return
+        existing = self._assigned.get(key)
+        if existing is not None:
+            self.tabs.setCurrentWidget(existing)
+            return
+        load_auto = (lambda target=target: self._load_auto_messages_for_target(target)) if self._load_auto_messages_for_target else None
+        save_auto = (lambda rules, target=target: self._save_auto_messages_for_target(target, rules)) if self._save_auto_messages_for_target else None
+        chat = GeminiChatWidget(
+            load_saved_key=self._load_saved_key, save_key=self._save_key, clear_saved_key=self._clear_saved_key,
+            load_saved_model=self._load_saved_model, save_model=self._save_model,
+            load_saved_provider=self._load_saved_provider, save_provider=self._save_provider,
+            load_auto_messages=load_auto, save_auto_messages=save_auto,
+            create_ai_process_controller=self._create_ai_process_controller, managed_process_tab=True,
+        )
+        chat.process_row.hide()
+        try:
+            chat.assign_process_target(target)
+        except Exception as error:
+            chat.release_process_target()
+            chat.deleteLater()
+            QMessageBox.warning(self, "Không thể thêm process", str(error))
+            return
+        title = str(getattr(target, "window_title", "Game") or "Game")
+        index = self.tabs.addTab(chat, title[:28])
+        self.tabs.setTabToolTip(index, title)
+        self.tabs.setCurrentIndex(index)
+        self._assigned[key] = chat
+
+    def _close_process_tab(self, index: int) -> None:
+        chat = self.tabs.widget(index)
+        if not isinstance(chat, GeminiChatWidget):
+            return
+        key = self._target_key(chat._selected_game_target)
+        chat.release_process_target()
+        self.tabs.removeTab(index)
+        self._assigned.pop(key, None)
+        chat.deleteLater()
+
+    def _open_settings(self) -> None:
+        active = self.tabs.currentWidget()
+        if isinstance(active, GeminiChatWidget):
+            active._open_settings()
