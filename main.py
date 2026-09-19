@@ -1523,23 +1523,22 @@ class MainWindow(QMainWindow):
         """Create the event-AI controller with all configured providers."""
         from samples.ai_game_controller.main import create_ai_process_controller
 
-        provider_configs = {
-            name: {
-                "api_key": self._get_saved_ai_key(name),
-                "model_name": self._get_saved_ai_model(name),
+        if provider == "ollama":
+            provider_configs = {
+                "ollama": {
+                    "model_name": model_name or "gemma4:e2b",
+                    "base_url": os.environ.get("OLLAMA_BASE_URL", "https://myllm.mcp88.uk/v1"),
+                    "cf_access_client_id": os.environ.get("CF_ACCESS_CLIENT_ID", ""),
+                    "cf_access_client_secret": os.environ.get("CF_ACCESS_CLIENT_SECRET", ""),
+                }
             }
-            for name in ("openrouter", "gemini")
-        }
-        provider_configs["ollama"] = {
-            "model_name": self._get_saved_ai_model("ollama") or "gemma4:e2b",
-            "base_url": os.environ.get("OLLAMA_BASE_URL", "https://myllm.mcp88.uk/v1"),
-            "cf_access_client_id": os.environ.get("CF_ACCESS_CLIENT_ID", ""),
-            "cf_access_client_secret": os.environ.get("CF_ACCESS_CLIENT_SECRET", ""),
-        }
-        if provider in provider_configs:
-            provider_configs[provider]["model_name"] = model_name
-            if provider != "ollama":
-                provider_configs[provider]["api_key"] = api_key
+        else:
+            provider_configs = {
+                provider: {
+                    "api_key": api_key,
+                    "model_name": model_name,
+                }
+            }
         controller, _ = create_ai_process_controller(
             provider=provider,
             api_key=api_key,

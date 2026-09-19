@@ -1,4 +1,5 @@
 import os
+from types import SimpleNamespace
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -97,6 +98,52 @@ def test_chat_tab_saves_provider_and_model_for_its_selected_process():
     assert saved == [(target, "ollama", "gemma4:e2b")]
     assert widget._current_provider() == "ollama"
     assert widget._current_model() == "gemma4:e2b"
+
+
+def test_ollama_tab_does_not_register_billable_fallback_providers(monkeypatch):
+    import src.ai_control.ai_manager as ai_manager_module
+
+    class FakeManager:
+        instances = []
+
+        def __init__(self):
+            self.registered = []
+            self.__class__.instances.append(self)
+
+        def register_model(self, model_id, **config):
+            self.registered.append((model_id, config))
+
+        def validate_models(self):
+            return tuple(model_id for model_id, _ in self.registered)
+
+        def start_chat(self, **_kwargs):
+            return object()
+
+        def model_status(self):
+            return tuple(
+                {
+                    "id": model_id,
+                    "provider": config["provider"],
+                    "model_name": config["model_name"],
+                }
+                for model_id, config in self.registered
+            )
+
+    monkeypatch.setattr(ai_manager_module, "AIManager", FakeManager)
+    widget = GeminiChatWidget(
+        load_saved_provider=lambda: "ollama",
+        load_saved_model=lambda provider: "gemma4:e2b" if provider == "ollama" else "paid-model",
+        load_saved_key=lambda provider: "paid-key",
+        managed_process_tab=True,
+    )
+    widget._scenario_tool_client = SimpleNamespace(
+        load_scenario_snapshot=lambda: {"ok": True},
+        refresh_tools=lambda timeout_seconds: [],
+    )
+    widget._scenario_system_prompt = lambda _snapshot: "system"
+
+    assert widget._connect_ai() is True
+    assert [config["provider"] for _, config in FakeManager.instances[-1].registered] == ["ollama"]
 
 
 def test_openrouter_catalog_keeps_tool_capable_text_models_and_prices_per_token():

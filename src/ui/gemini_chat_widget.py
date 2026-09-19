@@ -1580,7 +1580,9 @@ class GeminiChatWidget(QWidget):
                 raise RuntimeError(str(scenario_snapshot.get("error") or "Could not load scenarios."))
             tools = self._scenario_tool_client.refresh_tools(timeout_seconds=8.0)
             preferred_provider = self._current_provider()
-            providers = [preferred_provider, *(p for p in ("openrouter", "gemini", "ollama") if p != preferred_provider)]
+            # A tab's provider selection is explicit. Do not silently fail over to
+            # another billable provider when the selected local model has a problem.
+            providers = [preferred_provider]
             manager = AIManager()
             registered = []
             unavailable_sdks = []
