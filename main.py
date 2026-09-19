@@ -1514,6 +1514,8 @@ class MainWindow(QMainWindow):
             save_provider=self._save_ai_provider,
             load_auto_messages_for_target=self._load_ai_auto_messages_for_target,
             save_auto_messages_for_target=self._save_ai_auto_messages_for_target,
+            load_ai_settings_for_target=self._load_ai_settings_for_target,
+            save_ai_settings_for_target=self._save_ai_settings_for_target,
             create_ai_process_controller=self._create_ai_process_controller,
         )
 
@@ -1528,6 +1530,16 @@ class MainWindow(QMainWindow):
             }
             for name in ("openrouter", "gemini")
         }
+        provider_configs["ollama"] = {
+            "model_name": self._get_saved_ai_model("ollama") or "gemma4:e2b",
+            "base_url": os.environ.get("OLLAMA_BASE_URL", "https://myllm.mcp88.uk/v1"),
+            "cf_access_client_id": os.environ.get("CF_ACCESS_CLIENT_ID", ""),
+            "cf_access_client_secret": os.environ.get("CF_ACCESS_CLIENT_SECRET", ""),
+        }
+        if provider in provider_configs:
+            provider_configs[provider]["model_name"] = model_name
+            if provider != "ollama":
+                provider_configs[provider]["api_key"] = api_key
         controller, _ = create_ai_process_controller(
             provider=provider,
             api_key=api_key,
@@ -1551,7 +1563,7 @@ class MainWindow(QMainWindow):
 
     def _save_ai_provider(self, provider: str) -> None:
         provider = str(provider or "openrouter").strip().casefold()
-        if provider not in {"openrouter", "gemini"}:
+        if provider not in {"openrouter", "gemini", "ollama"}:
             raise ValueError(f"AI provider không hỗ trợ: {provider}")
         state = self._load_app_state()
         state["ai_provider"] = provider
@@ -1602,6 +1614,30 @@ class MainWindow(QMainWindow):
                 "time": str(rule.get("time", "00:00")),
             }
             for rule in messages if rule.get("id")
+        }
+        self._save_app_state(state)
+
+    def _load_ai_settings_for_target(self, target: object) -> dict[str, str]:
+        state = self._load_app_state()
+        settings = state.get("ai_chat_settings_by_process", {}).get(self._ai_process_key(target), {})
+        if not isinstance(settings, dict):
+            settings = {}
+        provider = str(settings.get("provider", self._get_saved_ai_provider()) or "openrouter").strip().casefold()
+        model = str(settings.get("model", "") or "").strip()
+        if not model:
+            model = self._get_saved_ai_model(provider)
+        return {"provider": provider, "model": model}
+
+    def _save_ai_settings_for_target(self, target: object, provider: str, model: str) -> None:
+        clean_provider = str(provider or "").strip().casefold()
+        clean_model = str(model or "").strip()
+        if clean_provider not in {"openrouter", "gemini", "ollama"} or not clean_model:
+            raise ValueError("Provider hoặc model của tab AI Chat không hợp lệ")
+        state = self._load_app_state()
+        by_process = state.setdefault("ai_chat_settings_by_process", {})
+        by_process[self._ai_process_key(target)] = {
+            "provider": clean_provider,
+            "model": clean_model,
         }
         self._save_app_state(state)
 

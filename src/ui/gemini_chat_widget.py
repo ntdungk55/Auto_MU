@@ -354,12 +354,16 @@ class GeminiSettingsDialog(QDialog):
         self.provider_combo = QComboBox()
         self.provider_combo.addItem("OpenRouter", "openrouter")
         self.provider_combo.addItem("Gemini", "gemini")
+        self.provider_combo.addItem("Ollama (local)", "ollama")
         provider_row.addWidget(self.provider_combo, 1)
         layout.addLayout(provider_row)
 
         # Key row
-        key_row = QHBoxLayout()
-        key_row.addWidget(QLabel("API key:"))
+        self.key_row_widget = QWidget()
+        key_row = QHBoxLayout(self.key_row_widget)
+        key_row.setContentsMargins(0, 0, 0, 0)
+        self.key_label = QLabel("API key:")
+        key_row.addWidget(self.key_label)
         self.key_input = QLineEdit()
         self.key_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.key_input.setText(initial_key or "")
@@ -372,7 +376,7 @@ class GeminiSettingsDialog(QDialog):
         self.clear_key_btn = QPushButton("Xóa key đã lưu")
         self.clear_key_btn.clicked.connect(self._clear_key_clicked)
         key_row.addWidget(self.clear_key_btn)
-        layout.addLayout(key_row)
+        layout.addWidget(self.key_row_widget)
 
         # Model row
         model_row = QHBoxLayout()
@@ -382,6 +386,7 @@ class GeminiSettingsDialog(QDialog):
         self._provider_models = {
             "openrouter": ["google/gemini-2.5-flash", "openai/gpt-4o-mini", "anthropic/claude-3.5-haiku", "Custom…"],
             "gemini": ["gemini-2.5-flash", "gemini-2.5-pro", "Custom…"],
+            "ollama": ["gemma4:e2b", "MichelRosselli/bonsai-27b:latest"],
         }
         model_row.addWidget(self.model_combo, 1)
 
@@ -415,6 +420,7 @@ class GeminiSettingsDialog(QDialog):
         layout.addLayout(btn_row)
 
         self.setLayout(layout)
+        self._update_provider_controls()
         if self.selected_provider() == "openrouter":
             self._load_openrouter_models()
 
@@ -464,8 +470,23 @@ class GeminiSettingsDialog(QDialog):
         """Prevent a key for the previous provider from being saved under the new one."""
         self.key_input.clear()
         self._set_models()
+        self._update_provider_controls()
         if self.selected_provider() == "openrouter":
             self._load_openrouter_models()
+
+    def _update_provider_controls(self) -> None:
+        provider = self.selected_provider()
+        needs_key = provider != "ollama"
+        self.key_row_widget.setVisible(needs_key)
+        self.key_label.setText("API key:")
+        self.key_input.setEnabled(needs_key)
+        self.save_key_btn.setEnabled(needs_key)
+        self.clear_key_btn.setEnabled(needs_key)
+        self.refresh_models_btn.setVisible(provider == "openrouter")
+        if provider == "ollama":
+            self.model_catalog_status.setText("2 model local qua Ollama OpenAI-compatible API")
+        elif provider == "gemini":
+            self.model_catalog_status.setText("Danh sách model Gemini cấu hình sẵn")
 
     def selected_model(self) -> str:
         name = str(self.model_combo.currentText() or "").strip()
@@ -698,6 +719,8 @@ class GeminiChatWidget(QWidget):
         load_auto_messages: Callable[[], list[dict]] | None = None,
         save_auto_messages: Callable[[list[dict]], None] | None = None,
         create_ai_process_controller: Callable[[str, str, str], object] | None = None,
+        load_tab_ai_settings: Callable[[object], dict[str, str]] | None = None,
+        save_tab_ai_settings: Callable[[object, str, str], None] | None = None,
         managed_process_tab: bool = False,
         on_managed_process_change: Callable[[object, object], None] | None = None,
         on_managed_process_title_changed: Callable[[object, str], None] | None = None,
@@ -724,6 +747,10 @@ class GeminiChatWidget(QWidget):
         self._load_auto_messages = load_auto_messages
         self._save_auto_messages = save_auto_messages
         self._create_ai_process_controller = create_ai_process_controller
+        self._load_tab_ai_settings = load_tab_ai_settings
+        self._save_tab_ai_settings = save_tab_ai_settings
+        self._tab_provider: str | None = None
+        self._tab_models: dict[str, str] = {}
         self._managed_process_tab = managed_process_tab
         self._on_managed_process_change = on_managed_process_change
         self._on_managed_process_title_changed = on_managed_process_title_changed
@@ -792,6 +819,10 @@ class GeminiChatWidget(QWidget):
         self.status_lbl = QLabel("Not connected")
         self.status_lbl.setStyleSheet("color:#9aa0a6;")
         header_row.addWidget(self.status_lbl, 0)
+        self.settings_btn = QPushButton("Cài đặt")
+        self.settings_btn.setToolTip("Chọn provider và model riêng cho tab này")
+        self.settings_btn.clicked.connect(self._open_settings)
+        header_row.addWidget(self.settings_btn, 0)
         layout.addLayout(header_row)
 
         # Chat area (bubbles)
@@ -927,6 +958,9 @@ class GeminiChatWidget(QWidget):
         self.focus_game_btn.setEnabled(False)
         if target is None:
             return
+
+        self._load_settings_for_target(target)
+        self._refresh_install_button()
 
         if self._create_ai_process_controller is None:
             QMessageBox.warning(
@@ -1172,6 +1206,8 @@ class GeminiChatWidget(QWidget):
         return self._key_for_provider(self._current_provider())
 
     def _key_for_provider(self, provider: str) -> str:
+        if provider == "ollama":
+            return ""
         try:
             if self._load_saved_key is not None:
                 try:
@@ -1187,6 +1223,8 @@ class GeminiChatWidget(QWidget):
         return str(os.environ.get(env_key, "") or "").strip()
 
     def _current_provider(self) -> str:
+        if self._tab_provider:
+            return self._tab_provider
         try:
             if self._load_saved_provider is not None:
                 return str(self._load_saved_provider() or "openrouter").strip().casefold() or "openrouter"
@@ -1198,6 +1236,9 @@ class GeminiChatWidget(QWidget):
         return self._model_for_provider(self._current_provider())
 
     def _model_for_provider(self, provider: str) -> str:
+        tab_model = str(self._tab_models.get(provider, "") or "").strip()
+        if tab_model:
+            return tab_model
         try:
             if self._load_saved_model is not None:
                 try:
@@ -1209,7 +1250,39 @@ class GeminiChatWidget(QWidget):
                     return m
         except Exception:
             pass
-        return "google/gemini-2.5-flash" if provider == "openrouter" else "gemini-2.5-flash"
+        defaults = {
+            "openrouter": "google/gemini-2.5-flash",
+            "gemini": "gemini-2.5-flash",
+            "ollama": "gemma4:e2b",
+        }
+        return defaults.get(provider, "")
+
+    def _load_settings_for_target(self, target: object) -> None:
+        self._tab_provider = None
+        self._tab_models.clear()
+        if self._load_tab_ai_settings is None:
+            return
+        try:
+            settings = self._load_tab_ai_settings(target) or {}
+            provider = str(settings.get("provider", "") or "").strip().casefold()
+            model = str(settings.get("model", "") or "").strip()
+            if provider in {"openrouter", "gemini", "ollama"}:
+                self._tab_provider = provider
+                if model:
+                    self._tab_models[provider] = model
+        except Exception:
+            pass
+
+    def _save_current_tab_settings(self, provider: str, model: str) -> None:
+        clean_provider = str(provider or "").strip().casefold()
+        clean_model = str(model or "").strip()
+        if clean_provider not in {"openrouter", "gemini", "ollama"} or not clean_model:
+            return
+        self._tab_provider = clean_provider
+        self._tab_models[clean_provider] = clean_model
+        target = self._selected_game_target
+        if target is not None and self._save_tab_ai_settings is not None:
+            self._save_tab_ai_settings(target, clean_provider, clean_model)
 
     def _refresh_attachment_ui(self):
         try:
@@ -1266,11 +1339,11 @@ class GeminiChatWidget(QWidget):
 
     @staticmethod
     def _provider_package(provider: str) -> str:
-        return "openai" if provider == "openrouter" else "google-generativeai"
+        return "openai" if provider in {"openrouter", "ollama"} else "google-generativeai"
 
     @staticmethod
     def _provider_sdk_available(provider: str) -> bool:
-        return importlib.util.find_spec("openai" if provider == "openrouter" else "google.generativeai") is not None
+        return importlib.util.find_spec("openai" if provider in {"openrouter", "ollama"} else "google.generativeai") is not None
 
     def _try_import_sdk(self, provider: str) -> bool:
         """Import a newly installed provider SDK without restarting the app."""
@@ -1279,7 +1352,7 @@ class GeminiChatWidget(QWidget):
         try:
             if provider == "gemini" and genai is None:
                 genai = importlib.import_module("google.generativeai")
-            elif provider == "openrouter":
+            elif provider in {"openrouter", "ollama"}:
                 importlib.import_module("openai")
         except Exception:
             ok = False
@@ -1351,17 +1424,12 @@ class GeminiChatWidget(QWidget):
             initial_provider=self._current_provider(),
             on_save_key=self._save_key_cb,
             on_clear_key=self._clear_saved_key_cb,
-            on_save_model=self._save_model_cb,
-            on_save_provider=self._save_provider_cb,
+            on_save_model=lambda provider, model: self._tab_models.__setitem__(provider, model),
+            on_save_provider=lambda provider: setattr(self, "_tab_provider", provider),
         )
         if dlg.exec():
-            try:
-                if self._save_provider_cb is not None:
-                    self._save_provider_cb(dlg.selected_provider())
-                if self._save_model_cb is not None:
-                    self._save_model_cb(dlg.selected_provider(), dlg.selected_model())
-            except Exception:
-                pass
+            self._save_current_tab_settings(dlg.selected_provider(), dlg.selected_model())
+            self._refresh_install_button()
             self._ensure_connected(force_reconnect=True)
 
     def _append_bubble(self, text: str, side: str, image_path: str | None = None, meta: str | None = None):
@@ -1512,21 +1580,32 @@ class GeminiChatWidget(QWidget):
                 raise RuntimeError(str(scenario_snapshot.get("error") or "Could not load scenarios."))
             tools = self._scenario_tool_client.refresh_tools(timeout_seconds=8.0)
             preferred_provider = self._current_provider()
-            providers = [preferred_provider, *(p for p in ("openrouter", "gemini") if p != preferred_provider)]
+            providers = [preferred_provider, *(p for p in ("openrouter", "gemini", "ollama") if p != preferred_provider)]
             manager = AIManager()
             registered = []
             unavailable_sdks = []
             for provider in providers:
                 key = self._key_for_provider(provider)
                 model_name = self._model_for_provider(provider)
-                if not key or not model_name:
+                if (provider != "ollama" and not key) or not model_name:
                     continue
                 if not self._provider_sdk_available(provider) or (provider == "gemini" and genai is None):
                     unavailable_sdks.append(provider)
                     continue
-                adapter_config = {"api_key": key}
+                adapter_config = {}
                 if provider == "gemini":
+                    adapter_config["api_key"] = key
                     adapter_config["sdk_module"] = genai
+                elif provider == "openrouter":
+                    adapter_config["api_key"] = key
+                elif provider == "ollama":
+                    adapter_config.update(
+                        {
+                            "base_url": os.environ.get("OLLAMA_BASE_URL", "https://myllm.mcp88.uk/v1"),
+                            "cf_access_client_id": os.environ.get("CF_ACCESS_CLIENT_ID", ""),
+                            "cf_access_client_secret": os.environ.get("CF_ACCESS_CLIENT_SECRET", ""),
+                        }
+                    )
                 model_id = f"{provider}:{model_name}"
                 manager.register_model(
                     model_id,
@@ -1543,7 +1622,7 @@ class GeminiChatWidget(QWidget):
                 if unavailable_sdks and preferred_provider in unavailable_sdks:
                     self._ensure_sdk()
                     return False
-                raise RuntimeError("Chưa cấu hình API key và SDK cho provider AI nào.")
+                raise RuntimeError("Chưa cấu hình provider AI nào có thể sử dụng.")
 
             valid_models = manager.validate_models()
             self._ai_manager = manager
@@ -1583,7 +1662,9 @@ class GeminiChatWidget(QWidget):
                 return
         except Exception:
             pass
-        if not any(self._key_for_provider(provider) for provider in ("openrouter", "gemini")):
+        if self._current_provider() != "ollama" and not any(
+            self._key_for_provider(provider) for provider in ("openrouter", "gemini")
+        ):
             try:
                 self.status_lbl.setText("No API key")
             except Exception:
@@ -2033,6 +2114,7 @@ class AIChatWorkspace(QWidget):
     def __init__(self, parent=None, *, load_saved_key=None, save_key=None, clear_saved_key=None,
                  load_saved_model=None, save_model=None, load_saved_provider=None, save_provider=None,
                  load_auto_messages_for_target=None, save_auto_messages_for_target=None,
+                 load_ai_settings_for_target=None, save_ai_settings_for_target=None,
                  create_ai_process_controller=None):
         super().__init__(parent)
         self._load_saved_key = load_saved_key
@@ -2044,6 +2126,8 @@ class AIChatWorkspace(QWidget):
         self._save_provider = save_provider
         self._load_auto_messages_for_target = load_auto_messages_for_target
         self._save_auto_messages_for_target = save_auto_messages_for_target
+        self._load_ai_settings_for_target = load_ai_settings_for_target
+        self._save_ai_settings_for_target = save_ai_settings_for_target
         self._create_ai_process_controller = create_ai_process_controller
         self._assigned: dict[int, GeminiChatWidget] = {}
         self._known_targets: dict[int, object] = {}
@@ -2069,6 +2153,8 @@ class AIChatWorkspace(QWidget):
             load_saved_key=self._load_saved_key, save_key=self._save_key, clear_saved_key=self._clear_saved_key,
             load_saved_model=self._load_saved_model, save_model=self._save_model,
             load_saved_provider=self._load_saved_provider, save_provider=self._save_provider,
+            load_tab_ai_settings=self._load_ai_settings_for_target,
+            save_tab_ai_settings=self._save_ai_settings_for_target,
             create_ai_process_controller=self._create_ai_process_controller, managed_process_tab=True,
             on_managed_process_change=self._change_tab_process,
             on_managed_process_title_changed=self._refresh_process_tab_title,
@@ -2198,6 +2284,8 @@ class AIChatWorkspace(QWidget):
             load_saved_model=self._load_saved_model, save_model=self._save_model,
             load_saved_provider=self._load_saved_provider, save_provider=self._save_provider,
             load_auto_messages=load_auto, save_auto_messages=save_auto,
+            load_tab_ai_settings=self._load_ai_settings_for_target,
+            save_tab_ai_settings=self._save_ai_settings_for_target,
             create_ai_process_controller=self._create_ai_process_controller, managed_process_tab=True,
             on_managed_process_change=self._change_tab_process,
             on_managed_process_title_changed=self._refresh_process_tab_title,
