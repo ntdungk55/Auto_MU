@@ -484,7 +484,7 @@ class GeminiSettingsDialog(QDialog):
         self.clear_key_btn.setEnabled(needs_key)
         self.refresh_models_btn.setVisible(provider == "openrouter")
         if provider == "ollama":
-            self.model_catalog_status.setText("2 model local qua Ollama OpenAI-compatible API")
+            self.model_catalog_status.setText("2 model local qua Ollama native API")
         elif provider == "gemini":
             self.model_catalog_status.setText("Danh sách model Gemini cấu hình sẵn")
 
@@ -1343,11 +1343,15 @@ class GeminiChatWidget(QWidget):
 
     @staticmethod
     def _provider_package(provider: str) -> str:
-        return "openai" if provider in {"openrouter", "ollama"} else "google-generativeai"
+        if provider == "ollama":
+            return ""
+        return "openai" if provider == "openrouter" else "google-generativeai"
 
     @staticmethod
     def _provider_sdk_available(provider: str) -> bool:
-        return importlib.util.find_spec("openai" if provider in {"openrouter", "ollama"} else "google.generativeai") is not None
+        if provider == "ollama":
+            return True
+        return importlib.util.find_spec("openai" if provider == "openrouter" else "google.generativeai") is not None
 
     def _try_import_sdk(self, provider: str) -> bool:
         """Import a newly installed provider SDK without restarting the app."""
@@ -1356,7 +1360,7 @@ class GeminiChatWidget(QWidget):
         try:
             if provider == "gemini" and genai is None:
                 genai = importlib.import_module("google.generativeai")
-            elif provider in {"openrouter", "ollama"}:
+            elif provider == "openrouter":
                 importlib.import_module("openai")
         except Exception:
             ok = False

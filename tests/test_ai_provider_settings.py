@@ -31,8 +31,9 @@ def test_provider_change_uses_its_models_and_never_reuses_the_previous_key():
 
 def test_provider_sdk_packages_are_selected_by_provider():
     assert GeminiChatWidget._provider_package("openrouter") == "openai"
-    assert GeminiChatWidget._provider_package("ollama") == "openai"
+    assert GeminiChatWidget._provider_package("ollama") == ""
     assert GeminiChatWidget._provider_package("gemini") == "google-generativeai"
+    assert GeminiChatWidget._provider_sdk_available("ollama") is True
 
 
 def test_widget_loads_credentials_and_models_for_each_provider():

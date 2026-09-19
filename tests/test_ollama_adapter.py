@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
+import io
+import json
 
 import pytest
 
@@ -9,70 +10,59 @@ import src.ai_control.ai_models.ollama_adapter as ollama_adapter_module
 from src.ai_control.ai_models.ollama_adapter import OllamaModelAdapter
 
 
-class _FakeCompletions:
+class _FakeResponse(io.BytesIO):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        self.close()
+
+
+class _FakeOpener:
     def __init__(self, responses):
         self._responses = list(responses)
         self.requests = []
 
-    def create(self, **kwargs):
-        self.requests.append(kwargs)
-        message, usage = self._responses.pop(0)
-        return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=usage)
+    def __call__(self, request, *, timeout):
+        self.requests.append((request, timeout))
+        payload = self._responses.pop(0)
+        return _FakeResponse(json.dumps(payload).encode("utf-8"))
 
 
-class _FakeClient:
-    def __init__(self, models, responses):
-        self.models = SimpleNamespace(
-            list=lambda: SimpleNamespace(data=[SimpleNamespace(id=model) for model in models])
-        )
-        self.chat = SimpleNamespace(completions=_FakeCompletions(responses))
-
-
-class _FakeClientClass:
-    def __init__(self, models, responses):
-        self._models = models
-        self._responses = responses
-        self.created = []
-
-    def __call__(self, **kwargs):
-        client = _FakeClient(self._models, self._responses)
-        self.created.append((kwargs, client))
-        return client
-
-
-def _response(content="", tool_calls=None, *, prompt_tokens=12, completion_tokens=4):
-    message = SimpleNamespace(
-        content=content,
-        tool_calls=list(tool_calls or []),
-        model_dump=lambda **_: {
+def _chat_response(content="", tool_calls=None, *, prompt_tokens=12, output_tokens=4):
+    return {
+        "message": {
             "role": "assistant",
             "content": content,
             **({"tool_calls": list(tool_calls)} if tool_calls else {}),
         },
-    )
-    usage = SimpleNamespace(
-        prompt_tokens=prompt_tokens,
-        completion_tokens=completion_tokens,
-        total_tokens=prompt_tokens + completion_tokens,
-    )
-    return message, usage
+        "prompt_eval_count": prompt_tokens,
+        "eval_count": output_tokens,
+    }
 
 
-def test_ollama_adapter_uses_openai_client_with_cloudflare_headers_and_tools():
-    tool_call = SimpleNamespace(
-        id="call-ollama-1",
-        function=SimpleNamespace(name="get_state", arguments='{"target":"hero"}'),
-    )
-    client_class = _FakeClientClass(
-        ["gemma4:e2b"],
-        [_response(tool_calls=[tool_call]), _response("done")],
+def _request_body(request):
+    return json.loads(request.data.decode("utf-8")) if request.data else None
+
+
+def test_ollama_adapter_uses_native_api_with_cloudflare_headers_and_tools():
+    tool_call = {
+        "function": {"name": "get_state", "arguments": {"target": "hero"}},
+    }
+    opener = _FakeOpener(
+        [
+            {"models": [{"name": "gemma4:e2b"}]},
+            _chat_response(tool_calls=[tool_call]),
+            _chat_response("done"),
+        ]
     )
     adapter = OllamaModelAdapter(
         model_name="gemma4:e2b",
-        base_url="https://myllm.mcp88.uk",
+        base_url="https://myllm.mcp88.uk/v1",
         cf_access_client_id="client-id",
         cf_access_client_secret="client-secret",
-        client_class=client_class,
+        max_tokens=128,
+        opener=opener,
     )
 
     adapter.validate()
@@ -82,31 +72,42 @@ def test_ollama_adapter_uses_openai_client_with_cloudflare_headers_and_tools():
     )
     first = chat.send("inspect")
     final = chat.send_tool_results(
-        [AIToolResult(name="get_state", call_id="call-ollama-1", result={"ok": True})]
+        [AIToolResult(name="get_state", call_id=first.tool_calls[0].call_id, result={"ok": True})]
     )
 
-    client_args, client = client_class.created[0]
+    tag_request, tag_timeout = opener.requests[0]
+    first_chat_request, _ = opener.requests[1]
+    second_chat_request, _ = opener.requests[2]
+    first_body = _request_body(first_chat_request)
+    second_body = _request_body(second_chat_request)
+
     assert adapter.provider_name == "ollama"
-    assert adapter.base_url == "https://myllm.mcp88.uk/v1"
-    assert client_args["api_key"] == "ollama"
-    assert client_args["default_headers"] == {
-        "CF-Access-Client-Id": "client-id",
-        "CF-Access-Client-Secret": "client-secret",
-    }
+    assert adapter.base_url == "https://myllm.mcp88.uk"
+    assert tag_request.full_url == "https://myllm.mcp88.uk/api/tags"
+    assert tag_timeout == 600.0
+    assert tag_request.get_header("Cf-access-client-id") == "client-id"
+    assert tag_request.get_header("Cf-access-client-secret") == "client-secret"
     assert first.tool_calls[0].arguments == {"target": "hero"}
     assert first.usage.total_tokens == 16
     assert final.text == "done"
-    assert client.chat.completions.requests[0]["tools"][0]["function"]["name"] == "get_state"
-    assert client.chat.completions.requests[0]["extra_body"] == {"think": False}
-    assert client.chat.completions.requests[1]["messages"][-2]["tool_call_id"] == "call-ollama-1"
+    assert first_chat_request.full_url == "https://myllm.mcp88.uk/api/chat"
+    assert first_body["think"] is False
+    assert first_body["keep_alive"] == "30m"
+    assert first_body["options"] == {"num_predict": 128}
+    assert first_body["tools"][0]["function"]["name"] == "get_state"
+    assert second_body["messages"][-1] == {
+        "role": "tool",
+        "tool_name": "get_state",
+        "content": '{"ok": true}',
+    }
 
 
 def test_ollama_adapter_rejects_unknown_model_during_validation():
-    client_class = _FakeClientClass(["gemma4:e2b"], [])
+    opener = _FakeOpener([{"models": [{"name": "gemma4:e2b"}]}])
     adapter = OllamaModelAdapter(
         model_name="missing",
         base_url="http://127.0.0.1:11434/v1",
-        client_class=client_class,
+        opener=opener,
     )
 
     with pytest.raises(ValueError, match="Ollama model không tồn tại"):
@@ -129,14 +130,12 @@ def test_ollama_adapter_uses_persistent_environment_when_process_values_are_miss
         "CF_ACCESS_CLIENT_SECRET": "stored-secret",
     }
     monkeypatch.setattr(ollama_adapter_module, "_environment_value", values.get)
-    client_class = _FakeClientClass(["gemma4:e2b"], [])
+    opener = _FakeOpener([{"models": [{"name": "gemma4:e2b"}]}])
 
-    adapter = OllamaModelAdapter(model_name="gemma4:e2b", client_class=client_class)
+    adapter = OllamaModelAdapter(model_name="gemma4:e2b", opener=opener)
     adapter.validate()
 
-    client_args, _ = client_class.created[0]
-    assert client_args["base_url"] == "https://myllm.mcp88.uk/v1"
-    assert client_args["default_headers"] == {
-        "CF-Access-Client-Id": "stored-id",
-        "CF-Access-Client-Secret": "stored-secret",
-    }
+    request, _ = opener.requests[0]
+    assert request.full_url == "https://myllm.mcp88.uk/api/tags"
+    assert request.get_header("Cf-access-client-id") == "stored-id"
+    assert request.get_header("Cf-access-client-secret") == "stored-secret"
