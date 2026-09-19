@@ -688,10 +688,10 @@ class GeminiChatWidget(QWidget):
     def __init__(
         self,
         parent=None,
-        load_saved_key: Callable[[], str] | None = None,
+        load_saved_key: Callable[..., str] | None = None,
         save_key: Callable[[str, str], None] | None = None,
         clear_saved_key: Callable[[str], None] | None = None,
-        load_saved_model: Callable[[], str] | None = None,
+        load_saved_model: Callable[..., str] | None = None,
         save_model: Callable[[str, str], None] | None = None,
         load_saved_provider: Callable[[], str] | None = None,
         save_provider: Callable[[str], None] | None = None,
@@ -710,6 +710,7 @@ class GeminiChatWidget(QWidget):
         self._signals.refresh_install.connect(self._refresh_install_button, Qt.ConnectionType.QueuedConnection)
 
         self._chat = None
+        self._ai_manager = None
         self._current_model_name = ""
         self._chat_turn_lock = threading.Lock()
         self._installing_sdk = False
@@ -1012,6 +1013,8 @@ class GeminiChatWidget(QWidget):
         self._auto_timer.stop()
         self._detach_ai_process_controller()
         self._dispose_scenario_tools()
+        self._chat = None
+        self._ai_manager = None
 
     def _prepare_scenario_tools(self):
         """Start MCP discovery and expose scenario/controller functions to Gemini."""
@@ -1166,14 +1169,21 @@ class GeminiChatWidget(QWidget):
             QTimer.singleShot(0, self._start_next_queued_turn)
 
     def _current_key(self) -> str:
+        return self._key_for_provider(self._current_provider())
+
+    def _key_for_provider(self, provider: str) -> str:
         try:
             if self._load_saved_key is not None:
-                k = str(self._load_saved_key() or "").strip()
+                try:
+                    value = self._load_saved_key(provider)
+                except TypeError:
+                    value = self._load_saved_key() if provider == self._current_provider() else ""
+                k = str(value or "").strip()
                 if k:
                     return k
         except Exception:
             pass
-        env_key = "OPENROUTER_API_KEY" if self._current_provider() == "openrouter" else "GEMINI_API_KEY"
+        env_key = "OPENROUTER_API_KEY" if provider == "openrouter" else "GEMINI_API_KEY"
         return str(os.environ.get(env_key, "") or "").strip()
 
     def _current_provider(self) -> str:
@@ -1185,14 +1195,21 @@ class GeminiChatWidget(QWidget):
         return str(os.environ.get("AI_PROVIDER", "openrouter") or "openrouter").strip().casefold()
 
     def _current_model(self) -> str:
+        return self._model_for_provider(self._current_provider())
+
+    def _model_for_provider(self, provider: str) -> str:
         try:
             if self._load_saved_model is not None:
-                m = str(self._load_saved_model() or "").strip()
+                try:
+                    value = self._load_saved_model(provider)
+                except TypeError:
+                    value = self._load_saved_model() if provider == self._current_provider() else ""
+                m = str(value or "").strip()
                 if m:
                     return m
         except Exception:
             pass
-        return "google/gemini-2.5-flash" if self._current_provider() == "openrouter" else "gemini-2.5-flash"
+        return "google/gemini-2.5-flash" if provider == "openrouter" else "gemini-2.5-flash"
 
     def _refresh_attachment_ui(self):
         try:
@@ -1479,18 +1496,6 @@ class GeminiChatWidget(QWidget):
         return False
 
     def _connect_ai(self) -> bool:
-        if not self._ensure_sdk():
-            return False
-
-        key = self._current_key()
-        if not key:
-            QMessageBox.warning(self, "Thiếu API key", "Bạn hãy nhập API key của provider đã chọn.")
-            return False
-
-        model_name = self._current_model()
-        if not model_name:
-            QMessageBox.warning(self, "Thiếu model", "Bạn hãy chọn model.")
-            return False
         if self._scenario_tool_client is None:
             QMessageBox.warning(
                 self,
@@ -1500,35 +1505,68 @@ class GeminiChatWidget(QWidget):
             return False
 
         try:
-            from src.ai_control.ai_models import create_default_ai_model_factory
+            from src.ai_control.ai_manager import AIManager
 
             scenario_snapshot = self._scenario_tool_client.load_scenario_snapshot()
             if not bool(scenario_snapshot.get("ok")):
                 raise RuntimeError(str(scenario_snapshot.get("error") or "Could not load scenarios."))
             tools = self._scenario_tool_client.refresh_tools(timeout_seconds=8.0)
-            provider = self._current_provider()
-            adapter = create_default_ai_model_factory().create(
-                provider,
-                model_name=model_name,
-                api_key=key,
-                sdk_module=genai,
-            )
-            adapter.validate()
-            self._chat = adapter.start_chat(
+            preferred_provider = self._current_provider()
+            providers = [preferred_provider, *(p for p in ("openrouter", "gemini") if p != preferred_provider)]
+            manager = AIManager()
+            registered = []
+            unavailable_sdks = []
+            for provider in providers:
+                key = self._key_for_provider(provider)
+                model_name = self._model_for_provider(provider)
+                if not key or not model_name:
+                    continue
+                if not self._provider_sdk_available(provider) or (provider == "gemini" and genai is None):
+                    unavailable_sdks.append(provider)
+                    continue
+                adapter_config = {"api_key": key}
+                if provider == "gemini":
+                    adapter_config["sdk_module"] = genai
+                model_id = f"{provider}:{model_name}"
+                manager.register_model(
+                    model_id,
+                    provider=provider,
+                    model_name=model_name,
+                    adapter_config=adapter_config,
+                    supports_tools=True,
+                    intelligence_level=2,
+                    priority=10 if provider == preferred_provider else 0,
+                )
+                registered.append(model_id)
+
+            if not registered:
+                if unavailable_sdks and preferred_provider in unavailable_sdks:
+                    self._ensure_sdk()
+                    return False
+                raise RuntimeError("Chưa cấu hình API key và SDK cho provider AI nào.")
+
+            valid_models = manager.validate_models()
+            self._ai_manager = manager
+            self._chat = manager.start_chat(
                 system_prompt=self._scenario_system_prompt(scenario_snapshot),
                 tools=tools,
                 history=[],
             )
-            self._current_model_name = model_name
-            self._append_system_text(f"Connected: {provider} / {model_name}")
+            statuses = {item["id"]: item for item in manager.model_status()}
+            first = statuses[valid_models[0]]
+            self._current_model_name = str(first["model_name"])
+            ready = ", ".join(str(statuses[item]["provider"]) for item in valid_models)
+            message = f"AI Manager connected: {ready} ({len(valid_models)} provider)"
+            self._append_system_text(message)
             try:
-                self.status_lbl.setText(f"Connected | {provider} / {model_name}")
+                self.status_lbl.setText(f"Connected | AI Manager | {ready}")
             except Exception:
                 pass
             return True
         except Exception as e:
             QMessageBox.warning(self, "Model không dùng được", str(e))
             self._chat = None
+            self._ai_manager = None
             self._current_model_name = ""
             try:
                 self.status_lbl.setText("Not connected")
@@ -1538,8 +1576,6 @@ class GeminiChatWidget(QWidget):
 
     def _ensure_connected(self, force_reconnect: bool = False):
         """Auto-connect when entering tab (if key exists)."""
-        if genai is None:
-            return
         if self._scenario_tool_client is None:
             return
         try:
@@ -1547,7 +1583,7 @@ class GeminiChatWidget(QWidget):
                 return
         except Exception:
             pass
-        if not self._current_key():
+        if not any(self._key_for_provider(provider) for provider in ("openrouter", "gemini")):
             try:
                 self.status_lbl.setText("No API key")
             except Exception:
@@ -2088,12 +2124,21 @@ class AIChatWorkspace(QWidget):
         if self._create_ai_process_controller is None:
             raise RuntimeError("AI Process Controller chưa được khởi tạo.")
         provider = str(self._load_saved_provider() if self._load_saved_provider else "openrouter")
-        key = str(self._load_saved_key() if self._load_saved_key else "")
-        model = str(self._load_saved_model() if self._load_saved_model else "")
+        key = self._provider_setting(self._load_saved_key, provider)
+        model = self._provider_setting(self._load_saved_model, provider)
         controller = self._create_ai_process_controller(provider, key, model)
         targets = list(controller.list_targets("MU GameThuVN"))
         self._known_targets = {self._target_key(target): target for target in targets if self._target_key(target)}
         return targets
+
+    @staticmethod
+    def _provider_setting(callback, provider: str) -> str:
+        if callback is None:
+            return ""
+        try:
+            return str(callback(provider) or "")
+        except TypeError:
+            return str(callback() or "")
 
     def _open_process_picker(self) -> None:
         try:

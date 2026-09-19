@@ -33,6 +33,20 @@ def test_provider_sdk_packages_are_selected_by_provider():
     assert GeminiChatWidget._provider_package("gemini") == "google-generativeai"
 
 
+def test_widget_loads_credentials_and_models_for_each_provider():
+    widget = GeminiChatWidget(
+        load_saved_provider=lambda: "openrouter",
+        load_saved_key=lambda provider: f"{provider}-key",
+        load_saved_model=lambda provider: f"{provider}-model",
+        managed_process_tab=True,
+    )
+
+    assert widget._key_for_provider("openrouter") == "openrouter-key"
+    assert widget._key_for_provider("gemini") == "gemini-key"
+    assert widget._model_for_provider("openrouter") == "openrouter-model"
+    assert widget._model_for_provider("gemini") == "gemini-model"
+
+
 def test_openrouter_catalog_keeps_tool_capable_text_models_and_prices_per_token():
     models = GeminiSettingsDialog._parse_openrouter_models({"data": [
         {"id": "zulu", "supported_parameters": ["tools"], "architecture": {"output_modalities": ["text"]}, "pricing": {"prompt": "0.0000001", "completion": "0.0000002"}},

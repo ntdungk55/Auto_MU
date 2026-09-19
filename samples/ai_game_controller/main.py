@@ -12,9 +12,9 @@ from .application.scenario_engine import ScenarioEngine
 from .application.scenario_manager import ScenarioManager
 from .infrastructure.game_state_reader import GameStateReader
 from .infrastructure.game_state_store import GameStateStore
-from .infrastructure.ai_agent_factory import AIAgentFactory
-from .infrastructure.gemini_agent import GeminiAgent
-from .infrastructure.openrouter_agent import OpenRouterAgent
+from src.ai_control.ai_manager import AIManager
+
+from .infrastructure.managed_ai_agent import ManagedAIAgent
 from .infrastructure.process_selector import ProcessSelector
 from .infrastructure.scenario_repository import ScenarioRepository
 from .infrastructure.settings_store import SettingsStore
@@ -28,6 +28,7 @@ def create_ai_process_controller(
     api_key: str | None = None,
     model_name: str | None = None,
     provider: str | None = None,
+    provider_configs: dict[str, dict[str, str]] | None = None,
 ) -> tuple[AIProcessController, ScenarioManager]:
     """Build the UI-independent controller and its scenario-management API."""
     root = Path(__file__).resolve().parent
@@ -46,15 +47,38 @@ def create_ai_process_controller(
         threshold=int(ocr_settings.get("threshold", 80)),
     )
     scenario_manager = ScenarioManager(ScenarioRepository(scenario_path))
-    agent_factory = AIAgentFactory()
-    agent_factory.register("gemini", GeminiAgent)
-    agent_factory.register("openrouter", OpenRouterAgent)
     provider_name = str(provider or agent_settings.get("provider", "openrouter")).strip().casefold()
-    ai_agent = agent_factory.create(
-        provider_name,
-        api_key=api_key if api_key is not None else os.environ.get(f"{provider_name.upper()}_API_KEY", ""),
-        model_name=model_name if model_name is not None else str(agent_settings.get("model", "")),
-    )
+    configs = dict(provider_configs or {})
+    if not configs:
+        configs[provider_name] = {
+            "api_key": api_key if api_key is not None else os.environ.get(f"{provider_name.upper()}_API_KEY", ""),
+            "model_name": model_name if model_name is not None else str(agent_settings.get("model", "")),
+        }
+    manager = AIManager()
+    ordered_providers = [provider_name, *(name for name in configs if name != provider_name)]
+    for name in ordered_providers:
+        config = configs.get(name, {})
+        configured_model = str(config.get("model_name", "") or "").strip()
+        configured_key = str(config.get("api_key", "") or "").strip()
+        if not configured_model or not configured_key:
+            continue
+        adapter_config: dict[str, object] = {"api_key": configured_key}
+        if name == "gemini":
+            try:
+                import google.generativeai as genai
+            except ImportError:
+                genai = None
+            adapter_config["sdk_module"] = genai
+        manager.register_model(
+            f"{name}:{configured_model}",
+            provider=name,
+            model_name=configured_model,
+            adapter_config=adapter_config,
+            supports_tools=True,
+            intelligence_level=2,
+            priority=10 if name == provider_name else 0,
+        )
+    ai_agent = ManagedAIAgent(manager)
     system_prompt_path = (root / "config" / str(path_settings.get("systemPrompt", "../prompts/system_prompt.md"))).resolve()
     controller = AIProcessController(
         game_state_reader=reader,

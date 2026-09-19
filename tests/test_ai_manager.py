@@ -8,6 +8,7 @@ from src.ai_control.ai_models.contracts import (
     AIChatSession,
     AIModelAdapter,
     AIResponse,
+    AIToolCall,
     AIToolResult,
     AIUsage,
 )
@@ -36,7 +37,10 @@ class _FakeSession(AIChatSession):
         return outcome
 
     def send_tool_results(self, results: list[AIToolResult]):
-        raise NotImplementedError
+        outcome = self._outcomes.popleft()
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
 
 
 class _FakeAdapter(AIModelAdapter):
@@ -198,3 +202,56 @@ def test_manager_does_not_fallback_for_invalid_request():
         manager.execute("hello", system_prompt="system")
 
     assert calls == ["first"]
+
+
+def test_managed_chat_falls_back_on_first_send_and_exposes_active_model():
+    calls = []
+    manager = _manager()
+    _register(manager, "primary", 1, [_StatusError(429, "rate limit")], calls, priority=2)
+    _register(manager, "fallback", 1, [AIResponse(text="ok")], calls)
+
+    chat = manager.start_chat(system_prompt="system", tools=[])
+    response = chat.send("hello")
+
+    assert response.text == "ok"
+    assert chat.active_model_id == "fallback"
+    assert calls == ["primary", "fallback"]
+
+
+def test_managed_chat_keeps_provider_pinned_during_tool_loop():
+    calls = []
+    manager = _manager()
+    _register(
+        manager,
+        "primary",
+        1,
+        [
+            AIResponse(tool_calls=(AIToolCall(name="attack", call_id="call-1"),)),
+            AIResponse(text="done"),
+        ],
+        calls,
+        priority=2,
+    )
+    _register(manager, "fallback", 1, [AIResponse(text="wrong")], calls)
+
+    chat = manager.start_chat(system_prompt="system", tools=[{"name": "attack"}])
+    first = chat.send("fight")
+    final = chat.send_tool_results([AIToolResult(name="attack", result={"ok": True}, call_id="call-1")])
+
+    assert first.tool_calls[0].name == "attack"
+    assert final.text == "done"
+    assert calls == ["primary"]
+
+
+def test_managed_chat_reroutes_after_scenario_reset():
+    calls = []
+    manager = _manager()
+    _register(manager, "primary", 1, [AIResponse(text="first")], calls, priority=2)
+    _register(manager, "fallback", 1, [AIResponse(text="second")], calls)
+    chat = manager.start_chat(system_prompt="system", tools=[])
+
+    assert chat.send("one").text == "first"
+    chat.reset_scenario()
+    manager.set_enabled("primary", False)
+    assert chat.send("two").text == "second"
+    assert calls == ["primary", "fallback"]

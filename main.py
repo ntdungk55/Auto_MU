@@ -1505,10 +1505,10 @@ class MainWindow(QMainWindow):
     def create_gemini_widget(self):
         """Tạo widget cho màn hình AI Chat."""
         return AIChatWorkspace(
-            load_saved_key=lambda: self._get_saved_ai_key(self._get_saved_ai_provider()),
+            load_saved_key=self._get_saved_ai_key,
             save_key=self._save_ai_key,
             clear_saved_key=self._clear_saved_ai_key,
-            load_saved_model=lambda: self._get_saved_ai_model(self._get_saved_ai_provider()),
+            load_saved_model=self._get_saved_ai_model,
             save_model=self._save_ai_model,
             load_saved_provider=self._get_saved_ai_provider,
             save_provider=self._save_ai_provider,
@@ -1518,10 +1518,22 @@ class MainWindow(QMainWindow):
         )
 
     def _create_ai_process_controller(self, provider: str, api_key: str, model_name: str):
-        """Create the event-AI controller using the selected provider credentials."""
+        """Create the event-AI controller with all configured providers."""
         from samples.ai_game_controller.main import create_ai_process_controller
 
-        controller, _ = create_ai_process_controller(provider=provider, api_key=api_key, model_name=model_name)
+        provider_configs = {
+            name: {
+                "api_key": self._get_saved_ai_key(name),
+                "model_name": self._get_saved_ai_model(name),
+            }
+            for name in ("openrouter", "gemini")
+        }
+        controller, _ = create_ai_process_controller(
+            provider=provider,
+            api_key=api_key,
+            model_name=model_name,
+            provider_configs=provider_configs,
+        )
         return controller
     
     def _open_telegram_settings_dialog(self):

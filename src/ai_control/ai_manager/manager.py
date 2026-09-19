@@ -8,7 +8,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from src.ai_control.ai_models.contracts import AIResponse
+from src.ai_control.ai_models.contracts import AIChatSession, AIResponse, AIToolResult
 from src.ai_control.ai_models.factory import AIModelFactory, create_default_ai_model_factory
 
 
@@ -60,7 +60,7 @@ class AIManager:
         adapter_config: dict[str, Any] | None = None,
         supports_tools: bool = True,
         intelligence_level: int = 1,
-        context_window: int = 8_192,
+        context_window: int | None = None,
         token_quota: int | None = None,
         quota_window_seconds: float | None = None,
         priority: int = 0,
@@ -74,7 +74,7 @@ class AIManager:
             raise ValueError("model_id, provider và model_name không được để trống")
         if intelligence_level not in (1, 2, 3):
             raise ValueError("intelligence_level phải là 1, 2 hoặc 3")
-        if context_window <= 0:
+        if context_window is not None and context_window <= 0:
             raise ValueError("context_window phải lớn hơn 0")
         if token_quota is not None and token_quota < 0:
             raise ValueError("token_quota không được âm")
@@ -92,7 +92,7 @@ class AIManager:
                 "adapter_config": dict(adapter_config or {}),
                 "supports_tools": bool(supports_tools),
                 "intelligence_level": int(intelligence_level),
-                "context_window": int(context_window),
+                "context_window": int(context_window) if context_window is not None else None,
                 "token_quota": token_quota,
                 "remaining_tokens": token_quota,
                 "quota_window_seconds": quota_window_seconds,
@@ -107,7 +107,56 @@ class AIManager:
                 "used_tokens": 0,
                 "average_latency_ms": 0.0,
                 "last_error": None,
+                "adapter": None,
             }
+
+    def start_chat(
+        self,
+        *,
+        system_prompt: str,
+        tools: list[dict[str, Any]],
+        history: list[Any] | None = None,
+        difficulty: int | None = None,
+        max_output_tokens: int = 1_024,
+    ) -> AIChatSession:
+        """Create a provider-managed chat that reroutes between scenario turns."""
+        prompt = str(system_prompt or "").strip()
+        if not prompt:
+            raise ValueError("system_prompt không được để trống")
+        if max_output_tokens <= 0:
+            raise ValueError("max_output_tokens phải lớn hơn 0")
+        if not self.model_status():
+            raise RuntimeError("AIManager chưa đăng ký model nào")
+        return _ManagedAIChatSession(
+            manager=self,
+            system_prompt=prompt,
+            tools=list(tools or []),
+            history=list(history or []),
+            difficulty=difficulty,
+            max_output_tokens=max_output_tokens,
+        )
+
+    def validate_models(self) -> tuple[str, ...]:
+        """Build every enabled adapter and keep only deployments that validate."""
+        with self._lock:
+            model_ids = [model_id for model_id, model in self._models.items() if model["enabled"]]
+        valid: list[str] = []
+        errors: list[str] = []
+        for model_id in model_ids:
+            try:
+                self._adapter_for(model_id)
+            except Exception as exc:
+                with self._lock:
+                    model = self._model(model_id)
+                    model["enabled"] = False
+                    model["last_error"] = str(exc)
+                errors.append(f"{model_id}: {exc}")
+            else:
+                valid.append(model_id)
+        if not valid:
+            detail = "; ".join(errors) or "không có model nào được bật"
+            raise RuntimeError(f"Không có AI model hợp lệ: {detail}")
+        return tuple(valid)
 
     def execute(
         self,
@@ -120,18 +169,38 @@ class AIManager:
         max_output_tokens: int = 1_024,
     ) -> AIResponse:
         """Route one request and return the first successful provider response."""
+        response, _, _ = self._send_with_new_session(
+            content,
+            system_prompt=system_prompt,
+            tools=list(tools or []),
+            history=list(history or []),
+            difficulty=difficulty,
+            max_output_tokens=max_output_tokens,
+        )
+        return response
+
+    def _send_with_new_session(
+        self,
+        content: Any,
+        *,
+        system_prompt: str,
+        tools: list[dict[str, Any]],
+        history: list[Any],
+        difficulty: int | None,
+        max_output_tokens: int,
+    ) -> tuple[AIResponse, AIChatSession, str]:
         prompt = str(system_prompt or "").strip()
         if not prompt:
             raise ValueError("system_prompt không được để trống")
         if max_output_tokens <= 0:
             raise ValueError("max_output_tokens phải lớn hơn 0")
-        requested_tools = list(tools or [])
+        requested_tools = list(tools)
         required_level = self._assess_difficulty(content, requested_tools, difficulty)
         estimated_tokens = self._estimate_tokens(
             content,
             prompt,
             requested_tools,
-            history or [],
+            history,
             max_output_tokens,
         )
         candidate_ids = self._rank_candidates(
@@ -150,13 +219,12 @@ class AIManager:
                 for attempt in range(self._max_retries + 1):
                     started = self._clock()
                     try:
-                        response = self._call_model(
-                            model_id,
-                            content=content,
-                            system_prompt=prompt,
-                            tools=requested_tools,
-                            history=history,
+                        chat = self._create_session(
+                            model_id, system_prompt=prompt, tools=requested_tools, history=history
                         )
+                        response = chat.send(content)
+                        if not isinstance(response, AIResponse):
+                            raise TypeError("AI provider không trả về AIResponse")
                     except Exception as exc:
                         last_error = exc
                         error_kind = self._classify_error(exc)
@@ -171,7 +239,7 @@ class AIManager:
                         latency_ms = max(0.0, (self._clock() - started) * 1_000)
                         actual_tokens = self._response_tokens(response) or estimated_tokens
                         self._record_success(model_id, actual_tokens, latency_ms)
-                        return response
+                        return response, chat, model_id
             finally:
                 self._release_reservation(model_id, estimated_tokens)
 
@@ -218,28 +286,74 @@ class AIManager:
             window = model["quota_window_seconds"]
             model["quota_reset_at"] = self._clock() + window if window else None
 
-    def _call_model(
+    def _create_session(
         self,
         model_id: str,
         *,
-        content: Any,
         system_prompt: str,
         tools: list[dict[str, Any]],
         history: list[Any] | None,
-    ) -> AIResponse:
+    ) -> AIChatSession:
+        adapter = self._adapter_for(model_id)
+        return adapter.start_chat(system_prompt=system_prompt, tools=tools, history=history)
+
+    def _adapter_for(self, model_id: str):
+        """Create and validate an adapter once, then reuse it across scenarios."""
         with self._lock:
             model = self._model(model_id)
-            provider = model["provider"]
-            model_name = model["model_name"]
-            config = dict(model["adapter_config"])
-        config.pop("model_name", None)
-        adapter = self._factory.create(provider, model_name=model_name, **config)
-        adapter.validate()
-        chat = adapter.start_chat(system_prompt=system_prompt, tools=tools, history=history)
-        response = chat.send(content)
-        if not isinstance(response, AIResponse):
-            raise TypeError("AI provider không trả về AIResponse")
-        return response
+            adapter = model["adapter"]
+            if adapter is None:
+                provider = model["provider"]
+                model_name = model["model_name"]
+                config = dict(model["adapter_config"])
+        if adapter is None:
+            config.pop("model_name", None)
+            adapter = self._factory.create(provider, model_name=model_name, **config)
+            adapter.validate()
+            with self._lock:
+                current = self._model(model_id)
+                if current["adapter"] is None:
+                    current["adapter"] = adapter
+                else:
+                    adapter = current["adapter"]
+        return adapter
+
+    def _send_on_session(
+        self,
+        model_id: str,
+        session: AIChatSession,
+        payload: Any,
+        *,
+        send_tool_results: bool,
+        max_output_tokens: int,
+    ) -> AIResponse:
+        estimated_tokens = self._estimate_tokens(
+            payload,
+            "",
+            [],
+            session.history,
+            max_output_tokens,
+        )
+        if not self._reserve(model_id, estimated_tokens):
+            raise RuntimeError(f"AI model không còn đủ quota cho phiên hiện tại: {model_id}")
+        started = self._clock()
+        try:
+            if send_tool_results:
+                response = session.send_tool_results(payload)
+            else:
+                response = session.send(payload)
+            if not isinstance(response, AIResponse):
+                raise TypeError("AI provider không trả về AIResponse")
+        except Exception as exc:
+            self._record_failure(model_id, exc, self._classify_error(exc))
+            raise
+        else:
+            latency_ms = max(0.0, (self._clock() - started) * 1_000)
+            actual_tokens = self._response_tokens(response) or estimated_tokens
+            self._record_success(model_id, actual_tokens, latency_ms)
+            return response
+        finally:
+            self._release_reservation(model_id, estimated_tokens)
 
     def _rank_candidates(
         self,
@@ -257,7 +371,8 @@ class AIManager:
                     continue
                 if requires_tools and not model["supports_tools"]:
                     continue
-                if estimated_tokens > model["context_window"]:
+                context_window = model["context_window"]
+                if context_window is not None and estimated_tokens > context_window:
                     continue
                 remaining = model["remaining_tokens"]
                 if remaining is not None and remaining - model["reserved_tokens"] < estimated_tokens:
@@ -412,3 +527,81 @@ class AIManager:
             return self._models[clean_id]
         except KeyError as exc:
             raise KeyError(f"Không tìm thấy AI model deployment: {clean_id}") from exc
+
+
+class _ManagedAIChatSession(AIChatSession):
+    """Pin one provider during a tool loop and reroute after scenario reset."""
+
+    def __init__(
+        self,
+        *,
+        manager: AIManager,
+        system_prompt: str,
+        tools: list[dict[str, Any]],
+        history: list[Any],
+        difficulty: int | None,
+        max_output_tokens: int,
+    ) -> None:
+        self._manager = manager
+        self._system_prompt = system_prompt
+        self._tools = tools
+        self._initial_history = history
+        self._difficulty = difficulty
+        self._max_output_tokens = max_output_tokens
+        self._active_session: AIChatSession | None = None
+        self._active_model_id: str | None = None
+        self._lock = threading.RLock()
+
+    @property
+    def history(self) -> list[Any]:
+        with self._lock:
+            if self._active_session is None:
+                return list(self._initial_history)
+            return list(self._active_session.history)
+
+    @property
+    def active_model_id(self) -> str | None:
+        with self._lock:
+            return self._active_model_id
+
+    def send(self, content: Any) -> AIResponse:
+        with self._lock:
+            if self._active_session is not None and self._active_model_id is not None:
+                return self._manager._send_on_session(
+                    self._active_model_id,
+                    self._active_session,
+                    content,
+                    send_tool_results=False,
+                    max_output_tokens=self._max_output_tokens,
+                )
+            response, session, model_id = self._manager._send_with_new_session(
+                content,
+                system_prompt=self._system_prompt,
+                tools=self._tools,
+                history=self._initial_history,
+                difficulty=self._difficulty,
+                max_output_tokens=self._max_output_tokens,
+            )
+            self._active_session = session
+            self._active_model_id = model_id
+            return response
+
+    def send_tool_results(self, results: list[AIToolResult]) -> AIResponse:
+        with self._lock:
+            if self._active_session is None or self._active_model_id is None:
+                raise RuntimeError("Chưa có AI provider đang hoạt động cho tool result")
+            return self._manager._send_on_session(
+                self._active_model_id,
+                self._active_session,
+                results,
+                send_tool_results=True,
+                max_output_tokens=self._max_output_tokens,
+            )
+
+    def reset_scenario(self) -> None:
+        with self._lock:
+            session = self._active_session
+            self._active_session = None
+            self._active_model_id = None
+        if session is not None:
+            session.reset_scenario()
