@@ -129,23 +129,6 @@ class _PromptTextEdit(QTextEdit):
         super().dropEvent(event)
 
 
-class _PromptActionContainer(QWidget):
-    """Keep a clickable action icon over the right edge of the text editor."""
-
-    def __init__(self, prompt: QTextEdit, action: QPushButton, parent=None):
-        super().__init__(parent)
-        self._action = action
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(prompt)
-        action.setParent(self)
-        action.raise_()
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self._action.move(self.width() - self._action.width() - 7, (self.height() - self._action.height()) // 2)
-
-
 class _ChatBubble(QWidget):
     def __init__(self, text: str, side: str = "left", image_path: str | None = None,
                  meta: str | None = None, timestamp: str | None = None, parent=None):
@@ -819,10 +802,6 @@ class GeminiChatWidget(QWidget):
         self.status_lbl = QLabel("Not connected")
         self.status_lbl.setStyleSheet("color:#9aa0a6;")
         header_row.addWidget(self.status_lbl, 0)
-        self.settings_btn = QPushButton("Cài đặt")
-        self.settings_btn.setToolTip("Chọn provider và model riêng cho tab này")
-        self.settings_btn.clicked.connect(self._open_settings)
-        header_row.addWidget(self.settings_btn, 0)
         layout.addLayout(header_row)
 
         # Chat area (bubbles)
@@ -865,36 +844,64 @@ class GeminiChatWidget(QWidget):
         self.auto_schedule_status.setStyleSheet("color:#a9bfd3;font-size:11px;")
         layout.addWidget(self.auto_schedule_status)
 
-        # Input bar (buttons near Send)
+        # Composer: text above, actions and model selector below.
         self.input_row = QWidget()
-        input_bar = QHBoxLayout(self.input_row)
-        input_bar.setContentsMargins(0, 0, 0, 0)
+        self.input_row.setObjectName("chatComposer")
+        self.input_row.setStyleSheet(
+            "QWidget#chatComposer{background:#2d2d2d;border:1px solid #414141;border-radius:18px;}"
+        )
+        input_bar = QVBoxLayout(self.input_row)
+        input_bar.setContentsMargins(10, 8, 8, 8)
+        input_bar.setSpacing(4)
         self.prompt = _PromptTextEdit()
         self.prompt.attachment_dropped.connect(self._set_attachment_from_drop)
         self.prompt.send_requested.connect(self._send)
         self.prompt.setPlaceholderText("Nhập câu hỏi… (Enter để gửi, Shift+Enter xuống dòng, kéo‑thả ảnh vào đây)")
         self.prompt.setMinimumHeight(44)
-        self.prompt.setViewportMargins(0, 0, 34, 0)
-        self.prompt.setStyleSheet("background:#111;color:#e6e6e6;border:1px solid #222;border-radius:12px;")
+        self.prompt.setViewportMargins(0, 0, 0, 0)
+        self.prompt.setStyleSheet(
+            "QTextEdit{background:transparent;color:#e6e6e6;border:0;padding:2px;}"
+        )
+        input_bar.addWidget(self.prompt)
 
-        self.ai_activity_btn = QPushButton("↵")
-        self.ai_activity_btn.setFixedSize(26, 26)
-        self.ai_activity_btn.setToolTip("Gửi tin nhắn (Enter)")
-        self.ai_activity_btn.clicked.connect(self._handle_input_action)
-        prompt_container = _PromptActionContainer(self.prompt, self.ai_activity_btn)
-        input_bar.addWidget(prompt_container, 1)
+        self.composer_actions = QHBoxLayout()
+        self.composer_actions.setContentsMargins(0, 0, 0, 0)
+        self.composer_actions.setSpacing(4)
+        action_style = (
+            "QPushButton{background:transparent;color:#d4d4d4;border:0;padding:4px 7px;}"
+            "QPushButton:hover{background:#414141;border-radius:8px;}"
+            "QPushButton:disabled{color:#777;}"
+        )
 
-        self.attach_btn = QPushButton("Đính kèm")
+        self.attach_btn = QPushButton("＋ Đính kèm")
+        self.attach_btn.setStyleSheet(action_style)
         self.attach_btn.clicked.connect(self._pick_image)
-        input_bar.addWidget(self.attach_btn, 0)
+        self.composer_actions.addWidget(self.attach_btn, 0)
 
         self.install_btn = QPushButton("Cài SDK")
+        self.install_btn.setStyleSheet(action_style)
         self.install_btn.clicked.connect(self._install_selected_provider_sdk)
-        input_bar.addWidget(self.install_btn, 0)
+        self.composer_actions.addWidget(self.install_btn, 0)
 
         self.auto_messages_btn = QPushButton("Tự động")
+        self.auto_messages_btn.setStyleSheet(action_style)
         self.auto_messages_btn.clicked.connect(self._open_auto_messages)
-        input_bar.addWidget(self.auto_messages_btn, 0)
+        self.composer_actions.addWidget(self.auto_messages_btn, 0)
+
+        self.composer_actions.addStretch(1)
+
+        self.settings_btn = QPushButton()
+        self.settings_btn.setStyleSheet(action_style)
+        self.settings_btn.setToolTip("Chọn provider và model cho tab này")
+        self.settings_btn.clicked.connect(self._open_settings)
+        self.composer_actions.addWidget(self.settings_btn, 0)
+
+        self.ai_activity_btn = QPushButton("↑")
+        self.ai_activity_btn.setFixedSize(32, 32)
+        self.ai_activity_btn.setToolTip("Gửi tin nhắn (Enter)")
+        self.ai_activity_btn.clicked.connect(self._handle_input_action)
+        self.composer_actions.addWidget(self.ai_activity_btn, 0)
+        input_bar.addLayout(self.composer_actions)
 
         layout.addWidget(self.input_row)
 
@@ -902,6 +909,7 @@ class GeminiChatWidget(QWidget):
         if not self._managed_process_tab:
             self._append_system_text("Sẵn sàng. Kéo‑thả ảnh vào ô nhập để đính kèm, rồi bấm Gửi.")
         self._refresh_attachment_ui()
+        self._refresh_model_selector()
         self._refresh_install_button()
         self._refresh_ai_activity_button()
         self._refresh_queue_bubble()
@@ -1198,7 +1206,11 @@ class GeminiChatWidget(QWidget):
         self.scroll.setVisible(True)
         self.scroll.setEnabled(available)
         self.input_row.setVisible(True)
-        self.input_row.setEnabled(available)
+        self.input_row.setEnabled(True)
+        self.prompt.setEnabled(available)
+        self.attach_btn.setEnabled(available)
+        self.auto_messages_btn.setEnabled(available)
+        self.settings_btn.setEnabled(True)
         self.attach_row.setVisible(bool(self._attach_path))
         self.attach_row.setEnabled(available)
         if not available:
@@ -1276,6 +1288,7 @@ class GeminiChatWidget(QWidget):
                     self._tab_models[provider] = model
         except Exception:
             pass
+        self._refresh_model_selector()
 
     def _save_current_tab_settings(self, provider: str, model: str) -> None:
         clean_provider = str(provider or "").strip().casefold()
@@ -1284,9 +1297,21 @@ class GeminiChatWidget(QWidget):
             return
         self._tab_provider = clean_provider
         self._tab_models[clean_provider] = clean_model
+        if self._save_provider_cb is not None:
+            self._save_provider_cb(clean_provider)
+        if self._save_model_cb is not None:
+            self._save_model_cb(clean_provider, clean_model)
         target = self._selected_game_target
         if target is not None and self._save_tab_ai_settings is not None:
             self._save_tab_ai_settings(target, clean_provider, clean_model)
+        self._refresh_model_selector()
+
+    def _refresh_model_selector(self) -> None:
+        button = getattr(self, "settings_btn", None)
+        if button is None:
+            return
+        model = self._current_model()
+        button.setText(f"{model or 'Chọn model'} ⌄")
 
     def _refresh_attachment_ui(self):
         try:
@@ -1490,8 +1515,9 @@ class GeminiChatWidget(QWidget):
 
     def _set_busy(self, busy: bool):
         try:
-            self.attach_btn.setEnabled(not busy)
-            self.auto_messages_btn.setEnabled(not busy)
+            self.attach_btn.setEnabled(self._chat_ready and not busy)
+            self.auto_messages_btn.setEnabled(self._chat_ready and not busy)
+            self.settings_btn.setEnabled(not busy)
             self._refresh_install_button()
             if busy:
                 self._show_typing_indicator()
@@ -1507,8 +1533,8 @@ class GeminiChatWidget(QWidget):
             return
         active = self._active_turn_cancel
         running = active is not None and not active.is_set()
-        button.setText("■" if running else "↵")
-        button.setEnabled(True)
+        button.setText("■" if running else "↑")
+        button.setEnabled(self._chat_ready or running)
         button.setToolTip("Hủy lượt AI hiện tại" if running else "Gửi tin nhắn (Enter)")
         button.setStyleSheet(
             "QPushButton{background:#b93f48;color:white;border:0;border-radius:13px;font-size:14px;}"

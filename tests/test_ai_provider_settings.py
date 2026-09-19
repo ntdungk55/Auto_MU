@@ -85,8 +85,12 @@ def test_each_chat_tab_can_load_its_own_provider_and_model():
 
 def test_chat_tab_saves_provider_and_model_for_its_selected_process():
     saved = []
+    saved_providers = []
+    saved_models = []
     target = object()
     widget = GeminiChatWidget(
+        save_provider=saved_providers.append,
+        save_model=lambda provider, model: saved_models.append((provider, model)),
         save_tab_ai_settings=lambda selected, provider, model: saved.append(
             (selected, provider, model)
         ),
@@ -97,8 +101,53 @@ def test_chat_tab_saves_provider_and_model_for_its_selected_process():
     widget._save_current_tab_settings("ollama", "gemma4:e2b")
 
     assert saved == [(target, "ollama", "gemma4:e2b")]
+    assert saved_providers == ["ollama"]
+    assert saved_models == [("ollama", "gemma4:e2b")]
     assert widget._current_provider() == "ollama"
     assert widget._current_model() == "gemma4:e2b"
+    assert "gemma4:e2b" in widget.settings_btn.text()
+
+
+def test_composer_places_settings_with_attachment_and_automatic_actions():
+    widget = GeminiChatWidget(
+        load_saved_provider=lambda: "ollama",
+        load_saved_model=lambda provider: "gemma4:e2b",
+        managed_process_tab=True,
+    )
+
+    action_widgets = [
+        widget.composer_actions.itemAt(index).widget()
+        for index in range(widget.composer_actions.count())
+    ]
+
+    assert widget.attach_btn in action_widgets
+    assert widget.auto_messages_btn in action_widgets
+    assert widget.settings_btn in action_widgets
+    assert widget.ai_activity_btn in action_widgets
+    assert "gemma4:e2b" in widget.settings_btn.text()
+
+
+def test_last_selected_model_is_restored_in_a_new_chat_widget():
+    state = {"provider": "openrouter", "models": {}}
+
+    first = GeminiChatWidget(
+        load_saved_provider=lambda: state["provider"],
+        save_provider=lambda provider: state.__setitem__("provider", provider),
+        load_saved_model=lambda provider: state["models"].get(provider, ""),
+        save_model=lambda provider, model: state["models"].__setitem__(provider, model),
+        managed_process_tab=True,
+    )
+    first._save_current_tab_settings("ollama", "MichelRosselli/bonsai-27b:latest")
+
+    reopened = GeminiChatWidget(
+        load_saved_provider=lambda: state["provider"],
+        load_saved_model=lambda provider: state["models"].get(provider, ""),
+        managed_process_tab=True,
+    )
+
+    assert reopened._current_provider() == "ollama"
+    assert reopened._current_model() == "MichelRosselli/bonsai-27b:latest"
+    assert "MichelRosselli/bonsai-27b:latest" in reopened.settings_btn.text()
 
 
 def test_ollama_tab_does_not_register_billable_fallback_providers(monkeypatch):
