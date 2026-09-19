@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from src.ai_control.ai_models.contracts import AIToolResult
+import src.ai_control.ai_models.ollama_adapter as ollama_adapter_module
 from src.ai_control.ai_models.ollama_adapter import OllamaModelAdapter
 
 
@@ -118,3 +119,23 @@ def test_ollama_adapter_requires_complete_cloudflare_credentials():
             cf_access_client_id="only-id",
             cf_access_client_secret="",
         )
+
+
+def test_ollama_adapter_uses_persistent_environment_when_process_values_are_missing(monkeypatch):
+    values = {
+        "OLLAMA_BASE_URL": "https://myllm.mcp88.uk/v1",
+        "CF_ACCESS_CLIENT_ID": "stored-id",
+        "CF_ACCESS_CLIENT_SECRET": "stored-secret",
+    }
+    monkeypatch.setattr(ollama_adapter_module, "_environment_value", values.get)
+    client_class = _FakeClientClass(["gemma4:e2b"], [])
+
+    adapter = OllamaModelAdapter(model_name="gemma4:e2b", client_class=client_class)
+    adapter.validate()
+
+    client_args, _ = client_class.created[0]
+    assert client_args["base_url"] == "https://myllm.mcp88.uk/v1"
+    assert client_args["default_headers"] == {
+        "CF-Access-Client-Id": "stored-id",
+        "CF-Access-Client-Secret": "stored-secret",
+    }

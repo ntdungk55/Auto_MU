@@ -1601,13 +1601,14 @@ class GeminiChatWidget(QWidget):
                 elif provider == "openrouter":
                     adapter_config["api_key"] = key
                 elif provider == "ollama":
-                    adapter_config.update(
-                        {
-                            "base_url": os.environ.get("OLLAMA_BASE_URL", "https://myllm.mcp88.uk/v1"),
-                            "cf_access_client_id": os.environ.get("CF_ACCESS_CLIENT_ID", ""),
-                            "cf_access_client_secret": os.environ.get("CF_ACCESS_CLIENT_SECRET", ""),
-                        }
+                    adapter_config["base_url"] = os.environ.get(
+                        "OLLAMA_BASE_URL", "https://myllm.mcp88.uk/v1"
                     )
+                    client_id = str(os.environ.get("CF_ACCESS_CLIENT_ID", "") or "").strip()
+                    client_secret = str(os.environ.get("CF_ACCESS_CLIENT_SECRET", "") or "").strip()
+                    if client_id and client_secret:
+                        adapter_config["cf_access_client_id"] = client_id
+                        adapter_config["cf_access_client_secret"] = client_secret
                 model_id = f"{provider}:{model_name}"
                 manager.register_model(
                     model_id,

@@ -14,6 +14,21 @@ DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434/v1"
 OLLAMA_PLACEHOLDER_API_KEY = "ollama"
 
 
+def _environment_value(name: str) -> str:
+    """Read a process variable, then the persistent Windows user environment."""
+    value = str(os.environ.get(name, "") or "").strip()
+    if value or os.name != "nt":
+        return value
+    try:
+        import winreg
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as key:
+            stored, _ = winreg.QueryValueEx(key, name)
+        return str(stored or "").strip()
+    except (FileNotFoundError, OSError):
+        return ""
+
+
 class OllamaModelAdapter(AIModelAdapter):
     """Use the official OpenAI SDK with a local or tunneled Ollama server."""
 
@@ -33,7 +48,7 @@ class OllamaModelAdapter(AIModelAdapter):
         **_: Any,
     ) -> None:
         self._model_name = str(model_name or "").strip()
-        self._base_url = self._normalize_base_url(base_url or os.environ.get("OLLAMA_BASE_URL", ""))
+        self._base_url = self._normalize_base_url(base_url or _environment_value("OLLAMA_BASE_URL"))
         self._api_key = str(api_key or OLLAMA_PLACEHOLDER_API_KEY).strip()
         self._max_tokens = int(max_tokens) if max_tokens is not None else None
         self._timeout = float(timeout)
@@ -44,12 +59,12 @@ class OllamaModelAdapter(AIModelAdapter):
         client_id = str(
             cf_access_client_id
             if cf_access_client_id is not None
-            else os.environ.get("CF_ACCESS_CLIENT_ID", "")
+            else _environment_value("CF_ACCESS_CLIENT_ID")
         ).strip()
         client_secret = str(
             cf_access_client_secret
             if cf_access_client_secret is not None
-            else os.environ.get("CF_ACCESS_CLIENT_SECRET", "")
+            else _environment_value("CF_ACCESS_CLIENT_SECRET")
         ).strip()
         if bool(client_id) != bool(client_secret):
             raise ValueError("Cloudflare Access yêu cầu đủ Client ID và Client Secret")
