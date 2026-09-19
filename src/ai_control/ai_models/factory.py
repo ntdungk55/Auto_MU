@@ -55,9 +55,11 @@ class AIModelFactory:
 def create_default_ai_model_factory() -> AIModelFactory:
     """Return the app factory with every currently installed adapter."""
     from src.ai_control.ai_models.gemini_adapter import GeminiModelAdapter
+    from src.ai_control.ai_models.ollama_adapter import OllamaModelAdapter
     from src.ai_control.ai_models.openrouter_adapter import OpenRouterModelAdapter
 
     factory = AIModelFactory()
     factory.register("gemini", GeminiModelAdapter)
+    factory.register("ollama", OllamaModelAdapter)
     factory.register("openrouter", OpenRouterModelAdapter)
     return factory

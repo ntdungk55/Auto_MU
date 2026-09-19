@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 from .application.prompt_builder import PromptBuilder
 from .application.event_detector import EventDetector
@@ -28,7 +29,7 @@ def create_ai_process_controller(
     api_key: str | None = None,
     model_name: str | None = None,
     provider: str | None = None,
-    provider_configs: dict[str, dict[str, str]] | None = None,
+    provider_configs: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[AIProcessController, ScenarioManager]:
     """Build the UI-independent controller and its scenario-management API."""
     root = Path(__file__).resolve().parent
@@ -50,19 +51,43 @@ def create_ai_process_controller(
     provider_name = str(provider or agent_settings.get("provider", "openrouter")).strip().casefold()
     configs = dict(provider_configs or {})
     if not configs:
-        configs[provider_name] = {
-            "api_key": api_key if api_key is not None else os.environ.get(f"{provider_name.upper()}_API_KEY", ""),
-            "model_name": model_name if model_name is not None else str(agent_settings.get("model", "")),
-        }
+        configured_model = model_name if model_name is not None else str(agent_settings.get("model", ""))
+        if provider_name == "ollama":
+            configs[provider_name] = {
+                "model_name": configured_model or os.environ.get("OLLAMA_MODEL", ""),
+                "base_url": os.environ.get("OLLAMA_BASE_URL", ""),
+                "cf_access_client_id": os.environ.get("CF_ACCESS_CLIENT_ID", ""),
+                "cf_access_client_secret": os.environ.get("CF_ACCESS_CLIENT_SECRET", ""),
+            }
+        else:
+            configs[provider_name] = {
+                "api_key": api_key if api_key is not None else os.environ.get(f"{provider_name.upper()}_API_KEY", ""),
+                "model_name": configured_model,
+            }
     manager = AIManager()
     ordered_providers = [provider_name, *(name for name in configs if name != provider_name)]
     for name in ordered_providers:
         config = configs.get(name, {})
         configured_model = str(config.get("model_name", "") or "").strip()
-        configured_key = str(config.get("api_key", "") or "").strip()
-        if not configured_model or not configured_key:
+        if not configured_model:
             continue
-        adapter_config: dict[str, object] = {"api_key": configured_key}
+        adapter_config: dict[str, object] = {}
+        if name == "ollama":
+            for key in (
+                "base_url",
+                "cf_access_client_id",
+                "cf_access_client_secret",
+                "max_tokens",
+                "timeout",
+                "max_retries",
+            ):
+                if config.get(key) not in (None, ""):
+                    adapter_config[key] = config[key]
+        else:
+            configured_key = str(config.get("api_key", "") or "").strip()
+            if not configured_key:
+                continue
+            adapter_config["api_key"] = configured_key
         if name == "gemini":
             try:
                 import google.generativeai as genai

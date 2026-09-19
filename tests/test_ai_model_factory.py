@@ -68,7 +68,7 @@ def test_factory_rejects_unknown_and_duplicate_provider():
 
 
 def test_default_factory_contains_configured_providers():
-    assert create_default_ai_model_factory().available_providers() == ("gemini", "openrouter")
+    assert create_default_ai_model_factory().available_providers() == ("gemini", "ollama", "openrouter")
 
 
 def test_system_prompt_loader_reads_utf8_and_returns_checksum(tmp_path):
