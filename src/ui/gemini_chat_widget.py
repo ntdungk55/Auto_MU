@@ -1083,7 +1083,11 @@ class GeminiChatWidget(QWidget):
         root = Path(__file__).resolve().parents[2]
         prompt_path = root / "scenario_engine" / "prompt" / "system_prompt" / "scenario_engine_system_prompt.md"
         base_prompt = prompt_path.read_text(encoding="utf-8-sig").strip()
-        scenario_json = json.dumps(scenario_snapshot, ensure_ascii=False, indent=2)
+        scenario_json = json.dumps(
+            scenario_snapshot,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
         return (
             f"{base_prompt}\n\n"
             "## Scenario catalog for this chat session\n\n"

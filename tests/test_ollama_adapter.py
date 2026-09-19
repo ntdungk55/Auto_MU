@@ -97,6 +97,7 @@ def test_ollama_adapter_uses_openai_client_with_cloudflare_headers_and_tools():
     assert first.usage.total_tokens == 16
     assert final.text == "done"
     assert client.chat.completions.requests[0]["tools"][0]["function"]["name"] == "get_state"
+    assert client.chat.completions.requests[0]["extra_body"] == {"think": False}
     assert client.chat.completions.requests[1]["messages"][-2]["tool_call_id"] == "call-ollama-1"
 
 

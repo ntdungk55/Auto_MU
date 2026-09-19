@@ -151,6 +151,7 @@ class OllamaModelAdapter(AIModelAdapter):
             prompt,
             tools,
             max_tokens=self._max_tokens,
+            completion_options={"extra_body": {"think": False}},
         )
         if history:
             session._history.extend(history)
