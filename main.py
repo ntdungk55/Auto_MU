@@ -1630,8 +1630,8 @@ class MainWindow(QMainWindow):
     def _save_ai_settings_for_target(self, target: object, provider: str, model: str) -> None:
         clean_provider = str(provider or "").strip().casefold()
         clean_model = str(model or "").strip()
-        if clean_provider not in {"openrouter", "gemini", "ollama"} or not clean_model:
-            raise ValueError("Provider hoặc model của tab AI Chat không hợp lệ")
+        if clean_provider not in {"openrouter", "gemini", "ollama"}:
+            raise ValueError("Provider của tab AI Chat không hợp lệ")
         state = self._load_app_state()
         by_process = state.setdefault("ai_chat_settings_by_process", {})
         by_process[self._ai_process_key(target)] = {
@@ -1674,13 +1674,18 @@ class MainWindow(QMainWindow):
     def _save_ai_model(self, provider: str, model_name: str) -> None:
         provider = str(provider or "openrouter").strip().casefold()
         model_name = str(model_name or "").strip()
-        if not model_name:
-            return
         state = self._load_app_state()
-        state[f"{provider}_model_name"] = model_name
+        state_key = f"{provider}_model_name"
+        if model_name:
+            state[state_key] = model_name
+        else:
+            state[state_key] = ""
         self._save_app_state(state)
         if provider == self._get_saved_ai_provider():
-            os.environ["AI_MODEL_NAME"] = model_name
+            if model_name:
+                os.environ["AI_MODEL_NAME"] = model_name
+            else:
+                os.environ.pop("AI_MODEL_NAME", None)
 
     def _get_saved_gemini_key(self) -> str:
         """Load Gemini API key from app_state.json (DPAPI-protected)."""

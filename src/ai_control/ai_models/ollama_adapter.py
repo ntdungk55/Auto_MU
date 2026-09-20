@@ -161,14 +161,19 @@ class OllamaModelAdapter(AIModelAdapter):
         raise RuntimeError("Không kết nối được Ollama")
 
     def validate(self) -> None:
+        available = set(self.available_models())
+        if self._model_name not in available:
+            choices = ", ".join(sorted(item for item in available if item)) or "không có"
+            raise ValueError(f"Ollama model không tồn tại: {self._model_name}. Đang có: {choices}")
+
+    def available_models(self) -> tuple[str, ...]:
+        """Return the model names currently installed on the Ollama server."""
         available = {
             str(model.get("name") or model.get("model") or "").strip()
             for model in self._request_json("/api/tags").get("models", [])
             if isinstance(model, dict)
         }
-        if self._model_name not in available:
-            choices = ", ".join(sorted(item for item in available if item)) or "không có"
-            raise ValueError(f"Ollama model không tồn tại: {self._model_name}. Đang có: {choices}")
+        return tuple(sorted((item for item in available if item), key=str.casefold))
 
     def start_chat(
         self,

@@ -3,9 +3,10 @@ from types import SimpleNamespace
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication
 
-from src.ui.gemini_chat_widget import GeminiSettingsDialog, GeminiChatWidget
+from src.ui.gemini_chat_widget import GeminiSettingsDialog, GeminiChatWidget, _ChatBubble
 
 
 APP = QApplication.instance() or QApplication([])
@@ -27,6 +28,20 @@ def test_provider_change_uses_its_models_and_never_reuses_the_previous_key():
     assert dialog.model_combo.findData("google/gemini-2.5-flash") >= 0
     dialog.save_model()
     assert saved_models == [("openrouter", "google/gemini-2.5-flash")]
+
+
+def test_chat_bubble_renders_safe_markdown_and_simplifies_inline_math():
+    bubble = _ChatBubble(
+        "**Map**: `Kanturu` và $abs(x - 140) <= 20$\n\n<img src='bad'>",
+        side="left",
+    )
+
+    rendered = bubble.label.text()
+    assert bubble.label.textFormat() == Qt.TextFormat.RichText
+    assert "font-weight:700" in rendered
+    assert "font-family:'monospace'" in rendered
+    assert "$abs" not in rendered
+    assert "&lt;img src='bad'&gt;" in rendered
 
 
 def test_provider_sdk_packages_are_selected_by_provider():
@@ -54,6 +69,7 @@ def test_ollama_provider_offers_the_two_local_models_without_an_api_key():
     dialog = GeminiSettingsDialog(
         initial_provider="ollama",
         initial_model="gemma4:e2b",
+        ollama_models=["gemma4:e2b", "MichelRosselli/bonsai-27b:latest"],
     )
 
     assert dialog.selected_provider() == "ollama"
@@ -63,6 +79,83 @@ def test_ollama_provider_offers_the_two_local_models_without_an_api_key():
     ]
     assert dialog.key_input.isEnabled() is False
     assert dialog.refresh_models_btn.isHidden() is True
+
+
+def test_ollama_model_refresh_replaces_a_removed_saved_model(monkeypatch):
+    import src.ai_control.ai_models.ollama_adapter as adapter_module
+
+    class FakeAdapter:
+        def __init__(self, **_kwargs):
+            pass
+
+        def available_models(self):
+            return ("gemma4:e2b",)
+
+    monkeypatch.setattr(adapter_module, "OllamaModelAdapter", FakeAdapter)
+    saved_models = []
+    widget = GeminiChatWidget(
+        load_saved_provider=lambda: "ollama",
+        load_saved_model=lambda provider: "MichelRosselli/bonsai-27b:latest",
+        save_model=lambda provider, model: saved_models.append((provider, model)),
+        managed_process_tab=True,
+    )
+
+    assert widget._refresh_ollama_models() == ["gemma4:e2b"]
+    assert widget._current_model() == "gemma4:e2b"
+    assert saved_models == [("ollama", "gemma4:e2b")]
+
+
+def test_ollama_model_refresh_clears_selection_when_server_is_empty(monkeypatch):
+    import src.ai_control.ai_models.ollama_adapter as adapter_module
+
+    class FakeAdapter:
+        def __init__(self, **_kwargs):
+            pass
+
+        def available_models(self):
+            return ()
+
+    monkeypatch.setattr(adapter_module, "OllamaModelAdapter", FakeAdapter)
+    saved_models = []
+    widget = GeminiChatWidget(
+        load_saved_provider=lambda: "ollama",
+        load_saved_model=lambda provider: "removed:model",
+        save_model=lambda provider, model: saved_models.append((provider, model)),
+        managed_process_tab=True,
+    )
+
+    assert widget._refresh_ollama_models() == []
+    assert widget._current_model() == ""
+    assert widget.settings_btn.text().startswith("Chọn model")
+    assert saved_models == [("ollama", "")]
+
+
+def test_process_does_not_connect_when_ollama_has_no_models(monkeypatch):
+    target = SimpleNamespace(
+        target_id="123:456",
+        hwnd=456,
+        process_name="game.exe",
+        window_title="MU GameThuVN",
+    )
+    controller_calls = []
+    widget = GeminiChatWidget(
+        load_saved_provider=lambda: "ollama",
+        load_saved_model=lambda provider: "removed:model",
+        load_tab_ai_settings=lambda selected: {
+            "provider": "ollama",
+            "model": "removed:model",
+        },
+        create_ai_process_controller=lambda *_args: controller_calls.append(True),
+        managed_process_tab=True,
+    )
+    monkeypatch.setattr(widget, "_refresh_ollama_models", lambda selected=None: [])
+    widget.process_combo.addItem("MU GameThuVN", target)
+
+    widget._on_process_selected(widget.process_combo.count() - 1)
+
+    assert controller_calls == []
+    assert widget._chat is None
+    assert widget.status_lbl.text() == "Ollama không có model; chưa kết nối"
 
 
 def test_each_chat_tab_can_load_its_own_provider_and_model():
@@ -125,6 +218,10 @@ def test_composer_places_settings_with_attachment_and_automatic_actions():
     assert widget.settings_btn in action_widgets
     assert widget.ai_activity_btn in action_widgets
     assert "gemma4:e2b" in widget.settings_btn.text()
+    assert widget.attach_btn.icon().isNull() is False
+    assert widget.auto_messages_btn.icon().isNull() is False
+    assert "border-radius:11px" in widget.attach_btn.styleSheet()
+    assert "border-radius:11px" in widget.auto_messages_btn.styleSheet()
 
 
 def test_last_selected_model_is_restored_in_a_new_chat_widget():

@@ -12,8 +12,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Callable
 
-from PyQt6.QtCore import Qt, pyqtSignal, QObject, QTimer, QRectF, QTime, QEvent
-from PyQt6.QtGui import QPixmap, QKeyEvent, QColor, QPainter
+from PyQt6.QtCore import Qt, pyqtSignal, QObject, QTimer, QRectF, QTime, QEvent, QSize
+from PyQt6.QtGui import QPixmap, QKeyEvent, QColor, QPainter, QTextDocument
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -35,6 +35,7 @@ from PyQt6.QtWidgets import (
     QTabWidget,
     QTabBar,
     QApplication,
+    QStyle,
 )
 
 from src.ai_control.scenario_tool_client import ScenarioToolClient
@@ -145,10 +146,16 @@ class _ChatBubble(QWidget):
 
         self._plain_text = str(text or "")
         self._copy_targets: list[QWidget] = [self, bubble]
-        display_text = self._plain_text.replace("_", "_\u200b")
-        label = QLabel(display_text)
+        display_text = re.sub(r"(?<!\\)\$([^$\n]+)\$", r"\1", self._plain_text)
+        markdown = QTextDocument()
+        markdown.setDefaultStyleSheet(
+            "p{margin:0 0 6px 0;} ul,ol{margin-top:2px;margin-bottom:6px;} "
+            "pre,code{font-family:Consolas,'Courier New',monospace;}"
+        )
+        markdown.setMarkdown(display_text, QTextDocument.MarkdownFeature.MarkdownNoHTML)
+        label = QLabel(markdown.toHtml())
         self.label = label
-        label.setTextFormat(Qt.TextFormat.PlainText)
+        label.setTextFormat(Qt.TextFormat.RichText)
         label.setWordWrap(True)
         label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -315,6 +322,7 @@ class GeminiSettingsDialog(QDialog):
         initial_key: str = "",
         initial_model: str = "google/gemini-2.5-flash",
         initial_provider: str = "openrouter",
+        ollama_models: list[str] | None = None,
         on_save_key: Callable[[str, str], None] | None = None,
         on_clear_key: Callable[[str], None] | None = None,
         on_save_model: Callable[[str, str], None] | None = None,
@@ -369,7 +377,7 @@ class GeminiSettingsDialog(QDialog):
         self._provider_models = {
             "openrouter": ["google/gemini-2.5-flash", "openai/gpt-4o-mini", "anthropic/claude-3.5-haiku", "Custom…"],
             "gemini": ["gemini-2.5-flash", "gemini-2.5-pro", "Custom…"],
-            "ollama": ["gemma4:e2b", "MichelRosselli/bonsai-27b:latest"],
+            "ollama": list(ollama_models or []),
         }
         model_row.addWidget(self.model_combo, 1)
 
@@ -734,6 +742,8 @@ class GeminiChatWidget(QWidget):
         self._save_tab_ai_settings = save_tab_ai_settings
         self._tab_provider: str | None = None
         self._tab_models: dict[str, str] = {}
+        self._ollama_models: list[str] = []
+        self._ollama_models_loaded = False
         self._managed_process_tab = managed_process_tab
         self._on_managed_process_change = on_managed_process_change
         self._on_managed_process_title_changed = on_managed_process_title_changed
@@ -873,8 +883,17 @@ class GeminiChatWidget(QWidget):
             "QPushButton:disabled{color:#777;}"
         )
 
-        self.attach_btn = QPushButton("＋ Đính kèm")
-        self.attach_btn.setStyleSheet(action_style)
+        self.attach_btn = QPushButton("Đính kèm")
+        self.attach_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogOpenButton))
+        self.attach_btn.setIconSize(QSize(16, 16))
+        self.attach_btn.setMinimumHeight(30)
+        self.attach_btn.setStyleSheet(
+            "QPushButton{background:#075985;color:#f0f9ff;border:1px solid #38bdf8;"
+            "border-radius:11px;padding:5px 11px;font-weight:600;}"
+            "QPushButton:hover{background:#0369a1;border-color:#7dd3fc;}"
+            "QPushButton:pressed{background:#0c4a6e;}"
+            "QPushButton:disabled{background:#334155;color:#94a3b8;border-color:#475569;}"
+        )
         self.attach_btn.clicked.connect(self._pick_image)
         self.composer_actions.addWidget(self.attach_btn, 0)
 
@@ -884,7 +903,16 @@ class GeminiChatWidget(QWidget):
         self.composer_actions.addWidget(self.install_btn, 0)
 
         self.auto_messages_btn = QPushButton("Tự động")
-        self.auto_messages_btn.setStyleSheet(action_style)
+        self.auto_messages_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_BrowserReload))
+        self.auto_messages_btn.setIconSize(QSize(16, 16))
+        self.auto_messages_btn.setMinimumHeight(30)
+        self.auto_messages_btn.setStyleSheet(
+            "QPushButton{background:#713f12;color:#fffbeb;border:1px solid #f59e0b;"
+            "border-radius:11px;padding:5px 11px;font-weight:600;}"
+            "QPushButton:hover{background:#92400e;border-color:#fbbf24;}"
+            "QPushButton:pressed{background:#78350f;}"
+            "QPushButton:disabled{background:#44403c;color:#a8a29e;border-color:#57534e;}"
+        )
         self.auto_messages_btn.clicked.connect(self._open_auto_messages)
         self.composer_actions.addWidget(self.auto_messages_btn, 0)
 
@@ -968,6 +996,14 @@ class GeminiChatWidget(QWidget):
             return
 
         self._load_settings_for_target(target)
+        if self._current_provider() == "ollama":
+            models = self._refresh_ollama_models(target)
+            if models is None:
+                self.status_lbl.setText("Không tải được danh sách model Ollama")
+                return
+            if not models:
+                self.status_lbl.setText("Ollama không có model; chưa kết nối")
+                return
         self._refresh_install_button()
 
         if self._create_ai_process_controller is None:
@@ -1255,6 +1291,8 @@ class GeminiChatWidget(QWidget):
         tab_model = str(self._tab_models.get(provider, "") or "").strip()
         if tab_model:
             return tab_model
+        if provider == "ollama" and self._ollama_models_loaded:
+            return ""
         try:
             if self._load_saved_model is not None:
                 try:
@@ -1293,7 +1331,9 @@ class GeminiChatWidget(QWidget):
     def _save_current_tab_settings(self, provider: str, model: str) -> None:
         clean_provider = str(provider or "").strip().casefold()
         clean_model = str(model or "").strip()
-        if clean_provider not in {"openrouter", "gemini", "ollama"} or not clean_model:
+        if clean_provider not in {"openrouter", "gemini", "ollama"}:
+            return
+        if not clean_model and clean_provider != "ollama":
             return
         self._tab_provider = clean_provider
         self._tab_models[clean_provider] = clean_model
@@ -1305,6 +1345,39 @@ class GeminiChatWidget(QWidget):
         if target is not None and self._save_tab_ai_settings is not None:
             self._save_tab_ai_settings(target, clean_provider, clean_model)
         self._refresh_model_selector()
+
+    def _refresh_ollama_models(self, target: object | None = None) -> list[str] | None:
+        """Reload installed Ollama models and replace stale saved selections."""
+        ollama_is_current = self._current_provider() == "ollama"
+        previous = self._model_for_provider("ollama")
+        try:
+            from src.ai_control.ai_models.ollama_adapter import OllamaModelAdapter
+
+            adapter = OllamaModelAdapter(
+                model_name=previous or "__model_discovery__",
+                base_url=os.environ.get("OLLAMA_BASE_URL", "https://myllm.mcp88.uk/v1"),
+                timeout=10.0,
+                max_retries=0,
+            )
+            models = list(adapter.available_models())
+        except Exception as error:
+            self._append_system_text(f"Không tải được danh sách model Ollama: {error}")
+            return None
+
+        self._ollama_models = models
+        self._ollama_models_loaded = True
+        selected = previous if previous in models else (models[0] if models else "")
+        self._tab_models["ollama"] = selected
+        if selected != previous:
+            if ollama_is_current and self._save_provider_cb is not None:
+                self._save_provider_cb("ollama")
+            if self._save_model_cb is not None:
+                self._save_model_cb("ollama", selected)
+            selected_target = target if target is not None else self._selected_game_target
+            if ollama_is_current and selected_target is not None and self._save_tab_ai_settings is not None:
+                self._save_tab_ai_settings(selected_target, "ollama", selected)
+        self._refresh_model_selector()
+        return list(models)
 
     def _refresh_model_selector(self) -> None:
         button = getattr(self, "settings_btn", None)
@@ -1450,11 +1523,13 @@ class GeminiChatWidget(QWidget):
         threading.Thread(target=_worker, daemon=True).start()
 
     def _open_settings(self):
+        self._refresh_ollama_models()
         dlg = GeminiSettingsDialog(
             parent=self,
             initial_key=self._current_key(),
             initial_model=self._current_model(),
             initial_provider=self._current_provider(),
+            ollama_models=self._ollama_models,
             on_save_key=self._save_key_cb,
             on_clear_key=self._clear_saved_key_cb,
             on_save_model=lambda provider, model: self._tab_models.__setitem__(provider, model),
@@ -1606,6 +1681,20 @@ class GeminiChatWidget(QWidget):
             )
             return False
 
+        preferred_provider = self._current_provider()
+        if preferred_provider == "ollama":
+            if not self._ollama_models_loaded:
+                models = self._refresh_ollama_models(self._selected_game_target)
+                if models is None:
+                    self.status_lbl.setText("Không tải được danh sách model Ollama")
+                    return False
+            if not self._current_model():
+                self._chat = None
+                self._ai_manager = None
+                self._current_model_name = ""
+                self.status_lbl.setText("Ollama không có model; chưa kết nối")
+                return False
+
         try:
             from src.ai_control.ai_manager import AIManager
 
@@ -1613,7 +1702,6 @@ class GeminiChatWidget(QWidget):
             if not bool(scenario_snapshot.get("ok")):
                 raise RuntimeError(str(scenario_snapshot.get("error") or "Could not load scenarios."))
             tools = self._scenario_tool_client.refresh_tools(timeout_seconds=8.0)
-            preferred_provider = self._current_provider()
             # A tab's provider selection is explicit. Do not silently fail over to
             # another billable provider when the selected local model has a problem.
             providers = [preferred_provider]

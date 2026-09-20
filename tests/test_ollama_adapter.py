@@ -114,6 +114,19 @@ def test_ollama_adapter_rejects_unknown_model_during_validation():
         adapter.validate()
 
 
+def test_ollama_adapter_lists_only_current_server_models():
+    opener = _FakeOpener(
+        [{"models": [{"name": "z:model"}, {"model": "a:model"}, {"name": "z:model"}]}]
+    )
+    adapter = OllamaModelAdapter(
+        model_name="discovery",
+        base_url="http://127.0.0.1:11434",
+        opener=opener,
+    )
+
+    assert adapter.available_models() == ("a:model", "z:model")
+
+
 def test_ollama_adapter_requires_complete_cloudflare_credentials():
     with pytest.raises(ValueError, match="Client ID và Client Secret"):
         OllamaModelAdapter(
