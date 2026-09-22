@@ -1514,6 +1514,8 @@ class MainWindow(QMainWindow):
             save_provider=self._save_ai_provider,
             load_auto_messages_for_target=self._load_ai_auto_messages_for_target,
             save_auto_messages_for_target=self._save_ai_auto_messages_for_target,
+            load_event_registrations_for_target=self._load_ai_event_registrations_for_target,
+            save_event_registrations_for_target=self._save_ai_event_registrations_for_target,
             load_ai_settings_for_target=self._load_ai_settings_for_target,
             save_ai_settings_for_target=self._save_ai_settings_for_target,
             create_ai_process_controller=self._create_ai_process_controller,
@@ -1572,6 +1574,20 @@ class MainWindow(QMainWindow):
     def _save_ai_auto_messages(self, messages: list[dict]) -> None:
         state = self._load_app_state()
         state["ai_auto_messages"] = messages
+        self._save_app_state(state)
+
+    def _load_ai_event_registrations_for_target(self, target: object) -> list[dict]:
+        """Load registered events for one selected game target."""
+        state = self._load_app_state()
+        by_process = state.get("ai_event_registrations_by_process", {})
+        events = by_process.get(self._ai_process_key(target), []) if isinstance(by_process, dict) else []
+        return [dict(item) for item in events if isinstance(item, dict) and item.get("event_id")]
+
+    def _save_ai_event_registrations_for_target(self, target: object, events: list[dict]) -> None:
+        """Persist registered events for one selected game target."""
+        state = self._load_app_state()
+        by_process = state.setdefault("ai_event_registrations_by_process", {})
+        by_process[self._ai_process_key(target)] = [dict(item) for item in events if item.get("event_id")]
         self._save_app_state(state)
 
     @staticmethod

@@ -20,10 +20,8 @@ from src.ai_control.companion_switcher import switch_to_companion_character as r
 from src.ai_control.companion_switcher import verify_and_close_companion_management_dialog as run_open_companion_dialog
 from src.ai_control.companion_info import get_companion_information
 from src.ai_control.companion_summoner import summon_companion_character as run_companion_summon
-from src.ai_control.current_character_info import get_current_character_map as read_current_character_map
 from src.ai_control.daily_events_info import get_daily_events_dialog_info as read_daily_events
 from src.ai_control.auto_play_control import (
-    get_companion_training_state as read_companion_training_state,
     set_main_character_auto_z as set_auto_z_state,
     start_autoplay_management as run_start_autoplay_management,
 )
@@ -402,10 +400,20 @@ def switch_to_companion_character() -> dict[str, Any]:
     return _run_companion_tool(run_companion_switch)
 
 
-def _run_companion_tool(action: Callable[..., dict[str, Any]], **arguments: Any) -> dict[str, Any]:
-    """Keep game actions on the selected window and keep library output off MCP stdout."""
+def _run_companion_tool(
+    action: Callable[..., dict[str, Any]],
+    *,
+    wake_up: bool = True,
+    **arguments: Any,
+) -> dict[str, Any]:
+    """Run a selected-window tool, waking it only for input-producing actions.
+
+    Read-only window-state tools must pass ``wake_up=False``. Capturing and OCR
+    are deliberately separated from background mouse/keyboard input so polling
+    cannot interfere with the player's control of the game.
+    """
     captured_stdout = io.StringIO()
-    wake_up: dict[str, Any] | None = None
+    wake_result: dict[str, Any] | None = None
     try:
         with contextlib.redirect_stdout(captured_stdout):
             windows, error = _selected_visible_windows()
@@ -416,7 +424,8 @@ def _run_companion_tool(action: Callable[..., dict[str, Any]], **arguments: Any)
                     "success": False, "selection_required": True,
                     "error": "Select exactly one game window in Gemini Chat",
                 }
-            wake_up = _wake_selected_window(windows[0])
+            if wake_up:
+                wake_result = _wake_selected_window(windows[0])
             result = action(windows[0], **arguments)
     except Exception as error:
         result = {
@@ -429,8 +438,8 @@ def _run_companion_tool(action: Callable[..., dict[str, Any]], **arguments: Any)
                 "traceback": traceback.format_exc(limit=5),
             },
         }
-    if wake_up is not None:
-        result["wake_up"] = wake_up
+    if wake_result is not None:
+        result["wake_up"] = wake_result
     result.setdefault("selection_required", False)
     if result.get("success") is False:
         debug = result.setdefault("debug", {})
@@ -454,17 +463,6 @@ def open_companion_management_dialog() -> dict[str, Any]:
 
 
 @mcp.tool()
-def get_current_character_map() -> dict[str, Any]:
-    """Read the selected active character's current map and coordinates from the HUD.
-
-    This is read-only. It returns map and position only when OCR validates the
-    taught mainInfo.map and mainInfo.position regions.
-    It does not open a dialog or change character.
-    """
-    return _run_companion_tool(read_current_character_map)
-
-
-@mcp.tool()
 def set_main_character_auto_z(running: bool) -> dict[str, Any]:
     """Ensure the selected main character's Auto Z is running or stopped.
 
@@ -484,16 +482,6 @@ def start_autoplay_management() -> dict[str, Any]:
     button, and verifies the running icon afterwards.
     """
     return _run_companion_tool(run_start_autoplay_management)
-
-
-@mcp.tool()
-def get_companion_training_state() -> dict[str, Any]:
-    """Read whether the selected character's slot-1 companion is training.
-
-    A right-pointing triangle means `training`; two vertical bars mean
-    `not_training`. This tool only captures and matches the taught icon.
-    """
-    return _run_companion_tool(read_companion_training_state)
 
 
 @mcp.tool()

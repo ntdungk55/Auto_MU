@@ -41,6 +41,12 @@ from PyQt6.QtWidgets import (
 from src.ai_control.scenario_tool_client import ScenarioToolClient
 from src.ai_control.chat_message_queue import ChatMessageQueue, QueuedChatMessage
 from src.ai_control.game_window_initializer import prepare_game_window_for_ocr
+from src.logic.event_observer import (
+    EventTrigger,
+    LocationObserverService,
+    registered_event_from_dict,
+)
+from src.ui.event_management_dialog import EventManagementDialog
 
 try:
     from PIL import Image
@@ -60,6 +66,8 @@ class _Signals(QObject):
     set_busy = pyqtSignal(bool)
     refresh_install = pyqtSignal()
     turn_finished = pyqtSignal()
+    event_status = pyqtSignal(str, str)
+    event_triggered = pyqtSignal(object)
 
 class _PromptTextEdit(QTextEdit):
     """Text input that accepts dropping an image file as an attachment (Messenger-like)."""
@@ -147,6 +155,8 @@ class _ChatBubble(QWidget):
         self._plain_text = str(text or "")
         self._copy_targets: list[QWidget] = [self, bubble]
         display_text = re.sub(r"(?<!\\)\$([^$\n]+)\$", r"\1", self._plain_text)
+        if side == "tool":
+            display_text = display_text.replace("_", "_\u200b")
         markdown = QTextDocument()
         markdown.setDefaultStyleSheet(
             "p{margin:0 0 6px 0;} ul,ol{margin-top:2px;margin-bottom:6px;} "
@@ -375,7 +385,7 @@ class GeminiSettingsDialog(QDialog):
         self.model_combo = QComboBox()
         self.model_combo.setMaxVisibleItems(25)
         self._provider_models = {
-            "openrouter": ["google/gemini-2.5-flash", "openai/gpt-4o-mini", "anthropic/claude-3.5-haiku", "Custom…"],
+            "openrouter": [],
             "gemini": ["gemini-2.5-flash", "gemini-2.5-pro", "Custom…"],
             "ollama": list(ollama_models or []),
         }
@@ -433,12 +443,18 @@ class GeminiSettingsDialog(QDialog):
                     self.model_combo.addItem(
                         self._openrouter_model_label(model_id, prompt_price, completion_price), model_id
                     )
-            else:
-                for model_id in self._provider_models["openrouter"]:
-                    if model_id != "Custom…":
-                        self.model_combo.addItem(f"{model_id} — đang tải giá", model_id)
-            self.model_combo.addItem("Custom…", "custom")
             index = self.model_combo.findData(selected_model)
+            if index >= 0:
+                self.model_combo.setCurrentIndex(index)
+                self.custom_model_input.clear()
+            elif self.model_combo.count() > 0:
+                self.model_combo.setCurrentIndex(0)
+                self.custom_model_input.clear()
+            else:
+                self.custom_model_input.clear()
+            self.model_combo.blockSignals(False)
+            self._on_model_changed(0)
+            return
         else:
             self.model_combo.addItems(self._provider_models[provider])
             index = self.model_combo.findText(selected_model)
@@ -489,7 +505,8 @@ class GeminiSettingsDialog(QDialog):
 
     @staticmethod
     def _openrouter_model_label(model_id: str, prompt_price: float, completion_price: float) -> str:
-        return f"{model_id} — ${prompt_price * 1_000_000:g} in / ${completion_price * 1_000_000:g} out / 1M token"
+        free_label = " [FREE]" if prompt_price == 0 and completion_price == 0 else ""
+        return f"{model_id}{free_label} — ${prompt_price * 1_000_000:g} in / ${completion_price * 1_000_000:g} out / 1M token"
 
     @staticmethod
     def _parse_openrouter_models(payload: object) -> list[tuple[str, float, float]]:
@@ -509,9 +526,18 @@ class GeminiSettingsDialog(QDialog):
                 completion_price = float(pricing.get("completion", 0))
             except (KeyError, TypeError, ValueError):
                 continue
-            if model_id and prompt_price >= 0 and completion_price >= 0:
+            if model_id and prompt_price == 0 and completion_price == 0:
                 models.append((model_id, prompt_price, completion_price))
-        return sorted(models, key=lambda model: model[0].casefold())
+        return sorted(
+            models,
+            key=lambda model: (
+                0 if model[1] == 0 and model[2] == 0 else 1,
+                model[1] + model[2],
+                model[1],
+                model[2],
+                model[0].casefold(),
+            ),
+        )
 
     def _load_openrouter_models(self) -> None:
         if self._is_loading_openrouter_models:
@@ -709,6 +735,8 @@ class GeminiChatWidget(QWidget):
         save_provider: Callable[[str], None] | None = None,
         load_auto_messages: Callable[[], list[dict]] | None = None,
         save_auto_messages: Callable[[list[dict]], None] | None = None,
+        load_event_registrations: Callable[[], list[dict]] | None = None,
+        save_event_registrations: Callable[[list[dict]], None] | None = None,
         create_ai_process_controller: Callable[[str, str, str], object] | None = None,
         load_tab_ai_settings: Callable[[object], dict[str, str]] | None = None,
         save_tab_ai_settings: Callable[[object, str, str], None] | None = None,
@@ -737,6 +765,8 @@ class GeminiChatWidget(QWidget):
         self._save_provider_cb = save_provider
         self._load_auto_messages = load_auto_messages
         self._save_auto_messages = save_auto_messages
+        self._load_event_registrations = load_event_registrations
+        self._save_event_registrations = save_event_registrations
         self._create_ai_process_controller = create_ai_process_controller
         self._load_tab_ai_settings = load_tab_ai_settings
         self._save_tab_ai_settings = save_tab_ai_settings
@@ -755,13 +785,21 @@ class GeminiChatWidget(QWidget):
         self._turn_running = False
         self._active_turn_cancel: threading.Event | None = None
         self._message_queue = ChatMessageQueue()
+        self._active_queued_message: QueuedChatMessage | None = None
         self._auto_rules = self._load_auto_rules()
+        self._event_rules = self._load_event_rules()
+        self._event_service: LocationObserverService | None = None
+        self._event_statuses: dict[str, str] = {}
         self._auto_next_due: dict[str, float] = {}
         self._queue_bubble: QPushButton | None = None
         self._queue_expanded = False
+        self._event_status_bubble: QPushButton | None = None
+        self._event_status_expanded = False
         self._auto_status_bubble: QPushButton | None = None
         self._auto_status_expanded = False
         self._signals.turn_finished.connect(self._on_turn_finished, Qt.ConnectionType.QueuedConnection)
+        self._signals.event_status.connect(self._on_event_status, Qt.ConnectionType.QueuedConnection)
+        self._signals.event_triggered.connect(self._on_event_triggered, Qt.ConnectionType.QueuedConnection)
 
         self._build_ui()
         self._reset_auto_schedule()
@@ -902,6 +940,12 @@ class GeminiChatWidget(QWidget):
         self.install_btn.clicked.connect(self._install_selected_provider_sdk)
         self.composer_actions.addWidget(self.install_btn, 0)
 
+        self.event_messages_btn = QPushButton("Event")
+        self.event_messages_btn.setToolTip("Danh sách đăng ký event")
+        self.event_messages_btn.setMinimumHeight(30)
+        self.event_messages_btn.clicked.connect(self._open_event_messages)
+        self.composer_actions.addWidget(self.event_messages_btn, 0)
+
         self.auto_messages_btn = QPushButton("Tự động")
         self.auto_messages_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_BrowserReload))
         self.auto_messages_btn.setIconSize(QSize(16, 16))
@@ -941,10 +985,12 @@ class GeminiChatWidget(QWidget):
         self._refresh_install_button()
         self._refresh_ai_activity_button()
         self._refresh_queue_bubble()
+        self._refresh_event_status_bubble()
         QTimer.singleShot(0, self._scroll_to_bottom)
 
     def _refresh_processes(self):
         """Load game windows without connecting or exposing the chat yet."""
+        self._stop_event_service()
         self._set_chat_available(False)
         self._detach_ai_process_controller()
         self._dispose_scenario_tools()
@@ -987,6 +1033,7 @@ class GeminiChatWidget(QWidget):
 
     def _on_process_selected(self, index: int):
         target = self.process_combo.itemData(index)
+        self._stop_event_service()
         self._set_chat_available(False)
         self._detach_ai_process_controller()
         self._dispose_scenario_tools()
@@ -1045,6 +1092,10 @@ class GeminiChatWidget(QWidget):
         self._set_chat_available(True)
         self.focus_game_btn.setEnabled(True)
         self._selected_game_target = target
+        self._event_rules = self._load_event_rules()
+        self._event_statuses = {str(item.get("event_id")): "Waiting for initial state" for item in self._event_rules}
+        self._restart_event_service()
+        self._refresh_event_status_bubble()
         self._append_system_text(f"Đã chọn process: {target.window_title}")
 
     def _on_process_combo_changed(self, index: int) -> None:
@@ -1086,6 +1137,7 @@ class GeminiChatWidget(QWidget):
 
     def release_process_target(self) -> None:
         """Stop all resources that belong to this process tab without closing the game."""
+        self._stop_event_service()
         self._cancel_active_turn()
         self._message_queue.clear()
         self._auto_timer.stop()
@@ -1608,7 +1660,7 @@ class GeminiChatWidget(QWidget):
             return
         active = self._active_turn_cancel
         running = active is not None and not active.is_set()
-        button.setText("■" if running else "↑")
+        button.setText("■" if running else "↵")
         button.setEnabled(self._chat_ready or running)
         button.setToolTip("Hủy lượt AI hiện tại" if running else "Gửi tin nhắn (Enter)")
         button.setStyleSheet(
@@ -1630,6 +1682,9 @@ class GeminiChatWidget(QWidget):
         if active is None or active.is_set():
             return
         active.set()
+        if self._active_queued_message is not None:
+            self._message_queue.clear_active(self._active_queued_message)
+            self._active_queued_message = None
         self._message_queue.clear()
         self._queue_expanded = False
         self._refresh_queue_bubble()
@@ -1807,11 +1862,83 @@ class GeminiChatWidget(QWidget):
         QTimer.singleShot(0, self._scroll_to_bottom)
 
     def closeEvent(self, event):
+        self._stop_event_service()
         self._dispose_scenario_tools()
         try:
             super().closeEvent(event)
         except Exception:
             pass
+
+    def _load_event_rules(self) -> list[dict]:
+        """Load persisted event registrations for the current chat target."""
+        try:
+            rules = self._load_event_registrations() if self._load_event_registrations else []
+            return [dict(rule) for rule in rules if isinstance(rule, dict) and rule.get("event_id")]
+        except Exception:
+            return []
+
+    def _save_event_rules(self) -> None:
+        if self._save_event_registrations:
+            self._save_event_registrations([dict(rule) for rule in self._event_rules])
+
+    def _open_event_messages(self) -> None:
+        dialog = EventManagementDialog(self._event_rules, self._apply_event_rules, self._event_status, self)
+        dialog.exec()
+
+    def _apply_event_rules(self, rules: list[dict]) -> None:
+        self._event_rules = [dict(rule) for rule in rules]
+        self._save_event_rules()
+        self._restart_event_service()
+        self._refresh_event_status_bubble()
+
+    def _event_status(self, event_id: str) -> str:
+        event = next((item for item in self._event_rules if item.get("event_id") == event_id), None)
+        if event is None:
+            return "Deleted"
+        return self._event_statuses.get(event_id, "Waiting for initial state" if event.get("enabled", True) else "Disabled")
+
+    def _on_event_status(self, event_id: str, status: str) -> None:
+        if event_id == "__service__":
+            return
+        self._event_statuses[event_id] = status
+        self._refresh_event_status_bubble()
+
+    def _on_event_triggered(self, trigger: EventTrigger) -> None:
+        if trigger.suppressed_by_focus:
+            self._event_statuses[trigger.event_id] = "Ignored: game focused"
+            return
+        if self._message_queue.enqueue_event(trigger.prompt, trigger.event_id):
+            self._append_bubble(trigger.prompt, side="automatic")
+            self._refresh_queue_bubble()
+            self._start_next_queued_turn()
+
+    def _read_current_location(self) -> dict:
+        if self._scenario_tool_client is None:
+            return {"success": False, "error": "MCP client unavailable"}
+        return self._scenario_tool_client.call_tool("get_selected_game_state", {})
+
+    def _restart_event_service(self) -> None:
+        self._stop_event_service()
+        if self._selected_game_target is None or self._scenario_tool_client is None:
+            return
+        try:
+            events = [registered_event_from_dict(item) for item in self._event_rules]
+        except (TypeError, ValueError):
+            events = []
+        target_hwnd = int(getattr(self._selected_game_target, "hwnd", 0) or 0)
+        self._event_service = LocationObserverService(
+            self._read_current_location,
+            target_hwnd,
+            lambda event_id, status: self._signals.event_status.emit(event_id, status),
+            lambda trigger: self._signals.event_triggered.emit(trigger),
+        )
+        self._event_service.update_events(events)
+        self._event_service.start()
+
+    def _stop_event_service(self) -> None:
+        if self._event_service is not None:
+            self._event_service.stop()
+            self._event_service = None
 
     def _load_auto_rules(self) -> list[dict]:
         try:
@@ -1903,6 +2030,32 @@ class GeminiChatWidget(QWidget):
         self._refresh_queue_bubble()
         self._refresh_auto_status_bubble()
 
+    def _refresh_event_status_bubble(self) -> None:
+        enabled = [rule for rule in self._event_rules if rule.get("enabled", True)]
+        if not enabled:
+            if self._event_status_bubble is not None:
+                self._event_status_bubble.hide()
+            self._position_queue_bubble()
+            return
+        if self._event_status_bubble is None:
+            self._event_status_bubble = QPushButton(self.scroll.viewport())
+            self._event_status_bubble.setCheckable(True)
+            self._event_status_bubble.clicked.connect(self._open_event_messages)
+            self.scroll.viewport().installEventFilter(self)
+        title = f"Event ({len(enabled)})"
+        detail = "\n".join(f"• {rule.get('name', '')}: {self._event_status(rule.get('event_id', ''))}" for rule in enabled)
+        self._event_status_bubble.setText(title + ("\n" + detail if self._event_status_expanded else ""))
+        self._event_status_bubble.setChecked(self._event_status_expanded)
+        self._event_status_bubble.setStyleSheet(
+            "text-align:left;background:#312e81;color:#e0e7ff;border:1px solid #6366f1;border-radius:10px;padding:7px;font-size:11px;"
+        )
+        self._event_status_bubble.show()
+        self._position_queue_bubble()
+
+    def _toggle_event_status_bubble(self) -> None:
+        self._event_status_expanded = not self._event_status_expanded
+        self._refresh_event_status_bubble()
+
     def _refresh_auto_status_bubble(self) -> None:
         enabled = [rule for rule in self._auto_rules if rule.get("enabled", False)]
         if not enabled:
@@ -1965,9 +2118,21 @@ class GeminiChatWidget(QWidget):
             queue.move(max(8, viewport.width() - queue_width - 8), max(8, viewport.height() - queue_height - 8))
             queue.raise_()
 
+        event_bubble = self._event_status_bubble
+        event_width = 0
+        if event_bubble is not None and not event_bubble.isHidden():
+            event_width, event_height = self._overlay_bubble_size(
+                event_bubble, self._event_status_expanded,
+                len([rule for rule in self._event_rules if rule.get("enabled", True)]) + 1,
+                max(1, available_width - queue_width - 14), available_height,
+            )
+            event_bubble.setFixedSize(event_width, event_height)
+            event_bubble.move(max(8, viewport.width() - queue_width - event_width - 14), max(8, viewport.height() - event_height - 8))
+            event_bubble.raise_()
+
         automatic = self._auto_status_bubble
         if automatic is not None and not automatic.isHidden():
-            automatic_available_width = max(1, viewport.width() - queue_width - 22)
+            automatic_available_width = max(1, viewport.width() - queue_width - event_width - 36)
             auto_width, auto_height = self._overlay_bubble_size(
                 automatic, self._auto_status_expanded,
                 len([rule for rule in self._auto_rules if rule.get("enabled", False)]) + 1,
@@ -1977,7 +2142,7 @@ class GeminiChatWidget(QWidget):
             title = automatic.text().split("\n", 1)[0]
             automatic.setText(self._auto_status_text(title, enabled, auto_width))
             automatic.setFixedSize(auto_width, auto_height)
-            automatic.move(max(8, viewport.width() - queue_width - auto_width - 14), max(8, viewport.height() - auto_height - 8))
+            automatic.move(max(8, viewport.width() - queue_width - event_width - auto_width - 22), max(8, viewport.height() - auto_height - 8))
             automatic.raise_()
 
     @staticmethod
@@ -1997,12 +2162,17 @@ class GeminiChatWidget(QWidget):
         queued = self._message_queue.pop_next()
         if queued is None: return
         self._turn_running = True
+        self._active_queued_message = queued
+        self._message_queue.mark_active(queued)
         self._refresh_queue_bubble()
-        if queued.source == "automatic":
+        if queued.source in ("automatic", "event"):
             self._append_bubble(queued.text, side="automatic")
         self._dispatch_turn(queued)
 
     def _on_turn_finished(self) -> None:
+        if self._active_queued_message is not None:
+            self._message_queue.clear_active(self._active_queued_message)
+            self._active_queued_message = None
         self._turn_running = False
         self._active_turn_cancel = None
         self._refresh_managed_process_title()
@@ -2239,6 +2409,7 @@ class AIChatWorkspace(QWidget):
     def __init__(self, parent=None, *, load_saved_key=None, save_key=None, clear_saved_key=None,
                  load_saved_model=None, save_model=None, load_saved_provider=None, save_provider=None,
                  load_auto_messages_for_target=None, save_auto_messages_for_target=None,
+                 load_event_registrations_for_target=None, save_event_registrations_for_target=None,
                  load_ai_settings_for_target=None, save_ai_settings_for_target=None,
                  create_ai_process_controller=None):
         super().__init__(parent)
@@ -2251,6 +2422,8 @@ class AIChatWorkspace(QWidget):
         self._save_provider = save_provider
         self._load_auto_messages_for_target = load_auto_messages_for_target
         self._save_auto_messages_for_target = save_auto_messages_for_target
+        self._load_event_registrations_for_target = load_event_registrations_for_target
+        self._save_event_registrations_for_target = save_event_registrations_for_target
         self._load_ai_settings_for_target = load_ai_settings_for_target
         self._save_ai_settings_for_target = save_ai_settings_for_target
         self._create_ai_process_controller = create_ai_process_controller
@@ -2280,6 +2453,8 @@ class AIChatWorkspace(QWidget):
             load_saved_provider=self._load_saved_provider, save_provider=self._save_provider,
             load_tab_ai_settings=self._load_ai_settings_for_target,
             save_tab_ai_settings=self._save_ai_settings_for_target,
+            load_event_registrations=lambda: self._load_events_for_target(None),
+            save_event_registrations=lambda events: self._save_events_for_target(None, events),
             create_ai_process_controller=self._create_ai_process_controller, managed_process_tab=True,
             on_managed_process_change=self._change_tab_process,
             on_managed_process_title_changed=self._refresh_process_tab_title,
@@ -2321,6 +2496,13 @@ class AIChatWorkspace(QWidget):
 
     def _load_rules_for_target(self, target: object) -> list[dict]:
         return self._load_auto_messages_for_target(target) if self._load_auto_messages_for_target else []
+
+    def _load_events_for_target(self, target: object) -> list[dict]:
+        return self._load_event_registrations_for_target(target) if self._load_event_registrations_for_target and target is not None else []
+
+    def _save_events_for_target(self, target: object, events: list[dict]) -> None:
+        if self._save_event_registrations_for_target and target is not None:
+            self._save_event_registrations_for_target(target, events)
 
     def _save_rules_for_target(self, target: object, rules: list[dict]) -> None:
         if self._save_auto_messages_for_target:
@@ -2404,11 +2586,14 @@ class AIChatWorkspace(QWidget):
             return
         load_auto = lambda target=target: self._load_rules_for_target(target)
         save_auto = lambda rules, target=target: self._save_rules_for_target(target, rules)
+        load_events = lambda target=target: self._load_events_for_target(target)
+        save_events = lambda events, target=target: self._save_events_for_target(target, events)
         chat = GeminiChatWidget(
             load_saved_key=self._load_saved_key, save_key=self._save_key, clear_saved_key=self._clear_saved_key,
             load_saved_model=self._load_saved_model, save_model=self._save_model,
             load_saved_provider=self._load_saved_provider, save_provider=self._save_provider,
             load_auto_messages=load_auto, save_auto_messages=save_auto,
+            load_event_registrations=load_events, save_event_registrations=save_events,
             load_tab_ai_settings=self._load_ai_settings_for_target,
             save_tab_ai_settings=self._save_ai_settings_for_target,
             create_ai_process_controller=self._create_ai_process_controller, managed_process_tab=True,
@@ -2489,7 +2674,10 @@ class AIChatWorkspace(QWidget):
         if is_add_tab:
             chat._load_auto_messages = lambda target=target: self._load_rules_for_target(target)
             chat._save_auto_messages = lambda rules, target=target: self._save_rules_for_target(target, rules)
+            chat._load_event_registrations = lambda target=target: self._load_events_for_target(target)
+            chat._save_event_registrations = lambda events, target=target: self._save_events_for_target(target, events)
             chat._auto_rules = chat._load_auto_rules()
+            chat._event_rules = chat._load_event_rules()
             chat._reset_auto_schedule()
         chat.assign_process_target(target)
         if self._selected_target_is(chat, target):

@@ -25,9 +25,9 @@ def test_provider_change_uses_its_models_and_never_reuses_the_previous_key():
 
     assert dialog.selected_provider() == "openrouter"
     assert dialog.key_input.text() == ""
-    assert dialog.model_combo.findData("google/gemini-2.5-flash") >= 0
+    assert dialog.model_combo.findData("google/gemini-2.5-flash") == -1
     dialog.save_model()
-    assert saved_models == [("openrouter", "google/gemini-2.5-flash")]
+    assert saved_models == []
 
 
 def test_chat_bubble_renders_safe_markdown_and_simplifies_inline_math():
@@ -288,17 +288,25 @@ def test_ollama_tab_does_not_register_billable_fallback_providers(monkeypatch):
         refresh_tools=lambda timeout_seconds: [],
     )
     widget._scenario_system_prompt = lambda _snapshot: "system"
+    widget._ollama_models_loaded = True
+    widget._ollama_models = ["gemma4:e2b"]
+    widget._tab_models["ollama"] = "gemma4:e2b"
 
     assert widget._connect_ai() is True
     assert [config["provider"] for _, config in FakeManager.instances[-1].registered] == ["ollama"]
 
 
-def test_openrouter_catalog_keeps_tool_capable_text_models_and_prices_per_token():
+def test_openrouter_catalog_keeps_only_tool_capable_free_text_models():
     models = GeminiSettingsDialog._parse_openrouter_models({"data": [
-        {"id": "zulu", "supported_parameters": ["tools"], "architecture": {"output_modalities": ["text"]}, "pricing": {"prompt": "0.0000001", "completion": "0.0000002"}},
-        {"id": "alpha", "supported_parameters": ["tools"], "architecture": {"output_modalities": ["text"]}, "pricing": {"prompt": "0.000002", "completion": "0.000004"}},
+        {"id": "zulu", "supported_parameters": ["tools"], "architecture": {"output_modalities": ["text"]}, "pricing": {"prompt": "0", "completion": "0"}},
+        {"id": "alpha", "supported_parameters": ["tools"], "architecture": {"output_modalities": ["text"]}, "pricing": {"prompt": "0", "completion": "0"}},
+        {"id": "free", "supported_parameters": ["tools"], "architecture": {"output_modalities": ["text"]}, "pricing": {"prompt": "0", "completion": "0"}},
         {"id": "no-tools", "supported_parameters": [], "architecture": {"output_modalities": ["text"]}, "pricing": {"prompt": "0", "completion": "0"}},
     ]})
 
-    assert models == [("alpha", 0.000002, 0.000004), ("zulu", 0.0000001, 0.0000002)]
-    assert GeminiSettingsDialog._openrouter_model_label(*models[1]).endswith("$0.1 in / $0.2 out / 1M token")
+    assert models == [
+        ("alpha", 0.0, 0.0),
+        ("free", 0.0, 0.0),
+        ("zulu", 0.0, 0.0),
+    ]
+    assert "[FREE]" in GeminiSettingsDialog._openrouter_model_label(*models[0])

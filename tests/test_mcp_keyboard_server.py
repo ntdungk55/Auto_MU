@@ -10,16 +10,15 @@ from src.ai_control.server_registry import default_server_specs
 
 GAME_TOOLS = {
     "get_daily_events_dialog_info", "open_companion_management_dialog",
-    "get_current_character_map", "get_companion_summoned_state", "switch_to_companion_character",
+    "get_companion_summoned_state", "switch_to_companion_character",
     "summon_companion_character", "set_main_character_auto_z", "start_autoplay_management",
-    "get_companion_training_state",
 }
 
 
 def test_only_game_tools_are_exposed() -> None:
     assert {tool.name for tool in asyncio.run(keyboard.mcp.list_tools())} == GAME_TOOLS
     assert asyncio.run(process.mcp.list_tools()) == []
-    assert [spec.name for spec in default_server_specs()] == ["keyboard"]
+    assert [spec.name for spec in default_server_specs()] == ["keyboard", "game_state"]
 
 
 def test_daily_events_rejects_missing_game_window(monkeypatch) -> None:

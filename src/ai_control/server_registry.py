@@ -27,6 +27,7 @@ def default_server_specs() -> list[MCPServerSpec]:
         cwd = os.path.dirname(executable)
         return [
             MCPServerSpec("keyboard", executable, ("--mcp-keyboard-server",), cwd),
+            MCPServerSpec("game_state", executable, ("--mcp-game-state-server",), cwd),
         ]
 
     root = project_root()
@@ -35,6 +36,12 @@ def default_server_specs() -> list[MCPServerSpec]:
             "keyboard",
             sys.executable,
             (str(root / "mcp" / "keyboard" / "server.py"),),
+            str(root),
+        ),
+        MCPServerSpec(
+            "game_state",
+            sys.executable,
+            (str(root / "mcp" / "game_state" / "server.py"),),
             str(root),
         ),
     ]
