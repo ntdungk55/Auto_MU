@@ -196,12 +196,10 @@ class LocationObserverService:
         location_state = self._parse_state(payload)
         health_state = self._parse_health_state(payload)
         previous_location = self._parse_previous_state(payload)
-        previous_health = self._parse_previous_health_state(payload)
         if any(item.enabled and item.observer_type == "health" for item in self._events):
             print(
                 "[Health Observer] "
                 f"character={self._character_name(payload)} "
-                f"previous_hp={previous_health.current if previous_health is not None else None} "
                 f"current_hp={health_state.current if health_state is not None else None}",
                 flush=True,
             )
@@ -218,14 +216,8 @@ class LocationObserverService:
                 continue
             observer = self._observers.setdefault(event.event_id, self._make_observer(event))
             state = health_state if event.observer_type == "health" else location_state
-            previous = previous_health if event.observer_type == "health" else previous_location
             if event.observer_type == "health":
-                result = observer.evaluate_window_pair(
-                    previous_state=previous,
-                    current_state=state,
-                    current_captured_at=payload.get("captured_at") if isinstance(payload, dict) else None,
-                    game_focused=focused,
-                )
+                result = observer.evaluate_current_state(state, game_focused=focused)
             else:
                 result = observer.evaluate(state, game_focused=focused)
             self._on_status(event.event_id, result.status)
@@ -342,18 +334,52 @@ class LocationObserverService:
 
 
 class HealthEventObserver:
-    """Apply the health rule directly to Window State previous/current values."""
+    """Compare one internally retained health state with the next current state."""
 
     def __init__(self, event: RegisteredEvent) -> None:
         self.event = event
+        self._current_state: HealthState | None = None
         self._last_trigger_captured_at: float | None = None
         self._armed = True
         self._status = "Waiting for initial state"
 
     def reset(self) -> None:
+        self._current_state = None
         self._last_trigger_captured_at = None
         self._armed = True
         self._status = "Waiting for initial state"
+
+    def evaluate_current_state(
+        self,
+        current_state: HealthState | None,
+        *,
+        game_focused: bool,
+    ) -> ObserverResult:
+        """Evaluate one newly captured health state against the one retained state."""
+        if current_state is None:
+            return ObserverResult(False, "Waiting for valid health state")
+        if self._current_state is None:
+            self._current_state = current_state
+            self._status = "Waiting for initial state"
+            return ObserverResult(False, self._status)
+
+        previous_state = self._current_state
+        self._current_state = current_state
+        threshold = self.event.health_threshold
+        if current_state.current >= threshold:
+            self._armed = True
+            self._status = f"HP normal ({current_state.current})"
+            return ObserverResult(False, self._status)
+        if not self._armed or previous_state.current < threshold or current_state.current == previous_state.current:
+            self._status = f"HP below {threshold} ({current_state.current})"
+            return ObserverResult(False, self._status)
+
+        self._armed = False
+        if game_focused:
+            self._status = "Ignored: game focused"
+            return ObserverResult(True, self._status, suppressed_by_focus=True)
+        self._status = f"HP below {threshold} ({current_state.current})"
+        return ObserverResult(True, self._status)
 
     def evaluate_window_pair(
         self,

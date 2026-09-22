@@ -1996,7 +1996,7 @@ class GeminiChatWidget(QWidget):
     def _read_current_location(self) -> dict:
         if self._scenario_tool_client is None:
             return {"success": False, "error": "MCP client unavailable"}
-        return self._scenario_tool_client.call_tool("get_selected_game_state", {"include_previous": True})
+        return self._scenario_tool_client.call_tool("get_selected_game_state", {})
 
     def _restart_event_service(self) -> None:
         self._stop_event_service()

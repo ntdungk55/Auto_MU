@@ -207,6 +207,15 @@ def test_health_observer_emits_once_until_health_recovers() -> None:
     assert repeated_pair.triggered is False
 
 
+def test_health_observer_compares_one_retained_state_with_new_state() -> None:
+    observer = HealthEventObserver(health_event())
+
+    assert observer.evaluate_current_state(HealthState(8190), game_focused=False).triggered is False
+    assert observer.evaluate_current_state(HealthState(8190), game_focused=False).triggered is False
+    assert observer.evaluate_current_state(HealthState(0), game_focused=False).triggered is True
+    assert observer.evaluate_current_state(HealthState(0), game_focused=False).triggered is False
+
+
 def test_health_observer_focus_suppresses_delivery_but_consumes_crossing() -> None:
     observer = HealthEventObserver(health_event())
     observer.evaluate_window_pair(previous_state=None, current_state=HealthState(150), game_focused=False)
