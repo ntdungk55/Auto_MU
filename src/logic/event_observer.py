@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 import threading
 import time
 from typing import Any, Callable, Literal
 
 
-TriggerMode = Literal["enter", "exit", "source_to_destination"]
+TriggerMode = Literal["enter", "exit", "source_to_destination", "health_below"]
 
 
 @dataclass
@@ -18,6 +19,27 @@ class LocationState:
     map_name: str
     x: int
     y: int
+
+
+@dataclass
+class HealthState:
+    """Validated current health read from the game HUD."""
+
+    current: int
+
+
+def is_health_below_transition(
+    previous: HealthState | None,
+    current: HealthState | None,
+    threshold: int = 100,
+) -> bool:
+    """Return the exact transition used by the Window State health logger."""
+    return (
+        previous is not None
+        and current is not None
+        and previous.current >= int(threshold)
+        and current.current < int(threshold)
+    )
 
 
 @dataclass
@@ -54,7 +76,8 @@ class RegisteredEvent:
     observer_type: str
     trigger_mode: TriggerMode
     source: LocationCondition | None
-    destination: LocationCondition
+    destination: LocationCondition | None
+    health_threshold: int = 100
 
 
 def condition_from_dict(data: dict[str, Any] | None) -> LocationCondition | None:
@@ -74,21 +97,25 @@ def condition_from_dict(data: dict[str, Any] | None) -> LocationCondition | None
 
 def registered_event_from_dict(data: dict[str, Any]) -> RegisteredEvent:
     """Build an observer event from persistence data."""
+    observer_type = str(data.get("observer_type", "location") or "location")
     destination = condition_from_dict(data.get("destination"))
-    if destination is None:
+    if observer_type == "location" and destination is None:
         raise ValueError("event destination is required")
     trigger_mode = str(data.get("trigger_mode", "enter"))
-    if trigger_mode not in ("enter", "exit", "source_to_destination"):
+    if observer_type == "health":
+        trigger_mode = "health_below"
+    elif trigger_mode not in ("enter", "exit", "source_to_destination"):
         raise ValueError("unsupported event trigger mode")
     return RegisteredEvent(
         event_id=str(data.get("event_id", "") or ""),
         name=str(data.get("name", "") or ""),
         prompt=str(data.get("prompt", "") or ""),
         enabled=bool(data.get("enabled", True)),
-        observer_type=str(data.get("observer_type", "location") or "location"),
+        observer_type=observer_type,
         trigger_mode=trigger_mode,  # type: ignore[arg-type]
         source=condition_from_dict(data.get("source")),
         destination=destination,
+        health_threshold=max(0, int(data.get("health_threshold", 100) or 0)),
     )
 
 
@@ -109,6 +136,9 @@ class EventTrigger:
     prompt: str
     status: str
     suppressed_by_focus: bool
+    observer_type: str = "location"
+    character_name: str = "Game"
+    details: dict[str, Any] | None = None
 
 
 class LocationObserverService:
@@ -121,7 +151,7 @@ class LocationObserverService:
         self._on_trigger = on_trigger
         self._interval_seconds = max(0.1, float(interval_seconds))
         self._events: list[RegisteredEvent] = []
-        self._observers: dict[str, LocationEventObserver] = {}
+        self._observers: dict[str, Any] = {}
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._was_unavailable = False
@@ -129,7 +159,7 @@ class LocationObserverService:
     def update_events(self, events: list[RegisteredEvent]) -> None:
         """Replace definitions and reset all affected runtime state."""
         self._events = list(events)
-        self._observers = {item.event_id: LocationEventObserver(item) for item in self._events}
+        self._observers = {item.event_id: self._make_observer(item) for item in self._events}
 
     def start(self) -> None:
         """Start the polling thread once."""
@@ -163,8 +193,19 @@ class LocationObserverService:
             self._on_status("__service__", f"MCP error: {error}")
             self._handle_unavailable()
             return
-        state = self._parse_state(payload)
-        if state is None:
+        location_state = self._parse_state(payload)
+        health_state = self._parse_health_state(payload)
+        previous_location = self._parse_previous_state(payload)
+        previous_health = self._parse_previous_health_state(payload)
+        if any(item.enabled and item.observer_type == "health" for item in self._events):
+            print(
+                "[Health Observer] "
+                f"character={self._character_name(payload)} "
+                f"previous_hp={previous_health.current if previous_health is not None else None} "
+                f"current_hp={health_state.current if health_state is not None else None}",
+                flush=True,
+            )
+        if location_state is None and health_state is None:
             self._handle_unavailable()
             return
         if self._was_unavailable:
@@ -175,11 +216,29 @@ class LocationObserverService:
             if not event.enabled:
                 self._on_status(event.event_id, "Disabled")
                 continue
-            observer = self._observers.setdefault(event.event_id, LocationEventObserver(event))
-            result = observer.evaluate(state, game_focused=focused)
+            observer = self._observers.setdefault(event.event_id, self._make_observer(event))
+            state = health_state if event.observer_type == "health" else location_state
+            previous = previous_health if event.observer_type == "health" else previous_location
+            if event.observer_type == "health":
+                result = observer.evaluate_window_pair(
+                    previous_state=previous,
+                    current_state=state,
+                    current_captured_at=payload.get("captured_at") if isinstance(payload, dict) else None,
+                    game_focused=focused,
+                )
+            else:
+                result = observer.evaluate(state, game_focused=focused)
             self._on_status(event.event_id, result.status)
             if result.triggered:
-                self._on_trigger(EventTrigger(event.event_id, event.prompt, result.status, result.suppressed_by_focus))
+                self._on_trigger(EventTrigger(
+                    event.event_id,
+                    event.prompt,
+                    result.status,
+                    result.suppressed_by_focus,
+                    event.observer_type,
+                    self._character_name(payload),
+                    self._trigger_details(location_state, health_state),
+                ))
 
     def _handle_unavailable(self) -> None:
         try:
@@ -201,12 +260,129 @@ class LocationObserverService:
             return None
         return LocationState(str(payload["map"]), int(position["x"]), int(position["y"]))
 
+    @staticmethod
+    def _parse_health_state(payload: dict[str, Any] | None) -> HealthState | None:
+        if not isinstance(payload, dict) or not bool(payload.get("success")):
+            return None
+        state = payload.get("state")
+        main_info = state.get("main_info", {}) if isinstance(state, dict) else {}
+        health_entry = main_info.get("healthBar") if isinstance(main_info, dict) else None
+        value = health_entry.get("value") if isinstance(health_entry, dict) else None
+        if value is None and isinstance(health_entry, dict):
+            value = health_entry
+        if not isinstance(value, dict) or value.get("current") is None:
+            return None
+        try:
+            return HealthState(int(value["current"]))
+        except (TypeError, ValueError):
+            return None
+
+    @classmethod
+    def _parse_previous_state(cls, payload: dict[str, Any] | None) -> LocationState | None:
+        if not isinstance(payload, dict):
+            return None
+        previous = payload.get("previous_state")
+        if not isinstance(previous, dict):
+            return None
+        return cls._parse_state({"success": True, "map": previous.get("map"), "position": previous.get("position")})
+
+    @staticmethod
+    def _parse_previous_health_state(payload: dict[str, Any] | None) -> HealthState | None:
+        if not isinstance(payload, dict) or not isinstance(payload.get("previous_state"), dict):
+            return None
+        previous = payload["previous_state"]
+        main_info = previous.get("main_info", {})
+        health_entry = main_info.get("healthBar") if isinstance(main_info, dict) else None
+        value = health_entry.get("value") if isinstance(health_entry, dict) else None
+        if value is None and isinstance(health_entry, dict):
+            value = health_entry
+        if not isinstance(value, dict) or value.get("current") is None:
+            return None
+        try:
+            return HealthState(int(value["current"]))
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _make_observer(event: RegisteredEvent) -> Any:
+        return HealthEventObserver(event) if event.observer_type == "health" else LocationEventObserver(event)
+
+    @staticmethod
+    def _character_name(payload: dict[str, Any]) -> str:
+        if not isinstance(payload, dict):
+            return "Game"
+        state = payload.get("state")
+        if not isinstance(state, dict):
+            state = {}
+        target = state.get("target")
+        if not isinstance(target, dict):
+            target = {}
+        title = str(target.get("title", "") or "") if isinstance(target, dict) else ""
+        match = re.search(r"\([^)]*-\s*([^)]+)\)", title)
+        return match.group(1).strip() if match else (title.strip() or "Game")
+
+    @staticmethod
+    def _trigger_details(location: LocationState | None, health: HealthState | None) -> dict[str, Any]:
+        details: dict[str, Any] = {}
+        if location is not None:
+            details.update({"map": location.map_name, "x": location.x, "y": location.y})
+        if health is not None:
+            details.update({
+                "current_hp": health.current,
+                "dead": health.current <= 0,
+            })
+        return details
+
     def _is_game_focused(self) -> bool:
         try:
             import win32gui
             return int(win32gui.GetForegroundWindow() or 0) == self._target_hwnd
         except Exception:
             return False
+
+
+class HealthEventObserver:
+    """Apply the health rule directly to Window State previous/current values."""
+
+    def __init__(self, event: RegisteredEvent) -> None:
+        self.event = event
+        self._last_trigger_captured_at: float | None = None
+        self._armed = True
+        self._status = "Waiting for initial state"
+
+    def reset(self) -> None:
+        self._last_trigger_captured_at = None
+        self._armed = True
+        self._status = "Waiting for initial state"
+
+    def evaluate_window_pair(
+        self,
+        *,
+        previous_state: HealthState | None,
+        current_state: HealthState | None,
+        current_captured_at: Any = None,
+        game_focused: bool,
+    ) -> ObserverResult:
+        if previous_state is None or current_state is None:
+            return ObserverResult(False, "Waiting for valid health state")
+        threshold = self.event.health_threshold
+        if current_state.current >= threshold:
+            self._armed = True
+            self._status = f"HP normal ({current_state.current})"
+            return ObserverResult(False, self._status)
+        if self._armed and is_health_below_transition(previous_state, current_state, threshold):
+            captured_at = float(current_captured_at) if current_captured_at is not None else None
+            if captured_at is not None and captured_at == self._last_trigger_captured_at:
+                return ObserverResult(False, self._status)
+            self._last_trigger_captured_at = captured_at
+            self._armed = False
+            if game_focused:
+                self._status = "Ignored: game focused"
+                return ObserverResult(True, self._status, suppressed_by_focus=True)
+            self._status = f"HP below {threshold} ({current_state.current})"
+            return ObserverResult(True, self._status)
+        self._status = f"HP below {threshold} ({current_state.current})"
+        return ObserverResult(False, self._status)
 
 
 class LocationEventObserver:
@@ -227,6 +403,12 @@ class LocationEventObserver:
         self._source_matched = False
         self._armed = True
         self._status = "Waiting for initial state"
+
+    def prime(self, state: LocationState | None) -> None:
+        """Use Window State's previous sample as the initial comparison point."""
+        if not self._baseline_ready and state is not None:
+            self._baseline_ready = True
+            self._previous_state = state
 
     def evaluate(self, state: LocationState | None, *, game_focused: bool) -> ObserverResult:
         """Evaluate one sample without mutating state for invalid samples."""

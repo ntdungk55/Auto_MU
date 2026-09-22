@@ -38,7 +38,8 @@ class EventManagementDialog(QDialog):
             enabled = QCheckBox(); enabled.setChecked(bool(event.get("enabled", True))); enabled.toggled.connect(lambda value, eid=event_id: self._set_enabled(eid, value)); self.table.setCellWidget(row, 0, enabled)
             name = QTableWidgetItem(str(event.get("name", ""))); name.setData(Qt.ItemDataRole.UserRole, event_id); name.setFlags(name.flags() & ~Qt.ItemFlag.ItemIsEditable); self.table.setItem(row, 1, name)
             prompt = QTableWidgetItem(str(event.get("prompt", ""))); prompt.setData(Qt.ItemDataRole.UserRole, event_id); self.table.setItem(row, 2, prompt)
-            observer = QTableWidgetItem("Location Observer"); observer.setFlags(observer.flags() & ~Qt.ItemFlag.ItemIsEditable); self.table.setItem(row, 3, observer)
+            observer_label = "Health Observer" if event.get("observer_type") == "health" else "Location Observer"
+            observer = QTableWidgetItem(observer_label); observer.setFlags(observer.flags() & ~Qt.ItemFlag.ItemIsEditable); self.table.setItem(row, 3, observer)
             status = self._status_getter(event_id) if self._status_getter else ("Enabled" if event.get("enabled", True) else "Disabled"); status_item = QTableWidgetItem(status); status_item.setFlags(status_item.flags() & ~Qt.ItemFlag.ItemIsEditable); self.table.setItem(row, 4, status_item)
         self.table.blockSignals(False)
         if self.events and current >= 0: self.table.selectRow(min(current, len(self.events) - 1))
@@ -73,8 +74,6 @@ class EventManagementDialog(QDialog):
         event_id = item.data(Qt.ItemDataRole.UserRole); event = next((value for value in self.events if value.get("event_id") == event_id), None)
         if event is None: return
         prompt = item.text().strip()
-        if not prompt:
-            QMessageBox.warning(self, "Prompt không hợp lệ", "Prompt không được để trống."); self._refresh(); return
         event["prompt"] = prompt; self._commit()
 
     def _set_enabled(self, event_id: str, enabled: bool) -> None:

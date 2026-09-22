@@ -31,6 +31,15 @@ def _normalize_position(raw_text: str) -> dict[str, int] | None:
     return {"x": int(match.group(1)), "y": int(match.group(2))}
 
 
+def _normalize_health(raw_text: str) -> dict[str, int] | None:
+    """Read only the first numeric line: the character's current health."""
+    values = re.findall(r"\d[\d,.]*", str(raw_text or ""))
+    if not values:
+        return None
+    values = [re.sub(r"\D", "", value) for value in values]
+    return {"current": int(values[0])}
+
+
 def _read_taught_hud_text(
     image: Any, definition: dict[str, Any], normalizer: Any,
 ) -> tuple[Any, dict[str, Any]]:
@@ -66,6 +75,56 @@ def _read_taught_hud_text(
         confidence = min((float(item[2]) for item in accepted), default=None)
     return value, {"value": value, "raw_text": winrt_raw if method == "winrt" else attempts["easyocr"],
                    "method": method, "confidence": confidence, "roi": roi, "attempts": attempts}
+
+
+def _read_taught_health_easyocr(
+    image: Any, definition: dict[str, Any], normalizer: Any,
+) -> tuple[Any, dict[str, Any]]:
+    """Read the tiny health-bar text with EasyOCR only."""
+    roi = {axis: int(value) for axis, value in dict(definition["roi"]).items()}
+    if not (0 <= roi["x1"] < roi["x2"] <= image.shape[1] and 0 <= roi["y1"] < roi["y2"] <= image.shape[0]):
+        raise ValueError(f"Current HUD ROI lies outside the captured image: {roi}")
+    current_line_y2 = roi["y1"] + max(1, (roi["y2"] - roi["y1"]) // 2)
+    crop = image[roi["y1"]:current_line_y2, roi["x1"]:roi["x2"]]
+    scaled = cv2.resize(crop, None, fx=6, fy=6, interpolation=cv2.INTER_CUBIC)
+    reader = EasyOCREngine()._get_reader()
+    attempts: dict[str, Any] = {}
+    if reader is None:
+        return None, {"value": None, "raw_text": "", "method": "easyocr", "confidence": None, "roi": roi, "attempts": attempts}
+    for name, candidate in (("raw", crop), ("scaled", scaled)):
+        try:
+            items = reader.readtext(
+                candidate,
+                detail=1,
+                paragraph=False,
+                allowlist="0123456789,.",
+                text_threshold=0.25,
+                low_text=0.2,
+                link_threshold=0.2,
+                canvas_size=2000,
+                mag_ratio=1.0,
+            )
+        except Exception as error:
+            attempts[f"{name}_error"] = str(error)
+            continue
+        accepted = [
+            item for item in items
+            if isinstance(item, (list, tuple)) and len(item) >= 3 and float(item[2]) >= 0.25
+        ]
+        accepted.sort(key=lambda item: min(float(point[1]) for point in item[0]))
+        raw_text = " ".join(str(item[1]).strip() for item in accepted).strip()
+        attempts[name] = raw_text
+        value = normalizer(raw_text)
+        if value is not None:
+            return value, {
+                "value": value,
+                "raw_text": raw_text,
+                "method": "easyocr",
+                "confidence": min((float(item[2]) for item in accepted), default=None),
+                "roi": roi,
+                "attempts": attempts,
+            }
+    return None, {"value": None, "raw_text": attempts.get("scaled", attempts.get("raw", "")), "method": "easyocr", "confidence": None, "roi": roi, "attempts": attempts}
 
 
 def get_current_character_map(target: dict[str, Any]) -> dict[str, Any]:

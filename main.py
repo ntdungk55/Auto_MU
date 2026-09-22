@@ -1577,17 +1577,57 @@ class MainWindow(QMainWindow):
         self._save_app_state(state)
 
     def _load_ai_event_registrations_for_target(self, target: object) -> list[dict]:
-        """Load registered events for one selected game target."""
+        """Load shared event definitions with enablement isolated per target."""
         state = self._load_app_state()
-        by_process = state.get("ai_event_registrations_by_process", {})
-        events = by_process.get(self._ai_process_key(target), []) if isinstance(by_process, dict) else []
-        return [dict(item) for item in events if isinstance(item, dict) and item.get("event_id")]
+        definitions = state.get("ai_event_registrations", [])
+        if not isinstance(definitions, list) or not definitions:
+            legacy = state.get("ai_event_registrations_by_process", {})
+            if isinstance(legacy, dict):
+                merged: dict[str, dict] = {}
+                for candidate in legacy.values():
+                    if isinstance(candidate, list):
+                        for item in candidate:
+                            if isinstance(item, dict) and item.get("event_id"):
+                                merged.setdefault(str(item["event_id"]), dict(item))
+                definitions = list(merged.values())
+        definitions = [dict(item) for item in definitions if isinstance(item, dict) and item.get("event_id")]
+        enabled_by_process = state.get("ai_event_enabled_by_process", {})
+        key = self._ai_process_key(target)
+        enabled = enabled_by_process.get(key, {}) if isinstance(enabled_by_process, dict) else {}
+        result = []
+        for item in definitions:
+            event_id = str(item["event_id"])
+            value = dict(item)
+            if isinstance(enabled, dict) and event_id in enabled:
+                value["enabled"] = bool(enabled[event_id])
+            result.append(value)
+        return result
 
     def _save_ai_event_registrations_for_target(self, target: object, events: list[dict]) -> None:
-        """Persist registered events for one selected game target."""
+        """Persist shared definitions and only this target's enabled flags."""
         state = self._load_app_state()
-        by_process = state.setdefault("ai_event_registrations_by_process", {})
-        by_process[self._ai_process_key(target)] = [dict(item) for item in events if item.get("event_id")]
+        old_definitions = state.get("ai_event_registrations", [])
+        old_by_id = {
+            str(item.get("event_id")): item for item in old_definitions
+            if isinstance(item, dict) and item.get("event_id")
+        } if isinstance(old_definitions, list) else {}
+        definitions = []
+        enabled = {}
+        for item in events:
+            if not item.get("event_id"):
+                continue
+            event_id = str(item["event_id"])
+            definition = dict(item)
+            if event_id in old_by_id:
+                definition["enabled"] = bool(old_by_id[event_id].get("enabled", True))
+            else:
+                definition["enabled"] = bool(item.get("enabled", True))
+            definitions.append(definition)
+            enabled[event_id] = bool(item.get("enabled", True))
+        state["ai_event_registrations"] = definitions
+        enabled_by_process = state.setdefault("ai_event_enabled_by_process", {})
+        if isinstance(enabled_by_process, dict):
+            enabled_by_process[self._ai_process_key(target)] = enabled
         self._save_app_state(state)
 
     @staticmethod
@@ -3224,6 +3264,10 @@ J) GHI CHÚ QUAN TRỌNG (ĐỠ BỊ “SAI PHÍM”)
                     type_item.setForeground(QBrush(QColor("#888888")))
 
 if __name__ == "__main__":
+    if "--mcp-notifications-server" in sys.argv:
+        from src.ai_control.servers.notifications import run_notifications_mcp_server
+        run_notifications_mcp_server()
+        raise SystemExit(0)
     import traceback
     import logging
     from datetime import datetime

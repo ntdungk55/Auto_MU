@@ -18,7 +18,7 @@ GAME_TOOLS = {
 def test_only_game_tools_are_exposed() -> None:
     assert {tool.name for tool in asyncio.run(keyboard.mcp.list_tools())} == GAME_TOOLS
     assert asyncio.run(process.mcp.list_tools()) == []
-    assert [spec.name for spec in default_server_specs()] == ["keyboard", "game_state"]
+    assert [spec.name for spec in default_server_specs()] == ["keyboard", "game_state", "notifications"]
 
 
 def test_daily_events_rejects_missing_game_window(monkeypatch) -> None:

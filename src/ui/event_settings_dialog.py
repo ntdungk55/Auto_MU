@@ -105,11 +105,20 @@ class EventSettingsDialog(QDialog):
         self.source = _ConditionWidget("Source"); self.destination = _ConditionWidget("Destination")
         location_layout.addWidget(self.source); location_layout.addWidget(self.destination)
         self.tabs.addTab(location_tab, "Location Observer"); layout.addWidget(self.tabs)
+        health_tab = QWidget(); health_form = QFormLayout(health_tab)
+        self.health_threshold = QSpinBox(); self.health_threshold.setRange(0, 2_000_000); self.health_threshold.setValue(100)
+        health_form.addRow("Phát khi HP dưới:", self.health_threshold)
+        health_form.addRow(QLabel("Đọc từ Window State / healthBar. Chỉ phát một lần khi vừa xuống dưới ngưỡng."))
+        self.tabs.addTab(health_tab, "Health Observer")
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Save)
         buttons.accepted.connect(self._save); buttons.rejected.connect(self.reject); layout.addWidget(buttons)
         self._load_event(); self._toggle_source()
 
     def _load_event(self) -> None:
+        observer_type = str(self._event.get("observer_type", "location"))
+        self.tabs.setCurrentIndex(1 if observer_type == "health" else 0)
+        if observer_type == "health":
+            self.health_threshold.setValue(int(self._event.get("health_threshold", 100) or 0))
         mode = str(self._event.get("trigger_mode", "enter"))
         index = self.trigger.findData(mode)
         if index >= 0: self.trigger.setCurrentIndex(index)
@@ -120,8 +129,8 @@ class EventSettingsDialog(QDialog):
 
     def _save(self) -> None:
         name = self.name_edit.text().strip(); prompt = self.prompt_edit.toPlainText().strip()
-        if not name or not prompt:
-            QMessageBox.warning(self, "Dữ liệu không hợp lệ", "Tên event và prompt không được để trống.")
+        if not name:
+            QMessageBox.warning(self, "Dữ liệu không hợp lệ", "Tên event không được để trống.")
             return
         destination = self.destination.value(); source = self.source.value() if self.trigger.currentData() == "source_to_destination" else None
         for label, value in (("destination", destination), ("source", source)):
@@ -133,10 +142,13 @@ class EventSettingsDialog(QDialog):
 
     def get_event(self) -> dict[str, Any]:
         """Return the validated event configuration."""
+        observer_type = "health" if self.tabs.currentIndex() == 1 else "location"
         return {
             "event_id": str(self._event.get("event_id") or uuid.uuid4().hex),
             "name": self.name_edit.text().strip(), "prompt": self.prompt_edit.toPlainText().strip(),
-            "enabled": self.enabled.isChecked(), "observer_type": "location", "trigger_mode": self.trigger.currentData(),
-            "source": self.source.value() if self.trigger.currentData() == "source_to_destination" else None,
-            "destination": self.destination.value(),
+            "enabled": self.enabled.isChecked(), "observer_type": observer_type,
+            "trigger_mode": self.trigger.currentData() if observer_type == "location" else "health_below",
+            "source": self.source.value() if observer_type == "location" and self.trigger.currentData() == "source_to_destination" else None,
+            "destination": self.destination.value() if observer_type == "location" else None,
+            "health_threshold": self.health_threshold.value(),
         }

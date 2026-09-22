@@ -14,7 +14,9 @@ except ImportError:  # MCP 2.x
 
 from src.ai_control.current_character_info import (
     _normalize_map,
+    _normalize_health,
     _normalize_position,
+    _read_taught_health_easyocr,
     _read_taught_hud_text,
 )
 from src.ai_control.auto_play_control import _config, _state_from_templates
@@ -131,11 +133,24 @@ class GameStateService:
                     continue
                 position = result.get("position")
                 map_name = result.get("map")
-                if result.get("success") and isinstance(map_name, str) and isinstance(position, dict):
+                health = result.get("main_info", {}).get("healthBar", {}).get("value")
+                has_location = (
+                    isinstance(map_name, str) and bool(map_name)
+                    and isinstance(position, dict)
+                    and position.get("x") is not None and position.get("y") is not None
+                )
+                has_health = isinstance(health, dict) and health.get("current") is not None
+                if result.get("success") and (has_location or has_health):
+                    previous = self.store.read()[1]
+                    if not has_location and previous is not None:
+                        map_name = previous.map
+                        position = dict(previous.position)
+                    map_name = str(map_name or "")
+                    position = dict(position or {})
                     self.store.replace(GameStateSnapshot(
                         hwnd=int(target["hwnd"]),
                         map=map_name,
-                        position={"x": int(position["x"]), "y": int(position["y"])},
+                        position={key: int(value) for key, value in position.items() if key in ("x", "y")},
                         main_info=dict(result["main_info"]),
                         captured_at=time.time(),
                         target=target,
@@ -161,8 +176,11 @@ class GameStateService:
         position_value, position_ocr = _read_taught_hud_text(
             image, main_info["position"], _normalize_position,
         )
-        if map_value is None or position_value is None:
-            raise RuntimeError("Could not read complete map/position state")
+        health_value, health_ocr = _read_taught_health_easyocr(
+            image, main_info["healthBar"], _normalize_health,
+        )
+        if (map_value is None or position_value is None) and health_value is None:
+            raise RuntimeError("Could not read complete map/position/health state")
 
         image_states: dict[str, Any] = {}
         for name in ("autoState", "autoPlayManagement"):
@@ -191,6 +209,7 @@ class GameStateService:
             "main_info": {
                 "map": {"value": map_value, "ocr": map_ocr},
                 "position": {"value": position_value, "ocr": position_ocr},
+                "healthBar": {"value": health_value, "ocr": health_ocr},
                 "autoState": image_states["autoState"],
                 "autoPlayManagement": image_states["autoPlayManagement"],
                 "companionTraining": image_states["companionTraining"],

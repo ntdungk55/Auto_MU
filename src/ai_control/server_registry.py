@@ -28,6 +28,7 @@ def default_server_specs() -> list[MCPServerSpec]:
         return [
             MCPServerSpec("keyboard", executable, ("--mcp-keyboard-server",), cwd),
             MCPServerSpec("game_state", executable, ("--mcp-game-state-server",), cwd),
+            MCPServerSpec("notifications", executable, ("--mcp-notifications-server",), cwd),
         ]
 
     root = project_root()
@@ -42,6 +43,12 @@ def default_server_specs() -> list[MCPServerSpec]:
             "game_state",
             sys.executable,
             (str(root / "mcp" / "game_state" / "server.py"),),
+            str(root),
+        ),
+        MCPServerSpec(
+            "notifications",
+            sys.executable,
+            (str(root / "mcp" / "notifications" / "server.py"),),
             str(root),
         ),
     ]
