@@ -13,6 +13,7 @@ class QueuedChatMessage:
     source: str  # manual | automatic
     rule_id: str | None = None
     image_path: str | None = None
+    turn_id: str | None = None
 
 
 class ChatMessageQueue:
@@ -21,20 +22,20 @@ class ChatMessageQueue:
         self._automatic: deque[QueuedChatMessage] = deque()
         self._active_event_ids: set[str] = set()
 
-    def enqueue_manual(self, text: str, image_path: str | None = None) -> None:
-        self._manual.append(QueuedChatMessage(text=text, source="manual", image_path=image_path))
+    def enqueue_manual(self, text: str, image_path: str | None = None, turn_id: str | None = None) -> None:
+        self._manual.append(QueuedChatMessage(text=text, source="manual", image_path=image_path, turn_id=turn_id))
 
-    def enqueue_automatic(self, text: str, rule_id: str) -> bool:
+    def enqueue_automatic(self, text: str, rule_id: str, turn_id: str | None = None) -> bool:
         if any(item.rule_id == rule_id for item in self._automatic):
             return False
-        self._automatic.append(QueuedChatMessage(text=text, source="automatic", rule_id=rule_id))
+        self._automatic.append(QueuedChatMessage(text=text, source="automatic", rule_id=rule_id, turn_id=turn_id))
         return True
 
-    def enqueue_event(self, text: str, event_id: str) -> bool:
+    def enqueue_event(self, text: str, event_id: str, turn_id: str | None = None) -> bool:
         """Queue an event prompt unless the same event is pending or active."""
         if event_id in self._active_event_ids or any(item.rule_id == event_id for item in self._automatic):
             return False
-        self._automatic.append(QueuedChatMessage(text=text, source="event", rule_id=event_id))
+        self._automatic.append(QueuedChatMessage(text=text, source="event", rule_id=event_id, turn_id=turn_id))
         return True
 
     def mark_active(self, message: QueuedChatMessage) -> None:

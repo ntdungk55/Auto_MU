@@ -41,6 +41,7 @@ from PyQt6.QtWidgets import (
 
 from src.ai_control.scenario_tool_client import ScenarioToolClient
 from src.ai_control.chat_message_queue import ChatMessageQueue, QueuedChatMessage
+from src.ai_control.chat_message_log import ChatMessageLog
 from src.ai_control.game_window_initializer import prepare_game_window_for_ocr
 from src.logic.event_observer import (
     EventTrigger,
@@ -804,6 +805,13 @@ class GeminiChatWidget(QWidget):
         self._turn_running = False
         self._active_turn_cancel: threading.Event | None = None
         self._message_queue = ChatMessageQueue()
+        self._chat_log = ChatMessageLog()
+        self._chat_log_key = ""
+        self._history_offset = 0
+        self._history_has_more = False
+        self._history_loading = False
+        self._active_log_turn_id: str | None = None
+        self._chat_log.purge_expired()
         self._active_queued_message: QueuedChatMessage | None = None
         self._auto_rules = self._load_auto_rules()
         self._event_rules = self._load_event_rules()
@@ -835,6 +843,7 @@ class GeminiChatWidget(QWidget):
         self._pending_scroll_to_bottom = False
         try:
             self.scroll.verticalScrollBar().rangeChanged.connect(self._on_scroll_range_changed)
+            self.scroll.verticalScrollBar().valueChanged.connect(self._on_chat_scroll)
         except Exception:
             pass
 
@@ -1061,6 +1070,8 @@ class GeminiChatWidget(QWidget):
         if target is None:
             return
 
+        self._selected_game_target = target
+        self._set_chat_log_target(target)
         self._load_settings_for_target(target)
         if self._current_provider() == "ollama":
             models = self._refresh_ollama_models(target)
@@ -1111,7 +1122,6 @@ class GeminiChatWidget(QWidget):
 
         self._set_chat_available(True)
         self.focus_game_btn.setEnabled(True)
-        self._selected_game_target = target
         self._event_rules = self._load_event_rules()
         self._event_statuses = {str(item.get("event_id")): "Waiting for initial state" for item in self._event_rules}
         self._restart_event_service()
@@ -1253,6 +1263,7 @@ class GeminiChatWidget(QWidget):
 
         current_state = getattr(event, "current_state", None)
         event_payload = {
+            "turn_id": uuid.uuid4().hex,
             "event_id": str(getattr(event, "event_id", "") or ""),
             "event_type": str(getattr(event, "event_type", "unknown") or "unknown"),
             "target_id": str(getattr(event, "target_id", "") or ""),
@@ -1285,6 +1296,7 @@ class GeminiChatWidget(QWidget):
                         "side": "left",
                         "text": result.text,
                         "meta": f"Event {event_payload['event_type']} | {result.tool_call_count} tool(s)",
+                        "turn_id": event_payload.get("turn_id"),
                     }
                 )
             except Exception as error:
@@ -1293,6 +1305,7 @@ class GeminiChatWidget(QWidget):
                         "side": "system",
                         "text": f"Lỗi xử lý event: {error}",
                         "meta": f"Event {event_payload['event_type']}",
+                        "turn_id": event_payload.get("turn_id"),
                     }
                 )
 
@@ -1306,8 +1319,71 @@ class GeminiChatWidget(QWidget):
             {
                 "text": text or error or "AI không trả về nội dung.",
                 "side": "left",
+                "turn_id": self._active_log_turn_id,
             }
         )
+
+    def _set_chat_log_target(self, target: object) -> None:
+        """Switch the bounded UI history to the selected character."""
+        title = str(getattr(target, "window_title", "Game") or "Game")
+        key = ChatMessageLog.character_key(title)
+        if key == self._chat_log_key:
+            return
+        self._chat_log_key = key
+        self._history_offset = 0
+        self._history_has_more = False
+        self._clear_chat_bubbles()
+        self._chat_log.purge_expired()
+        self._load_history_page(prepend=False)
+
+    def _clear_chat_bubbles(self) -> None:
+        """Remove rendered chat widgets without touching persistent history."""
+        while self.chat_layout.count() > 1:
+            item = self.chat_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+    def _load_history_page(self, prepend: bool) -> None:
+        if self._history_loading or not self._chat_log_key or (prepend and not self._history_has_more):
+            return
+        self._history_loading = True
+        try:
+            page, has_more = self._chat_log.load_turn_page(
+                self._chat_log_key,
+                offset=self._history_offset,
+                limit=ChatMessageLog.PAGE_TURNS,
+            )
+            if not page:
+                self._history_has_more = has_more
+                return
+            self._history_offset += len(page)
+            self._history_has_more = has_more
+            if prepend:
+                for turn in reversed(page):
+                    for record in reversed(turn):
+                        self._insert_history_record(record)
+            else:
+                for turn in page:
+                    for record in turn:
+                        self._insert_history_record(record)
+                QTimer.singleShot(0, self._scroll_to_bottom)
+        finally:
+            self._history_loading = False
+
+    def _insert_history_record(self, record: dict) -> None:
+        self._append_bubble(
+            text=str(record.get("text", "") or ""),
+            side=str(record.get("side", "left") or "left"),
+            image_path=record.get("image_path"),
+            meta=record.get("meta"),
+            persist=False,
+            insert_at=0 if self._history_offset else None,
+        )
+
+    def _on_chat_scroll(self, value: int) -> None:
+        if value <= self.scroll.verticalScrollBar().minimum() + 2:
+            self._load_history_page(prepend=True)
 
     def _set_chat_available(self, available: bool):
         self._chat_ready = available
@@ -1639,19 +1715,44 @@ class GeminiChatWidget(QWidget):
             self._refresh_install_button()
             self._ensure_connected(force_reconnect=True)
 
-    def _append_bubble(self, text: str, side: str, image_path: str | None = None, meta: str | None = None):
+    def _append_bubble(
+        self,
+        text: str,
+        side: str,
+        image_path: str | None = None,
+        meta: str | None = None,
+        *,
+        turn_id: str | None = None,
+        persist: bool = True,
+        insert_at: int | None = None,
+    ):
         try:
-            anchor = self._typing_indicator or self._chat_spacer
-            idx = self.chat_layout.indexOf(anchor)
-            if idx < 0:
-                idx = max(0, self.chat_layout.count() - 1)
+            if persist and self._chat_log_key and side in {"left", "right", "automatic"}:
+                self._chat_log.append(
+                    self._chat_log_key,
+                    {
+                        "turn_id": turn_id or uuid.uuid4().hex,
+                        "side": side,
+                        "text": text,
+                        "image_path": image_path,
+                        "meta": meta,
+                    },
+                )
+            if insert_at is None:
+                anchor = self._typing_indicator or self._chat_spacer
+                idx = self.chat_layout.indexOf(anchor)
+                if idx < 0:
+                    idx = max(0, self.chat_layout.count() - 1)
+            else:
+                idx = max(0, int(insert_at))
             timestamp = datetime.now().strftime("%H:%M:%S") if side in {"left", "right", "automatic"} else None
             self.chat_layout.insertWidget(
                 idx, _ChatBubble(text=text, side=side, image_path=image_path, meta=meta, timestamp=timestamp),
             )
-            self._pending_scroll_to_bottom = True
-            QTimer.singleShot(0, self._scroll_to_bottom)
-            QTimer.singleShot(30, self._scroll_to_bottom)
+            if persist:
+                self._pending_scroll_to_bottom = True
+                QTimer.singleShot(0, self._scroll_to_bottom)
+                QTimer.singleShot(30, self._scroll_to_bottom)
         except Exception:
             pass
 
@@ -1683,6 +1784,7 @@ class GeminiChatWidget(QWidget):
                 side=str(payload.get("side", "left") or "left"),
                 image_path=payload.get("image_path"),
                 meta=payload.get("meta"),
+                turn_id=payload.get("turn_id"),
             )
         except Exception:
             return
@@ -1920,7 +2022,10 @@ class GeminiChatWidget(QWidget):
         """Load persisted event registrations for the current chat target."""
         try:
             rules = self._load_event_registrations() if self._load_event_registrations else []
-            return [dict(rule) for rule in rules if isinstance(rule, dict) and rule.get("event_id")]
+            result = [dict(rule) for rule in rules if isinstance(rule, dict) and rule.get("event_id")]
+            for rule in result:
+                rule.setdefault("enabled", False)
+            return result
         except Exception:
             return []
 
@@ -1942,7 +2047,7 @@ class GeminiChatWidget(QWidget):
         event = next((item for item in self._event_rules if item.get("event_id") == event_id), None)
         if event is None:
             return "Deleted"
-        return self._event_statuses.get(event_id, "Waiting for initial state" if event.get("enabled", True) else "Disabled")
+        return self._event_statuses.get(event_id, "Waiting for initial state" if event.get("enabled", False) else "Disabled")
 
     def _on_event_status(self, event_id: str, status: str) -> None:
         if event_id == "__service__":
@@ -1951,8 +2056,6 @@ class GeminiChatWidget(QWidget):
         self._refresh_event_status_bubble()
 
     def _on_event_triggered(self, trigger: EventTrigger) -> None:
-        if trigger.observer_type == "health":
-            self._log_health_observer_event(trigger)
         if trigger.suppressed_by_focus:
             self._event_statuses[trigger.event_id] = "Ignored: game focused"
             return
@@ -1961,7 +2064,8 @@ class GeminiChatWidget(QWidget):
             self._event_statuses[trigger.event_id] = "Triggered (no prompt)"
             self._refresh_event_status_bubble()
             return
-        if self._message_queue.enqueue_event(ai_prompt, trigger.event_id):
+        turn_id = uuid.uuid4().hex
+        if self._message_queue.enqueue_event(ai_prompt, trigger.event_id, turn_id=turn_id):
             self._refresh_queue_bubble()
             self._start_next_queued_turn()
 
@@ -1982,16 +2086,6 @@ class GeminiChatWidget(QWidget):
         if prompt:
             return f"{prompt}\n\n{context}"
         return context
-
-    def _log_health_observer_event(self, trigger: EventTrigger) -> None:
-        """Print temporary health-observer diagnostics to the terminal only."""
-        details = trigger.details or {}
-        current = details.get("current_hp", "?")
-        character = str(trigger.character_name or "Game")
-        print(
-            f"[Health Observer] EVENT ĐÃ BẮT ĐƯỢC — {character}: HP hiện tại = {current} (< ngưỡng)",
-            flush=True,
-        )
 
     def _read_current_location(self) -> dict:
         if self._scenario_tool_client is None:
@@ -2079,7 +2173,7 @@ class GeminiChatWidget(QWidget):
             if not rule.get("enabled", False): continue
             rule_id = str(rule.get("id"))
             if now < self._auto_next_due.get(rule_id, now + 1): continue
-            self._message_queue.enqueue_automatic(str(rule.get("text", "")), rule_id)
+            self._message_queue.enqueue_automatic(str(rule.get("text", "")), rule_id, turn_id=uuid.uuid4().hex)
             if rule.get("kind") == "time": self._auto_next_due[rule_id] += 86400
             else: self._auto_next_due[rule_id] = now + max(1, int(rule.get("interval_seconds", 300)))
         self._refresh_queue_bubble(); self._start_next_queued_turn()
@@ -2204,7 +2298,7 @@ class GeminiChatWidget(QWidget):
         if event_bubble is not None and not event_bubble.isHidden():
             event_width, event_height = self._overlay_bubble_size(
                 event_bubble, self._event_status_expanded,
-                len([rule for rule in self._event_rules if rule.get("enabled", True)]) + 1,
+                len([rule for rule in self._event_rules if rule.get("enabled", False)]) + 1,
                 max(1, available_width - queue_width - 14), available_height,
             )
             event_bubble.setFixedSize(event_width, event_height)
@@ -2244,10 +2338,11 @@ class GeminiChatWidget(QWidget):
         if queued is None: return
         self._turn_running = True
         self._active_queued_message = queued
+        self._active_log_turn_id = queued.turn_id
         self._message_queue.mark_active(queued)
         self._refresh_queue_bubble()
         if queued.source in ("automatic", "event"):
-            self._append_bubble(queued.text, side="automatic")
+            self._append_bubble(queued.text, side="automatic", turn_id=queued.turn_id)
         self._dispatch_turn(queued)
 
     def _on_turn_finished(self) -> None:
@@ -2256,6 +2351,7 @@ class GeminiChatWidget(QWidget):
             self._active_queued_message = None
         self._turn_running = False
         self._active_turn_cancel = None
+        self._active_log_turn_id = None
         self._refresh_managed_process_title()
         self._refresh_ai_activity_button()
         self._start_next_queued_turn()
@@ -2285,8 +2381,9 @@ class GeminiChatWidget(QWidget):
         self.prompt.clear()
         self._attach_path = None
         self._refresh_attachment_ui()
-        self._append_bubble(prompt or "", side="right", image_path=image_path)
-        self._message_queue.enqueue_manual(prompt, image_path)
+        turn_id = uuid.uuid4().hex
+        self._append_bubble(prompt or "", side="right", image_path=image_path, turn_id=turn_id)
+        self._message_queue.enqueue_manual(prompt, image_path, turn_id=turn_id)
         self._refresh_queue_bubble()
         self._start_next_queued_turn()
 
@@ -2354,6 +2451,7 @@ class GeminiChatWidget(QWidget):
                         "side": "left",
                         "text": txt,
                         "meta": self._format_turn_meta(dt_ms, model_name, tool_result),
+                        "turn_id": queued.turn_id,
                     }
                 )
             except AIMCPTurnCancelled:
@@ -2572,6 +2670,7 @@ class AIChatWorkspace(QWidget):
         self.tabs.setTabToolTip(index, title)
         try:
             setattr(chat._selected_game_target, "window_title", window_title)
+            chat._set_chat_log_target(chat._selected_game_target)
         except Exception:
             pass
 
