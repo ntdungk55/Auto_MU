@@ -1578,6 +1578,8 @@ class MainWindow(QMainWindow):
 
     def _load_ai_event_registrations_for_target(self, target: object) -> list[dict]:
         """Load shared event definitions with enablement isolated per target."""
+        if target is None:
+            return []
         state = self._load_app_state()
         definitions = state.get("ai_event_registrations", [])
         if not isinstance(definitions, list) or not definitions:
@@ -1598,8 +1600,7 @@ class MainWindow(QMainWindow):
         for item in definitions:
             event_id = str(item["event_id"])
             value = dict(item)
-            if isinstance(enabled, dict) and event_id in enabled:
-                value["enabled"] = bool(enabled[event_id])
+            value["enabled"] = bool(enabled.get(event_id, False)) if isinstance(enabled, dict) else False
             result.append(value)
         return result
 

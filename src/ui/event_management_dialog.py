@@ -35,12 +35,12 @@ class EventManagementDialog(QDialog):
         current = self.table.currentRow(); self.table.blockSignals(True); self.table.setRowCount(0)
         for row, event in enumerate(self.events):
             self.table.insertRow(row); event_id = str(event.get("event_id", ""))
-            enabled = QCheckBox(); enabled.setChecked(bool(event.get("enabled", True))); enabled.toggled.connect(lambda value, eid=event_id: self._set_enabled(eid, value)); self.table.setCellWidget(row, 0, enabled)
+            enabled = QCheckBox(); enabled.setChecked(bool(event.get("enabled", False))); enabled.toggled.connect(lambda value, eid=event_id: self._set_enabled(eid, value)); self.table.setCellWidget(row, 0, enabled)
             name = QTableWidgetItem(str(event.get("name", ""))); name.setData(Qt.ItemDataRole.UserRole, event_id); name.setFlags(name.flags() & ~Qt.ItemFlag.ItemIsEditable); self.table.setItem(row, 1, name)
             prompt = QTableWidgetItem(str(event.get("prompt", ""))); prompt.setData(Qt.ItemDataRole.UserRole, event_id); self.table.setItem(row, 2, prompt)
             observer_label = "Health Observer" if event.get("observer_type") == "health" else "Location Observer"
             observer = QTableWidgetItem(observer_label); observer.setFlags(observer.flags() & ~Qt.ItemFlag.ItemIsEditable); self.table.setItem(row, 3, observer)
-            status = self._status_getter(event_id) if self._status_getter else ("Enabled" if event.get("enabled", True) else "Disabled"); status_item = QTableWidgetItem(status); status_item.setFlags(status_item.flags() & ~Qt.ItemFlag.ItemIsEditable); self.table.setItem(row, 4, status_item)
+            status = self._status_getter(event_id) if self._status_getter else ("Enabled" if event.get("enabled", False) else "Disabled"); status_item = QTableWidgetItem(status); status_item.setFlags(status_item.flags() & ~Qt.ItemFlag.ItemIsEditable); self.table.setItem(row, 4, status_item)
         self.table.blockSignals(False)
         if self.events and current >= 0: self.table.selectRow(min(current, len(self.events) - 1))
 

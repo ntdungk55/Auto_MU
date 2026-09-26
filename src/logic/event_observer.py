@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import re
+import sys
 import threading
 import time
 from typing import Any, Callable, Literal
@@ -196,13 +197,31 @@ class LocationObserverService:
         location_state = self._parse_state(payload)
         health_state = self._parse_health_state(payload)
         previous_location = self._parse_previous_state(payload)
-        if any(item.enabled and item.observer_type == "health" for item in self._events):
-            print(
-                "[Health Observer] "
-                f"character={self._character_name(payload)} "
-                f"current_hp={health_state.current if health_state is not None else None}",
-                flush=True,
-            )
+        companion_training = None
+        companion_scores: dict[str, Any] = {}
+        companion_margin: Any = None
+        if isinstance(payload, dict):
+            state_payload = payload.get("state")
+            main_info = state_payload.get("main_info", {}) if isinstance(state_payload, dict) else {}
+            companion = main_info.get("companionTraining", {}) if isinstance(main_info, dict) else {}
+            if isinstance(companion, dict):
+                companion_training = companion.get("state")
+                raw_scores = companion.get("scores")
+                if isinstance(raw_scores, dict):
+                    companion_scores = {
+                        "training": raw_scores.get("training"),
+                        "not_training": raw_scores.get("not_training"),
+                    }
+                companion_margin = companion.get("score_margin")
+        print(
+            "[Companion State] "
+            f"state={companion_training or 'unknown'} "
+            f"training_score={companion_scores.get('training')} "
+            f"not_training_score={companion_scores.get('not_training')} "
+            f"margin={companion_margin}",
+            file=sys.stderr,
+            flush=True,
+        )
         if location_state is None and health_state is None:
             self._handle_unavailable()
             return
@@ -309,9 +328,19 @@ class LocationObserverService:
         target = state.get("target")
         if not isinstance(target, dict):
             target = {}
-        title = str(target.get("title", "") or "") if isinstance(target, dict) else ""
-        match = re.search(r"\([^)]*-\s*([^)]+)\)", title)
-        return match.group(1).strip() if match else (title.strip() or "Game")
+        title = ""
+        for key in ("title", "window_title", "selected_window_title"):
+            candidate = str(target.get(key, "") or "").strip()
+            if candidate:
+                title = candidate
+                break
+        match = re.search(r"\(([^()]*)\)\s*$", title)
+        if match:
+            parts = re.split(r"\s*-\s*", match.group(1))
+            name = parts[-1].strip()
+            if name:
+                return name
+        return title or "Game"
 
     @staticmethod
     def _trigger_details(location: LocationState | None, health: HealthState | None) -> dict[str, Any]:

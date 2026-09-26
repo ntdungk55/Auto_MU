@@ -3,6 +3,7 @@ from src.logic.event_observer import (
     HealthState,
     LocationCondition,
     LocationEventObserver,
+    LocationObserverService,
     LocationState,
     RegisteredEvent,
     is_health_below_transition,
@@ -214,6 +215,18 @@ def test_health_observer_compares_one_retained_state_with_new_state() -> None:
     assert observer.evaluate_current_state(HealthState(8190), game_focused=False).triggered is False
     assert observer.evaluate_current_state(HealthState(0), game_focused=False).triggered is True
     assert observer.evaluate_current_state(HealthState(0), game_focused=False).triggered is False
+
+
+def test_character_name_uses_name_after_last_dash_in_window_title() -> None:
+    payload = {
+        "state": {
+            "target": {
+                "title": "MU GamethuVN - Season 21 (Golden - zPhoenix)",
+            },
+        },
+    }
+
+    assert LocationObserverService._character_name(payload) == "zPhoenix"
 
 
 def test_health_observer_focus_suppresses_delivery_but_consumes_crossing() -> None:

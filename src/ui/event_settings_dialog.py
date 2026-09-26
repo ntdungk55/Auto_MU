@@ -94,7 +94,7 @@ class EventSettingsDialog(QDialog):
         self.name_edit = QLineEdit(str(self._event.get("name", "")))
         self.prompt_edit = QTextEdit(str(self._event.get("prompt", "")))
         self.prompt_edit.setMinimumHeight(70)
-        self.enabled = QCheckBox(); self.enabled.setChecked(bool(self._event.get("enabled", True)))
+        self.enabled = QCheckBox(); self.enabled.setChecked(bool(self._event.get("enabled", False)))
         form.addRow("Tên event:", self.name_edit); form.addRow("Prompt:", self.prompt_edit); form.addRow("Enabled:", self.enabled)
         layout.addLayout(form)
         self.tabs = QTabWidget(); location_tab = QWidget(); location_layout = QVBoxLayout(location_tab)

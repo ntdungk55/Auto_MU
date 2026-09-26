@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+import sys
 import threading
 import time
 from typing import Any
+
+import cv2
 
 try:
     from mcp.server import FastMCP
@@ -19,7 +23,7 @@ from src.ai_control.current_character_info import (
     _read_taught_health_easyocr,
     _read_taught_hud_text,
 )
-from src.ai_control.auto_play_control import _config, _state_from_templates
+from src.ai_control.auto_play_control import _config, _load_template, _state_from_templates
 from samples.ai_game_controller.infrastructure.window_capture import GameWindowCapture
 from src.ai_control.servers.process import resolve_selected_process
 
@@ -86,11 +90,12 @@ class GameStateStore:
 class GameStateService:
     """Capture/OCR state in the background without sending game input."""
 
-    def __init__(self, store: GameStateStore, interval_seconds: float = 0.5) -> None:
+    def __init__(self, store: GameStateStore, interval_seconds: float = 2.0) -> None:
         self.store = store
         self.interval_seconds = max(0.1, float(interval_seconds))
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        self._roi_cache: dict[tuple[int, str], tuple[bytes, Any, dict[str, Any]]] = {}
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -157,10 +162,21 @@ class GameStateService:
                     ))
                 else:
                     self.store.set_error(str(result.get("error") or "Incomplete game state"))
+                companion_state = (
+                    result.get("main_info", {})
+                    .get("companionTraining", {})
+                    .get("state")
+                    if isinstance(result, dict)
+                    else None
+                )
+                print(
+                    f"[Companion State] training={companion_state or 'unknown'}",
+                    file=sys.stderr,
+                    flush=True,
+                )
             self._stop.wait(self.interval_seconds)
 
-    @staticmethod
-    def _read_window_state(target: dict[str, Any]) -> dict[str, Any]:
+    def _read_window_state(self, target: dict[str, Any]) -> dict[str, Any]:
         """Capture once and read all non-dialog HUD state from that image."""
         import win32gui
 
@@ -172,12 +188,14 @@ class GameStateService:
         if image is None:
             raise RuntimeError("Could not capture the selected game window")
         main_info = config["mainInfo"]
-        map_value, map_ocr = _read_taught_hud_text(image, main_info["map"], _normalize_map)
-        position_value, position_ocr = _read_taught_hud_text(
-            image, main_info["position"], _normalize_position,
+        map_value, map_ocr = self._read_cached_roi(
+            hwnd, image, "map", main_info["map"], _normalize_map, _read_taught_hud_text,
         )
-        health_value, health_ocr = _read_taught_health_easyocr(
-            image, main_info["healthBar"], _normalize_health,
+        position_value, position_ocr = self._read_cached_roi(
+            hwnd, image, "position", main_info["position"], _normalize_position, _read_taught_hud_text,
+        )
+        health_value, health_ocr = self._read_cached_roi(
+            hwnd, image, "healthBar", main_info["healthBar"], _normalize_health, _read_taught_health_easyocr,
         )
         if (map_value is None or position_value is None) and health_value is None:
             raise RuntimeError("Could not read complete map/position/health state")
@@ -194,14 +212,7 @@ class GameStateService:
                 threshold_override=control.get("edgeThreshold"),
             )
         companion = main_info["companionManagement1"]
-        image_states["companionTraining"] = _state_from_templates(
-            image,
-            companion["roi"],
-            companion["trainingStateTemplates"],
-            icon_roi_relative=companion.get("trainingIconRoiRelative"),
-            edge_matching=bool(companion.get("edgeMatching", False)),
-            threshold_override=companion.get("edgeThreshold"),
-        )
+        image_states["companionTraining"] = self._companion_training_state(image, companion)
         return {
             "success": True,
             "map": map_value,
@@ -215,6 +226,60 @@ class GameStateService:
                 "companionTraining": image_states["companionTraining"],
             },
         }
+
+    @staticmethod
+    def _companion_training_state(image: Any, config: dict[str, Any]) -> dict[str, Any]:
+        """Recognize slot-empty before checking the summoned companion's training icon."""
+        roi = config["roi"]
+        template = _load_template(str(config["notSummonedTemplate"]))
+        x1, y1, x2, y2 = (int(roi[key]) for key in ("x1", "y1", "x2", "y2"))
+        margin = int(config.get("templateSearchMargin", 0))
+        search_x1, search_y1 = max(0, x1 - margin), max(0, y1 - margin)
+        search_x2, search_y2 = min(image.shape[1], x2 + margin), min(image.shape[0], y2 + margin)
+        search = cv2.cvtColor(image[search_y1:search_y2, search_x1:search_x2], cv2.COLOR_BGR2GRAY)
+        if search.shape[0] >= template.shape[0] and search.shape[1] >= template.shape[1]:
+            _, score, _, _ = cv2.minMaxLoc(cv2.matchTemplate(search, template, cv2.TM_CCOEFF_NORMED))
+            threshold = float(config.get("notSummonedThreshold", 0.7))
+            if float(score) >= threshold:
+                return {
+                    "state": "not_summoned",
+                    "score": round(float(score), 6),
+                    "threshold": threshold,
+                }
+        return _state_from_templates(
+            image,
+            config["roi"],
+            config["trainingStateTemplates"],
+            icon_roi_relative=config.get("trainingIconRoiRelative"),
+            edge_matching=bool(config.get("edgeMatching", False)),
+            # Use the per-template teaching threshold.  The legacy
+            # ``edgeThreshold`` value is not the companion icon acceptance
+            # threshold and must not override the teaching assets.
+            threshold_override=None,
+        )
+
+    def _read_cached_roi(
+        self,
+        hwnd: int,
+        image: Any,
+        name: str,
+        definition: dict[str, Any],
+        normalizer: Any,
+        reader: Any,
+    ) -> tuple[Any, dict[str, Any]]:
+        """Reuse OCR for an unchanged taught ROI within the same game window."""
+        roi = {axis: int(value) for axis, value in dict(definition["roi"]).items()}
+        if not (0 <= roi["x1"] < roi["x2"] <= image.shape[1] and 0 <= roi["y1"] < roi["y2"] <= image.shape[0]):
+            raise ValueError(f"Current HUD ROI lies outside the captured image: {roi}")
+        crop = image[roi["y1"]:roi["y2"], roi["x1"]:roi["x2"]]
+        fingerprint = hashlib.blake2b(crop.tobytes(), digest_size=8).digest()
+        key = (int(hwnd), name)
+        cached = self._roi_cache.get(key)
+        if cached is not None and cached[0] == fingerprint:
+            return cached[1], cached[2]
+        value, evidence = reader(image, definition, normalizer)
+        self._roi_cache[key] = (fingerprint, value, evidence)
+        return value, evidence
 
 
 _store = GameStateStore()

@@ -233,7 +233,7 @@
       "lowPowerIndicatorThreshold": 0.92,
       "summonedIndicatorTemplates": [
         {
-          "path": "assets/companion_summoned_pause_indicator.png",
+          "path": "assets/companion_not_training_state_icon.png",
           "threshold": 0.7
         },
         {
@@ -243,7 +243,7 @@
       ],
       "trainingStateTemplates": {
         "training": {
-          "path": "assets/companion_training_state_icon.png",
+          "path": "assets/companion_summoned_play_indicator.png",
           "threshold": 0.7
         },
         "not_training": {
