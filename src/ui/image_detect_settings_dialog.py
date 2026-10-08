@@ -225,15 +225,6 @@ class ImageDetectSettingsDialog(QDialog):
         self.ocr_denoise_checkbox.setChecked(False)
         ocr_layout.addWidget(self.ocr_denoise_checkbox)
         
-        preprocessing_row = QHBoxLayout()
-        self.preprocessing_load_btn = QPushButton("📥 Load cấu hình từ Lab Hiệu chỉnh")
-        self.preprocessing_load_btn.clicked.connect(self._load_preprocessing_config)
-        preprocessing_row.addWidget(self.preprocessing_load_btn)
-        self.preprocessing_status_label = QLabel("")
-        preprocessing_row.addWidget(self.preprocessing_status_label)
-        preprocessing_row.addStretch()
-        ocr_layout.addLayout(preprocessing_row)
-        
         self.ocr_group.setLayout(ocr_layout)
         self.ocr_group.setVisible(False)
         layout.addWidget(self.ocr_group)
@@ -515,24 +506,6 @@ class ImageDetectSettingsDialog(QDialog):
         else:
             self.image_btn.setText("Tạo ảnh Teaching")
     
-    def _load_preprocessing_config(self):
-        """Load preprocessing config from preprocessing_config.json."""
-        config_path = os.path.join(os.path.dirname(__file__), "..", "preprocessing_config.json")
-        if not os.path.exists(config_path):
-            QMessageBox.warning(self, "Lỗi", "Chưa có cấu hình từ Lab Hiệu chỉnh.\nHãy vào tab 'Hiệu chỉnh', test thuật toán và nhấn 'Lưu cấu hình cho OCR'.")
-            return
-        try:
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-            
-            self.action.preprocessing_config = config
-            algo_name = config.get("algorithm_name", config.get("algorithm", ""))
-            self.preprocessing_status_label.setText(f"✓ {algo_name}")
-            self.preprocessing_status_label.setStyleSheet("color: green;")
-            QMessageBox.information(self, "Thành công", f"Đã load cấu hình:\n{algo_name}\n\nOCR sẽ tự động áp dụng preprocessing này.")
-        except Exception as e:
-            QMessageBox.critical(self, "Lỗi", f"Không thể load cấu hình: {e}")
-    
     def _app_state_path(self) -> str:
         try:
             return os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")), "app_state.json")
@@ -789,13 +762,6 @@ class ImageDetectSettingsDialog(QDialog):
         self.ocr_enhance_contrast_checkbox.setChecked(bool(getattr(self.action, "ocr_enhance_contrast", True)))
         self.ocr_sharpen_checkbox.setChecked(bool(getattr(self.action, "ocr_sharpen", True)))
         self.ocr_denoise_checkbox.setChecked(bool(getattr(self.action, "ocr_denoise", False)))
-        
-        # Preprocessing config status
-        if getattr(self.action, "preprocessing_config", None):
-            config = self.action.preprocessing_config
-            algo_name = config.get("algorithm_name", config.get("algorithm", ""))
-            self.preprocessing_status_label.setText(f"✓ {algo_name}")
-            self.preprocessing_status_label.setStyleSheet("color: green;")
         
         # Gemini settings
         gemini_enabled = bool(getattr(self.action, "gemini_enabled", False))

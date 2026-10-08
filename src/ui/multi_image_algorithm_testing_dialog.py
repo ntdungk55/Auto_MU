@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushBut
                              QSpinBox, QDoubleSpinBox, QGridLayout, QTableWidget, 
                              QTableWidgetItem, QGraphicsSimpleTextItem, QPlainTextEdit)
 from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QThread
-from PyQt6.QtGui import QPixmap, QImage, QPen, QColor, QWheelEvent, QPainter, QBrush
+from PyQt6.QtGui import QPixmap, QImage, QPen, QColor, QWheelEvent, QPainter, QBrush, QFont
 from PyQt6.QtWidgets import QSlider
 from typing import Optional
 from ..logic.action_type import AutoAction
@@ -17,12 +17,15 @@ from ..logic.system_executor.window_capture import WindowCapture
 from ..logic.window_detector import WindowDetector
 import os
 import re
+import json
 import cv2
 import numpy as np
 import threading
 import time
 import tempfile
 import atexit
+import shutil
+from datetime import datetime
 
 
 class ZoomableGraphicsView(QGraphicsView):
@@ -442,6 +445,11 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         # Progress tracking counters
         self.current_test_total = 0
         self.current_test_completed = 0
+        self.current_test_window_title = ""
+        self.test_sessions_dir = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "..", "..", "assets", "algorithm_tests")
+        )
+        os.makedirs(self.test_sessions_dir, exist_ok=True)
         
         # OCR-related attributes
         self.available_ocr_engines = self._detect_available_ocr_engines()
@@ -603,7 +611,7 @@ class MultiImageAlgorithmTestingDialog(QDialog):
     def _init_ui(self):
         """Initialize UI components."""
         layout = QVBoxLayout()
-        
+
         # Preview area (30/70 split - Teaching nhỏ, Window Capture lớn)
         preview_splitter = QSplitter(Qt.Orientation.Horizontal)
         
@@ -1076,6 +1084,125 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         folder = f"images/{self.tool_id}/{safe_action_name}/window_captures/"
         os.makedirs(folder, exist_ok=True)
         return folder
+
+    def _save_test_session(self) -> None:
+        """Persist the current test resources as an independent session."""
+        if self.current_test_total <= 0:
+            return
+
+        session_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        session_dir = os.path.join(self.test_sessions_dir, session_id)
+        captures_dir = os.path.join(session_dir, "captures")
+        os.makedirs(captures_dir, exist_ok=True)
+
+        captures = []
+        for index in range(self.captures_list.count()):
+            item = self.captures_list.item(index)
+            source_path = item.data(Qt.ItemDataRole.UserRole) if item else None
+            if not source_path or not os.path.isfile(source_path):
+                continue
+            filename = f"capture_{index + 1:03d}{os.path.splitext(source_path)[1].lower() or '.png'}"
+            destination = os.path.join(captures_dir, filename)
+            try:
+                shutil.copy2(source_path, destination)
+            except OSError as exc:
+                print(f"[WARN] Cannot save test session capture {source_path}: {exc}")
+                continue
+            captures.append({
+                "filename": filename,
+                "source_name": os.path.basename(source_path),
+                "score": self.test_results.get(source_path),
+                "bbox": list(self.test_match_bboxes[source_path]) if source_path in self.test_match_bboxes else None,
+            })
+
+        teaching_image_name = None
+        if self.teaching_image_path and os.path.isfile(self.teaching_image_path):
+            teaching_image_name = "teaching.png"
+            try:
+                shutil.copy2(
+                    self.teaching_image_path,
+                    os.path.join(session_dir, teaching_image_name),
+                )
+            except OSError as exc:
+                print(f"[WARN] Cannot save teaching image for test session: {exc}")
+                teaching_image_name = None
+
+        metadata = {
+            "created_at": datetime.now().isoformat(timespec="seconds"),
+            "window_title": self.current_test_window_title,
+            "window_hwnd": self.selected_window_hwnd,
+            "matching_method": self.matching_method_combo.currentData(),
+            "algorithms": self._get_current_algorithms(),
+            "teaching_image": teaching_image_name,
+            "captures": captures,
+        }
+        try:
+            with open(os.path.join(session_dir, "session.json"), "w", encoding="utf-8") as handle:
+                json.dump(metadata, handle, ensure_ascii=False, indent=2)
+        except (OSError, TypeError, ValueError) as exc:
+            print(f"[WARN] Cannot save test session metadata: {exc}")
+            shutil.rmtree(session_dir, ignore_errors=True)
+            return
+
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "_load_test_sessions"):
+            parent._load_test_sessions()
+
+    def load_test_session(self, session_dir: str) -> None:
+        """Load a saved session into the current dialog."""
+        if not session_dir:
+            return
+        metadata_path = os.path.join(session_dir, "session.json")
+        try:
+            with open(metadata_path, "r", encoding="utf-8") as handle:
+                metadata = json.load(handle)
+        except (OSError, ValueError, TypeError) as exc:
+            QMessageBox.warning(self, "Lỗi", f"Không thể đọc phiên test: {exc}")
+            return
+
+        self.temp_captures.clear()
+        self.saved_captures.clear()
+        self.test_results.clear()
+        self.test_match_bboxes.clear()
+        self.captures_list.clear()
+
+        captures_dir = os.path.join(session_dir, "captures")
+        for capture in metadata.get("captures", []):
+            filename = capture.get("filename")
+            path = os.path.join(captures_dir, filename) if filename else ""
+            if not os.path.isfile(path):
+                continue
+            self.saved_captures.append(path)
+            self._add_saved_capture_to_list(path)
+            score = capture.get("score")
+            if score is not None:
+                self.test_results[path] = float(score)
+            bbox = capture.get("bbox")
+            if bbox and len(bbox) == 4:
+                self.test_match_bboxes[path] = tuple(bbox)
+
+        self.current_test_window_title = metadata.get("window_title", "")
+        self.selected_window_hwnd = metadata.get("window_hwnd") or self.selected_window_hwnd
+
+        matching_method = metadata.get("matching_method")
+        if matching_method:
+            index = self.matching_method_combo.findData(matching_method)
+            if index >= 0:
+                self.matching_method_combo.setCurrentIndex(index)
+
+        while self.algorithms_list.count():
+            self.algorithms_list.takeItem(0)
+        for algorithm in metadata.get("algorithms", []):
+            self._add_algorithm_from_data(algorithm)
+
+        self.current_test_total = len(metadata.get("captures", []))
+        self.current_test_completed = self.current_test_total
+        self.progress_bar.setValue(100 if self.current_test_total else 0)
+        self.progress_label.setText(
+            f"Đã nạp phiên test ({self.current_test_total}/{self.current_test_total})"
+            if self.current_test_total else "Phiên test không có ảnh"
+        )
+        self._update_results_display()
     
     def _get_next_capture_filename(self):
         """Get next capture filename."""
@@ -1184,17 +1311,12 @@ class MultiImageAlgorithmTestingDialog(QDialog):
     def _refresh_windows(self):
         """Refresh window list for capture selection."""
         self.window_combo.clear()
-        
-        # Find windows similar to main app logic
-        windows = self.window_detector.find_windows_by_title("Mu Online - GamethuVN.com")
-        if not windows:
-            windows = self.window_detector.find_windows_by_title("Mu Online")
-        if not windows:
-            windows = self.window_detector.find_windows_by_title("GamethuVN")
-        if not windows:
-            windows = self.window_detector.find_windows_by_title("MU ONLINE")
-        if not windows:
-            windows = self.window_detector.find_windows_by_title("MU")
+
+        # Keep all detected game windows selectable, while putting the
+        # requested Season 21 naming scheme first when it is present.
+        prefix = "MU GamethuVN - Season 21"
+        windows = list(self.window_detector.find_game_windows())
+        windows.sort(key=lambda pair: not str(pair[1]).strip().lower().startswith(prefix.lower()))
         
         if not windows:
             self.window_combo.addItem("Không tìm thấy window", None)
@@ -2377,6 +2499,10 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         # Store total for progress calculation
         self.current_test_total = len(checked_items)
         self.current_test_completed = 0
+        selected_index = self.window_combo.currentIndex()
+        self.current_test_window_title = (
+            self.window_combo.itemText(selected_index) if selected_index >= 0 else ""
+        )
         
         # Get algorithms from algorithms_list (user đã add)
         algorithms = self._get_current_algorithms()
@@ -2444,11 +2570,7 @@ class MultiImageAlgorithmTestingDialog(QDialog):
             if self.captures_list.currentItem() is item:
                 self._on_capture_selected(item)
         
-        # Update progress counter and bar
-        self.current_test_completed += 1
-        progress_percent = int(self.current_test_completed / self.current_test_total * 100)
-        self.progress_bar.setValue(progress_percent)
-        self.progress_label.setText(f"Testing: {filename}... ({self.current_test_completed}/{self.current_test_total})")
+        self._advance_test_progress(filename)
     
     def _on_test_error(self, index: int, filename: str, error: str):
         """Handle test error (updated for custom widgets)."""
@@ -2457,12 +2579,38 @@ class MultiImageAlgorithmTestingDialog(QDialog):
             widget = self.captures_list.itemWidget(item)
             if widget and hasattr(widget, 'label'):
                 widget.label.setText(f"{filename} | Error: {error}")
+        self._advance_test_progress(filename)
+
+    def _advance_test_progress(self, filename: str) -> None:
+        """Count both successful and failed items toward the run total."""
+        if self.current_test_total <= 0:
+            return
+        self.current_test_completed = min(
+            self.current_test_completed + 1, self.current_test_total
+        )
+        progress_percent = int(self.current_test_completed / self.current_test_total * 100)
+        self.progress_bar.setValue(progress_percent)
+        self.progress_label.setText(
+            f"Testing: {filename}... ({self.current_test_completed}/{self.current_test_total})"
+        )
     
     def _on_test_complete(self):
         """Test complete."""
         self.test_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
-        self.progress_label.setText("Test complete!")
+        if self.stop_testing:
+            self.progress_label.setText(
+                f"Test stopped ({self.current_test_completed}/{self.current_test_total})"
+            )
+        else:
+            # Completion is authoritative even when an item failed. Failed
+            # items are still completed work for the progress bar.
+            self.current_test_completed = self.current_test_total
+            self.progress_bar.setValue(100)
+            self.progress_label.setText(
+                f"Test complete! ({self.current_test_total}/{self.current_test_total})"
+            )
+            self._save_test_session()
         self._update_results_display()
     
     def _update_results_display(self):
@@ -2532,8 +2680,6 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         # Save to action
         self.action.window_capture_paths = all_paths
         self.action.window_capture_results = self.test_results
-        
-        self._test_complete_signal.emit()
     
     def _add_window_capture_for_test(self, path: str):
         """Helper method for tests - add window capture directly to saved_captures."""

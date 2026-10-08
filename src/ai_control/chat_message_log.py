@@ -14,7 +14,7 @@ class ChatMessageLog:
     """Store chat turns on disk and return bounded pages for the UI."""
 
     RETENTION_DAYS = 7
-    PAGE_TURNS = 20
+    PAGE_TURNS = 5
 
     def __init__(self, root: Path | None = None) -> None:
         self.root = root or Path(__file__).resolve().parents[2] / "chat_message_log"

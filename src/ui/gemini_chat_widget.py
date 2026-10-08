@@ -742,6 +742,8 @@ class AutoMessageDialog(QDialog):
 class GeminiChatWidget(QWidget):
     """AI chat tab with selectable providers, images, and MCP tools."""
 
+    MAX_VISIBLE_BUBBLES = 5
+
     def __init__(
         self,
         parent=None,
@@ -1749,12 +1751,27 @@ class GeminiChatWidget(QWidget):
             self.chat_layout.insertWidget(
                 idx, _ChatBubble(text=text, side=side, image_path=image_path, meta=meta, timestamp=timestamp),
             )
+            self._trim_chat_bubbles()
             if persist:
                 self._pending_scroll_to_bottom = True
                 QTimer.singleShot(0, self._scroll_to_bottom)
                 QTimer.singleShot(30, self._scroll_to_bottom)
         except Exception:
             pass
+
+    def _trim_chat_bubbles(self) -> None:
+        """Keep only the newest visible chat bubbles in the bounded UI history."""
+        bubbles = []
+        for index in range(self.chat_layout.count()):
+            widget = self.chat_layout.itemAt(index).widget()
+            if widget is None or widget is self._chat_spacer or widget is self._typing_indicator:
+                continue
+            bubbles.append(widget)
+
+        while len(bubbles) > self.MAX_VISIBLE_BUBBLES:
+            oldest = bubbles.pop(0)
+            self.chat_layout.removeWidget(oldest)
+            oldest.deleteLater()
 
     def _on_scroll_range_changed(self, _min: int, _max: int):
         """Called after layout updates change the scroll range."""

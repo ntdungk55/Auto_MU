@@ -57,7 +57,7 @@ from src.logic.tool_manager import ToolManager, Tool
 from src.ui.tool_editor_window import ToolEditorWindow
 from src.ui.tool_settings_dialog import ToolSettingsDialog
 from src.ui.gemini_chat_widget import AIChatWorkspace
-from src.ui.image_preprocessing_widget import ImagePreprocessingWidget
+from src.ui.teaching_algorithm_lab_widget import TeachingAlgorithmLabWidget
 from src.logic.dpapi import protect_to_b64, unprotect_from_b64
 
 try:
@@ -1257,8 +1257,8 @@ class MainWindow(QMainWindow):
         self.stacked_widget.addWidget(self.hotkey_widget)
         self.gemini_widget = self.create_gemini_widget()
         self.stacked_widget.addWidget(self.gemini_widget)
-        self.preprocessing_widget = ImagePreprocessingWidget()
-        self.stacked_widget.addWidget(self.preprocessing_widget)
+        self.teaching_lab_widget = TeachingAlgorithmLabWidget()
+        self.stacked_widget.addWidget(self.teaching_lab_widget)
         self.setCentralWidget(self.stacked_widget)
         self.stacked_widget.setCurrentIndex(0)  # Default to Home
 
@@ -1443,11 +1443,11 @@ class MainWindow(QMainWindow):
         toolbar.addAction(self.gemini_action)
 
         # Image Preprocessing Lab action
-        self.preprocessing_action = QAction("Hiệu chỉnh", self)
-        self.preprocessing_action.setToolTip("Lab xử lý ảnh: test thuật toán preprocessing cho OCR")
-        self.preprocessing_action.setCheckable(True)
-        self.preprocessing_action.triggered.connect(lambda: self.on_toolbar_action_clicked(3))
-        toolbar.addAction(self.preprocessing_action)
+        self.teaching_lab_action = QAction("Hiệu chỉnh", self)
+        self.teaching_lab_action.setToolTip("Tạo teaching image và test thuật toán trên window game")
+        self.teaching_lab_action.setCheckable(True)
+        self.teaching_lab_action.triggered.connect(lambda: self.on_toolbar_action_clicked(3))
+        toolbar.addAction(self.teaching_lab_action)
         
         # Settings menu button (dropdown)
         settings_menu_btn = QToolButton()
@@ -1475,14 +1475,14 @@ class MainWindow(QMainWindow):
                 self.home_action.setChecked(action is self.home_action)
                 self.hotkey_action.setChecked(action is self.hotkey_action)
                 self.gemini_action.setChecked(action is self.gemini_action)
-                self.preprocessing_action.setChecked(action is self.preprocessing_action)
+                self.teaching_lab_action.setChecked(action is self.teaching_lab_action)
             except Exception:
                 pass
 
         self.home_action.triggered.connect(lambda: _set_checked_only(self.home_action))
         self.hotkey_action.triggered.connect(lambda: _set_checked_only(self.hotkey_action))
         self.gemini_action.triggered.connect(lambda: _set_checked_only(self.gemini_action))
-        self.preprocessing_action.triggered.connect(lambda: _set_checked_only(self.preprocessing_action))
+        self.teaching_lab_action.triggered.connect(lambda: _set_checked_only(self.teaching_lab_action))
     
     def on_toolbar_action_clicked(self, index):
         """Xử lý khi click vào toolbar action"""
@@ -1493,9 +1493,9 @@ class MainWindow(QMainWindow):
         elif index == 2:
             self.gemini_action.setChecked(True)
         elif index == 3:
-            self.preprocessing_action.setChecked(True)
+            self.teaching_lab_action.setChecked(True)
         
-        # Chuyển màn hình (chỉ có 4 tabs: Home, Game HotKey, Gemini Chat, Hiệu chỉnh)
+        # Chuyển màn hình chính.
         self.stacked_widget.setCurrentIndex(index)
 
         # Nếu về Home thì đóng tất cả các dialog/cửa sổ phụ để tránh lạc UI

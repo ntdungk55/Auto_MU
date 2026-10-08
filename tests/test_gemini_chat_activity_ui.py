@@ -102,6 +102,29 @@ def test_busy_indicator_stays_below_left_aligned_tool_bubbles() -> None:
     assert widget._typing_indicator is None
 
 
+def test_chat_keeps_only_the_five_newest_visible_bubbles() -> None:
+    widget = GeminiChatWidget(managed_process_tab=True)
+
+    for index in range(7):
+        widget._append_bubble(f"Message {index}", side="left")
+
+    visible = [
+        widget.chat_layout.itemAt(index).widget()
+        for index in range(widget.chat_layout.count())
+        if isinstance(widget.chat_layout.itemAt(index).widget(), _ChatBubble)
+    ]
+
+    assert widget.MAX_VISIBLE_BUBBLES == 5
+    assert len(visible) == 5
+    assert [bubble._plain_text for bubble in visible] == [
+        "Message 2",
+        "Message 3",
+        "Message 4",
+        "Message 5",
+        "Message 6",
+    ]
+
+
 def test_ai_activity_button_cancels_the_active_turn() -> None:
     widget = GeminiChatWidget()
     widget._set_chat_available(True)
