@@ -15,8 +15,8 @@ def test_teaching_asset_paths_are_scoped_to_assets(tmp_path):
     """Teaching assets use the dedicated project asset folder."""
     image_path, metadata_path = TeachingAlgorithmLabWidget.asset_paths(tmp_path)
 
-    assert image_path == tmp_path / "assets" / "teaching_images" / "current_teaching.png"
-    assert metadata_path == tmp_path / "assets" / "teaching_images" / "current_teaching.json"
+    assert image_path == tmp_path / "assets" / "teaching" / "current_teaching.png"
+    assert metadata_path == tmp_path / "assets" / "teaching" / "current_teaching.json"
 
 
 def test_teaching_metadata_round_trip(tmp_path):

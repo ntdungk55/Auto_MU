@@ -13,6 +13,10 @@ import numpy as np
 import cv2
 import os
 from ..logic.window_detector import WindowDetector
+from ..logic.teaching_matching import (
+    expand_coordinate_bounds,
+    normalize_coordinate_match_offset,
+)
 try:
     from PIL import Image
     import io
@@ -62,6 +66,7 @@ class ImageGraphicsView(QGraphicsView):
         self.start_pos = None
         # Graphics items để vẽ selection và click point
         self.selection_item = None
+        self.coordinate_offset_item = None
         self.click_item = None  # Có thể là list nếu có nhiều items
         self._parent_dialog = None  # Reference to parent dialog for updating title
         self._temp_mask_item = None  # Temporary mask visual during drawing
@@ -229,7 +234,8 @@ class ImageGraphicsView(QGraphicsView):
         # Create new temp mask item
         if rect and not rect.isEmpty() and rect.width() > 0 and rect.height() > 0:
             self._temp_mask_item = QGraphicsRectItem(rect)
-            pen = QPen(QColor(255, 165, 0), 2)  # Orange, 2px (different from red mask)
+            pen = QPen(QColor(255, 165, 0), 1)
+            pen.setCosmetic(True)
             pen.setStyle(Qt.PenStyle.DashLine)
             self._temp_mask_item.setPen(pen)
             self._temp_mask_item.setBrush(QColor(255, 165, 0, 50))  # Orange semi-transparent
@@ -261,6 +267,9 @@ class ImageGraphicsView(QGraphicsView):
         if self.selection_item:
             scene.removeItem(self.selection_item)
             self.selection_item = None
+        if self.coordinate_offset_item:
+            scene.removeItem(self.coordinate_offset_item)
+            self.coordinate_offset_item = None
         
         # Tạo item mới nếu có selection_rect và không rỗng
         if self.selection_rect and not self.selection_rect.isEmpty():
@@ -268,12 +277,37 @@ class ImageGraphicsView(QGraphicsView):
             if self.selection_rect.width() > 0 and self.selection_rect.height() > 0:
                 self.selection_item = QGraphicsRectItem(self.selection_rect)
                 # Vẽ viền đỏ đậm và nền trong suốt
-                pen = QPen(QColor(255, 0, 0), 3)  # Viền đỏ, dày 3px
+                pen = QPen(QColor(255, 0, 0), 1)
+                pen.setCosmetic(True)
                 pen.setStyle(Qt.PenStyle.DashLine)  # Đường nét đứt
                 self.selection_item.setPen(pen)
                 self.selection_item.setBrush(QColor(255, 0, 0, 50))  # Nền đỏ trong suốt
                 self.selection_item.setZValue(1000)  # Đảm bảo vẽ trên cùng
                 scene.addItem(self.selection_item)
+
+                parent_dialog = self._parent_dialog
+                offset = getattr(parent_dialog, "coordinate_match_offset", 0)
+                captured_image = getattr(parent_dialog, "captured_image", None)
+                if offset > 0 and captured_image is not None:
+                    bounds = expand_coordinate_bounds(
+                        self.selection_rect.left(),
+                        self.selection_rect.top(),
+                        self.selection_rect.right(),
+                        self.selection_rect.bottom(),
+                        offset,
+                        captured_image.width(),
+                        captured_image.height(),
+                    )
+                    if bounds:
+                        left, top, right, bottom = bounds
+                        offset_rect = QRectF(left, top, right - left, bottom - top)
+                        self.coordinate_offset_item = QGraphicsRectItem(offset_rect)
+                        offset_pen = QPen(QColor(255, 214, 10), 1)
+                        offset_pen.setCosmetic(True)
+                        offset_pen.setStyle(Qt.PenStyle.DashLine)
+                        self.coordinate_offset_item.setPen(offset_pen)
+                        self.coordinate_offset_item.setZValue(1001)
+                        scene.addItem(self.coordinate_offset_item)
     
     def update_click_point(self):
         """Cập nhật graphics item cho click point"""
@@ -328,7 +362,8 @@ class ImageGraphicsView(QGraphicsView):
             ellipse = QGraphicsEllipseItem(rect)
             
             # Style cho tất cả items
-            pen = QPen(QColor(0, 255, 0), 3)  # Màu xanh lá, dày 3px
+            pen = QPen(QColor(0, 255, 0), 1)
+            pen.setCosmetic(True)
             brush = QColor(0, 255, 0, 100)  # Màu xanh trong suốt
             
             line1.setPen(pen)
@@ -360,6 +395,7 @@ class ImageCaptureDialog(QDialog):
         initial_click_x: int = None,
         initial_click_y: int = None,
         initial_mask_regions: list = None,
+        coordinate_match_offset: int = 0,
     ):
         super().__init__(parent)
         self.target_window_hwnd = target_window_hwnd
@@ -372,6 +408,11 @@ class ImageCaptureDialog(QDialog):
         self.selecting_click_point = False
         self.hide_click_selection = hide_click_selection  # Ẩn nút chọn điểm click nếu True
         self.hide_region_selection = hide_region_selection  # Ẩn nút chọn vùng nếu True
+        self.coordinate_match_offset = (
+            normalize_coordinate_match_offset(coordinate_match_offset)
+            if coordinate_match_offset
+            else 0
+        )
         self._loaded_from_existing = False  # Track if loaded from existing file
         self._existing_image_path = initial_image_path  # Store original path
         
@@ -694,6 +735,7 @@ class ImageCaptureDialog(QDialog):
         self.graphics_view.click_point = None
         self.graphics_view.start_pos = None
         self.graphics_view.selection_item = None
+        self.graphics_view.coordinate_offset_item = None
         self.graphics_view.click_item = None
         self.selection_rect = None
         self.click_point = None
@@ -980,7 +1022,8 @@ class ImageCaptureDialog(QDialog):
         
         # Create mask rect item
         mask_item = QGraphicsRectItem(rect)
-        pen = QPen(QColor(255, 0, 0), 2)  # Red, 2px
+        pen = QPen(QColor(255, 0, 0), 1)
+        pen.setCosmetic(True)
         mask_item.setPen(pen)
         mask_item.setBrush(QColor(255, 0, 0, 76))  # Red semi-transparent (alpha=0.3*255)
         mask_item.setZValue(999)  # Below selection but above image
@@ -995,17 +1038,23 @@ class ImageCaptureDialog(QDialog):
                 # Deselect previous
                 if self.selected_mask_index is not None and self.selected_mask_index < len(self.mask_rect_items):
                     old_item = self.mask_rect_items[self.selected_mask_index]
-                    old_item.setPen(QPen(QColor(255, 0, 0), 2))
+                    old_pen = QPen(QColor(255, 0, 0), 1)
+                    old_pen.setCosmetic(True)
+                    old_item.setPen(old_pen)
                 
                 # Select new
                 self.selected_mask_index = i
-                item.setPen(QPen(QColor(255, 0, 0), 3))  # Thicker pen
+                selected_pen = QPen(QColor(255, 165, 0), 1)
+                selected_pen.setCosmetic(True)
+                item.setPen(selected_pen)
                 return True
         
         # Clicked outside all masks - deselect
         if self.selected_mask_index is not None and self.selected_mask_index < len(self.mask_rect_items):
             old_item = self.mask_rect_items[self.selected_mask_index]
-            old_item.setPen(QPen(QColor(255, 0, 0), 2))
+            old_pen = QPen(QColor(255, 0, 0), 1)
+            old_pen.setCosmetic(True)
+            old_item.setPen(old_pen)
         self.selected_mask_index = None
         return False
     

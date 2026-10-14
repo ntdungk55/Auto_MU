@@ -1,4 +1,3 @@
-import re
 import win32gui
 import win32con
 import win32process
@@ -6,23 +5,24 @@ import win32api
 from typing import List, Optional, Tuple
 
 class WindowDetector:
+    """Detect top-level MU game windows without including helper UI windows."""
+
+    GAME_TITLE_PREFIXES = (
+        "mu gamethuvn - season 21",
+        "mu online - gamethuvn.com",
+    )
+
     @staticmethod
     def is_game_window_title(title: str) -> bool:
-        """Return True for MU game windows, excluding generic/process helper windows."""
-        text = str(title or "").strip()
-        if not text:
+        """Return True only for known MU game title formats."""
+        normalized = " ".join(str(title or "").split()).casefold()
+        if not normalized:
             return False
 
-        lower = text.lower()
-        if "mu" not in lower:
-            return False
-
-        # Current real game windows share MU + server/client marker or a character block.
-        return (
-            "gamethuvn" in lower
-            or "season" in lower
-            or bool(re.search(r"\([^)]{2,}\)", text))
-        )
+        for prefix in WindowDetector.GAME_TITLE_PREFIXES:
+            if normalized == prefix or normalized.startswith(f"{prefix} ("):
+                return True
+        return False
 
     @staticmethod
     def find_game_windows(include_invisible: bool = False) -> List[Tuple[int, str]]:

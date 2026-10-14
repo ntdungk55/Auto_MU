@@ -6,11 +6,17 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushBut
                              QGraphicsScene, QGraphicsPixmapItem, QWidget, QCheckBox,
                              QSpinBox, QDoubleSpinBox, QGridLayout, QTableWidget, 
                              QTableWidgetItem, QGraphicsSimpleTextItem, QPlainTextEdit)
-from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QThread
+from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QThread, QTimer
 from PyQt6.QtGui import QPixmap, QImage, QPen, QColor, QWheelEvent, QPainter, QBrush, QFont
 from PyQt6.QtWidgets import QSlider
 from typing import Optional
+from pathlib import Path
 from ..logic.action_type import AutoAction
+from ..logic.teaching_matching import (
+    DEFAULT_COORDINATE_MATCH_OFFSET,
+    expand_coordinate_bounds,
+    normalize_coordinate_match_offset,
+)
 from ..logic.system_executor.ocr_preprocessor import OCRPreprocessor
 from ..logic.system_executor.template_matching_preprocessor import TemplateMatchingPreprocessor
 from ..logic.system_executor.window_capture import WindowCapture
@@ -612,21 +618,28 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         """Initialize UI components."""
         layout = QVBoxLayout()
 
-        # Preview area (30/70 split - Teaching nhỏ, Window Capture lớn)
-        preview_splitter = QSplitter(Qt.Orientation.Horizontal)
-        
-        # Teaching preview (nhỏ hơn)
+        # Preview area: Teaching nhỏ bên trái, Window Capture và danh sách bên phải.
+        preview_container = QWidget()
+        preview_layout = QGridLayout(preview_container)
+
+        # Teaching preview (giảm còn khoảng một nửa kích thước hiện tại)
         teaching_widget = QWidget()
         teaching_layout = QVBoxLayout(teaching_widget)
         teaching_layout.addWidget(QLabel("📷 Teaching Image (Scroll: Pan, Wheel: Zoom)"))
         self.teaching_view = ZoomableGraphicsView()
-        self.teaching_view.setMaximumWidth(400)  # Giới hạn width
         self.teaching_scene = QGraphicsScene()
         self.teaching_view.setScene(self.teaching_scene)
         teaching_layout.addWidget(self.teaching_view)
-        preview_splitter.addWidget(teaching_widget)
-        
-        # Window capture preview (lớn hơn)
+        preview_layout.addWidget(teaching_widget, 0, 0)
+
+        self.teaching_widget = teaching_widget
+        teaching_widget.setFixedSize(525, 330)
+        preview_layout.setAlignment(
+            teaching_widget,
+            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft,
+        )
+
+        # Window capture preview nằm bên phải, chiếm toàn bộ chiều cao vùng preview.
         capture_widget = QWidget()
         capture_layout = QVBoxLayout(capture_widget)
         capture_layout.addWidget(QLabel("🖼️ Window Capture (Scroll: Pan, Wheel: Zoom)"))
@@ -634,31 +647,44 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         self.capture_scene = QGraphicsScene()
         self.capture_view.setScene(self.capture_scene)
         capture_layout.addWidget(self.capture_view)
-        preview_splitter.addWidget(capture_widget)
-        
-        # Set splitter ratios: 30% teaching, 70% capture (responsive)
-        preview_splitter.setSizes([300, 700])
-        
-        layout.addWidget(preview_splitter, stretch=5)  # High stretch for responsive preview area
-        
-        # Load teaching image
-        self._load_teaching_preview()
-        
-        # Window Captures List (fixed height for responsive layout)
-        threshold_label = QLabel(f"🖼️ Window Captures (Max 50) - Threshold: {self.action.match_threshold:.2f}")
-        layout.addWidget(threshold_label)
+        preview_layout.addWidget(capture_widget, 0, 1, 2, 1)
+
+        # Danh sách Window Capture nằm dưới Teaching và neo về mép trái.
+        capture_list_widget = QWidget()
+        capture_list_layout = QVBoxLayout(capture_list_widget)
+        capture_list_layout.setContentsMargins(0, 0, 0, 0)
+        capture_list_layout.setSpacing(4)
+        threshold_label = QLabel(
+            f"🖼️ Window Captures (Max 50) - Threshold: {self.action.match_threshold:.2f}"
+        )
+        capture_list_layout.addWidget(threshold_label)
         self.captures_list = QListWidget()
-        self.captures_list.setMaximumHeight(200)  # Fixed max height for responsive layout
-        self.captures_list.setMaximumWidth(800)   # Max width to prevent over-stretching
+        self.captures_list.setMinimumHeight(120)
+        self.captures_list.setMaximumHeight(220)
+        self.captures_list.setMaximumWidth(max(320, int(self.width() * 0.4)))
         self.captures_list.itemClicked.connect(self._on_capture_selected)
-        
+
         # Improve scroll behavior - smaller steps
         self.captures_list.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
-        self.captures_list.verticalScrollBar().setSingleStep(5)  # Small scroll step
-        self.captures_list.verticalScrollBar().setPageStep(50)   # Page scroll step
-        
-        layout.addWidget(self.captures_list, stretch=0)  # No stretch - fixed size
-        
+        self.captures_list.verticalScrollBar().setSingleStep(5)
+        self.captures_list.verticalScrollBar().setPageStep(50)
+        capture_list_layout.addWidget(self.captures_list)
+
+        preview_layout.addWidget(capture_list_widget, 1, 0)
+        preview_layout.setColumnStretch(0, 1)
+        preview_layout.setColumnStretch(1, 1)
+        preview_layout.setRowStretch(0, 0)
+        preview_layout.setRowStretch(1, 1)
+        preview_container.setMinimumHeight(500)
+        preview_container.setMaximumHeight(520)
+        self.preview_container = preview_container
+
+        layout.addWidget(preview_container, stretch=0)
+
+        # Load teaching image
+        self._load_teaching_preview()
+        QTimer.singleShot(0, self._fit_teaching_preview)
+
         # Buttons for captures (bỏ Remove Selected button)
         btn_row = QHBoxLayout()
         self.load_btn = QPushButton("📁 Upload Local...")
@@ -671,8 +697,8 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         self.window_combo.setToolTip("Chọn window để chụp ảnh")
         btn_row.addWidget(self.window_combo)
         
-        self.refresh_window_btn = QPushButton("🔄")
-        self.refresh_window_btn.setFixedWidth(30)
+        self.refresh_window_btn = QPushButton("Làm mới")
+        self.refresh_window_btn.setMinimumWidth(80)
         self.refresh_window_btn.setToolTip("Làm mới danh sách window")
         self.refresh_window_btn.clicked.connect(self._refresh_windows)
         btn_row.addWidget(self.refresh_window_btn)
@@ -971,8 +997,27 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         # Don't auto-scale - let user scroll and zoom
         self.teaching_view.resetTransform()
         
+        QTimer.singleShot(0, self._fit_teaching_preview)
+
         # Load and display mask regions if available
         self._load_teaching_masks()
+
+    def _fit_teaching_preview(self) -> None:
+        """Fit the teaching image to the largest available preview side."""
+        if not hasattr(self, "teaching_scene") or not hasattr(self, "teaching_view"):
+            return
+        scene_rect = self.teaching_scene.sceneRect()
+        if scene_rect.isEmpty() or self.teaching_view.viewport().size().isEmpty():
+            return
+        self.teaching_view.resetTransform()
+        self.teaching_view.fitInView(scene_rect, Qt.AspectRatioMode.KeepAspectRatio)
+        self.teaching_view.zoom_factor = 1.0
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if hasattr(self, "captures_list"):
+            self.captures_list.setMaximumWidth(max(320, int(self.width() * 0.4)))
+        QTimer.singleShot(0, self._fit_teaching_preview)
     
     def _load_teaching_masks(self):
         """Load and display mask regions on teaching image."""
@@ -1005,7 +1050,8 @@ class MultiImageAlgorithmTestingDialog(QDialog):
                 
                 # Style mask (red semi-transparent)
                 from PyQt6.QtGui import QPen, QBrush, QColor
-                pen = QPen(QColor(255, 0, 0), 2)  # Red border
+                pen = QPen(QColor(255, 0, 0), 1)  # Fixed 1px red border
+                pen.setCosmetic(True)
                 brush = QBrush(QColor(255, 0, 0, 80))  # Red semi-transparent fill
                 mask_item.setPen(pen)
                 mask_item.setBrush(brush)
@@ -1090,8 +1136,15 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         if self.current_test_total <= 0:
             return
 
-        session_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        session_dir = os.path.join(self.test_sessions_dir, session_id)
+        parent = self.parent()
+        parent_session_dir = getattr(parent, "session_dir", None) if parent else None
+        if parent_session_dir:
+            session_dir = os.fspath(parent_session_dir)
+        else:
+            session_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            session_dir = os.path.join(self.test_sessions_dir, session_id)
+            if parent is not None and hasattr(parent, "session_dir"):
+                parent.session_dir = Path(session_dir)
         captures_dir = os.path.join(session_dir, "captures")
         os.makedirs(captures_dir, exist_ok=True)
 
@@ -1108,43 +1161,74 @@ class MultiImageAlgorithmTestingDialog(QDialog):
             except OSError as exc:
                 print(f"[WARN] Cannot save test session capture {source_path}: {exc}")
                 continue
-            captures.append({
+            item_widget = self.captures_list.itemWidget(item)
+            display_name = getattr(item_widget, "display_name", None)
+            capture_metadata = {
                 "filename": filename,
                 "source_name": os.path.basename(source_path),
                 "score": self.test_results.get(source_path),
                 "bbox": list(self.test_match_bboxes[source_path]) if source_path in self.test_match_bboxes else None,
-            })
+            }
+            if display_name and display_name != os.path.basename(source_path):
+                capture_metadata["display_name"] = display_name
+            captures.append(capture_metadata)
 
         teaching_image_name = None
         if self.teaching_image_path and os.path.isfile(self.teaching_image_path):
             teaching_image_name = "teaching.png"
+            destination_teaching_path = os.path.abspath(os.path.join(session_dir, teaching_image_name))
             try:
-                shutil.copy2(
-                    self.teaching_image_path,
-                    os.path.join(session_dir, teaching_image_name),
-                )
+                source_teaching_path = os.path.abspath(self.teaching_image_path)
+                if source_teaching_path != destination_teaching_path:
+                    shutil.copy2(source_teaching_path, destination_teaching_path)
             except OSError as exc:
                 print(f"[WARN] Cannot save teaching image for test session: {exc}")
                 teaching_image_name = None
 
-        metadata = {
-            "created_at": datetime.now().isoformat(timespec="seconds"),
+        metadata_path = os.path.join(session_dir, "session.json")
+        try:
+            with open(metadata_path, "r", encoding="utf-8") as handle:
+                existing_metadata = json.load(handle)
+            if not isinstance(existing_metadata, dict):
+                existing_metadata = {}
+        except (OSError, TypeError, ValueError):
+            existing_metadata = {}
+
+        metadata = dict(existing_metadata)
+        metadata.update({
+            "created_at": existing_metadata.get("created_at") or datetime.now().isoformat(timespec="seconds"),
             "window_title": self.current_test_window_title,
             "window_hwnd": self.selected_window_hwnd,
             "matching_method": self.matching_method_combo.currentData(),
+            "match_by_coordinates": bool(
+                getattr(self.action, "teaching_match_by_coordinates", False)
+            ),
+            "coordinate_offset": normalize_coordinate_match_offset(
+                getattr(
+                    self.action,
+                    "teaching_match_coordinate_offset",
+                    DEFAULT_COORDINATE_MATCH_OFFSET,
+                )
+            ),
             "algorithms": self._get_current_algorithms(),
             "teaching_image": teaching_image_name,
+            "teaching_metadata": {
+                key: getattr(self.action, f"teaching_{key}", None)
+                for key in (
+                    "corner_x1", "corner_y1", "corner_x2", "corner_y2",
+                    "window_width", "window_height",
+                )
+            },
             "captures": captures,
-        }
+        })
         try:
-            with open(os.path.join(session_dir, "session.json"), "w", encoding="utf-8") as handle:
+            with open(metadata_path, "w", encoding="utf-8") as handle:
                 json.dump(metadata, handle, ensure_ascii=False, indent=2)
         except (OSError, TypeError, ValueError) as exc:
             print(f"[WARN] Cannot save test session metadata: {exc}")
             shutil.rmtree(session_dir, ignore_errors=True)
             return
 
-        parent = self.parent()
         if parent is not None and hasattr(parent, "_load_test_sessions"):
             parent._load_test_sessions()
 
@@ -1173,7 +1257,7 @@ class MultiImageAlgorithmTestingDialog(QDialog):
             if not os.path.isfile(path):
                 continue
             self.saved_captures.append(path)
-            self._add_saved_capture_to_list(path)
+            self._add_saved_capture_to_list(path, capture.get("display_name"))
             score = capture.get("score")
             if score is not None:
                 self.test_results[path] = float(score)
@@ -1182,7 +1266,29 @@ class MultiImageAlgorithmTestingDialog(QDialog):
                 self.test_match_bboxes[path] = tuple(bbox)
 
         self.current_test_window_title = metadata.get("window_title", "")
-        self.selected_window_hwnd = metadata.get("window_hwnd") or self.selected_window_hwnd
+        saved_window_hwnd = metadata.get("window_hwnd")
+        saved_window_index = (
+            self.window_combo.findData(saved_window_hwnd)
+            if saved_window_hwnd
+            else -1
+        )
+        if saved_window_index < 0 and self.current_test_window_title:
+            saved_window_index = self.window_combo.findText(
+                self.current_test_window_title
+            )
+        if saved_window_index >= 0:
+            self.window_combo.setCurrentIndex(saved_window_index)
+        self.selected_window_hwnd = self.window_combo.currentData()
+        self.action.teaching_match_by_coordinates = bool(
+            metadata.get("match_by_coordinates", False)
+        )
+        self.action.teaching_match_coordinate_offset = normalize_coordinate_match_offset(
+            metadata.get("coordinate_offset", DEFAULT_COORDINATE_MATCH_OFFSET)
+        )
+        teaching_metadata = metadata.get("teaching_metadata", {})
+        if isinstance(teaching_metadata, dict):
+            for key, value in teaching_metadata.items():
+                setattr(self.action, f"teaching_{key}", value)
 
         matching_method = metadata.get("matching_method")
         if matching_method:
@@ -1254,12 +1360,38 @@ class MultiImageAlgorithmTestingDialog(QDialog):
     
     def _capture_new(self):
         """Capture new screenshot and save to temp file."""
-        hwnd = self.selected_window_hwnd or self.target_window_hwnd
+        # The visible ComboBox selection is authoritative. Session metadata may
+        # contain an older HWND and must never redirect a capture silently.
+        hwnd = self.window_combo.currentData()
         
         if not hwnd:
             QMessageBox.warning(self, "Cảnh báo", "Chưa chọn window để chụp ảnh!")
             return
+
+        try:
+            import win32gui
+
+            if not win32gui.IsWindow(int(hwnd)):
+                QMessageBox.warning(
+                    self,
+                    "Window không hợp lệ",
+                    "Window game đang chọn không còn tồn tại. Hãy nhấn Làm mới "
+                    "và chọn lại window trước khi capture.",
+                )
+                return
+        except (ImportError, TypeError, ValueError) as exc:
+            QMessageBox.warning(
+                self,
+                "Không kiểm tra được window",
+                f"Không thể xác nhận window game đang chọn: {exc}",
+            )
+            return
+
+        self.selected_window_hwnd = int(hwnd)
         
+        if not self._resize_game_window(hwnd, parent=self):
+            return
+
         total_captures = len(self.temp_captures) + len(self.saved_captures)
         if total_captures >= 50:
             QMessageBox.warning(self, "Cảnh báo", "Đã đạt giới hạn 50 window captures!")
@@ -1301,13 +1433,50 @@ class MultiImageAlgorithmTestingDialog(QDialog):
             self.next_capture_id += 1
             
             print(f"[DEBUG] Screenshot saved to temp: {temp_path} (size: {os.path.getsize(temp_path)} bytes)")
-            self._add_temp_capture_to_list(temp_path)
+            display_name = self._get_new_capture_display_name(hwnd, temp_filename)
+            self._add_temp_capture_to_list(temp_path, display_name)
             
         except Exception as e:
             QMessageBox.critical(self, "Lỗi", f"Lỗi khi chụp screenshot: {e}")
             import traceback
             traceback.print_exc()
     
+    @staticmethod
+    def _resize_game_window(
+        hwnd: int,
+        client_width: int = 800,
+        client_height: int = 600,
+        parent=None,
+    ) -> bool:
+        """Resize the game client area before capturing a window image."""
+        try:
+            import win32con
+            import win32gui
+
+            window_rect = win32gui.GetWindowRect(hwnd)
+            client_rect = win32gui.GetClientRect(hwnd)
+            border_width = (window_rect[2] - window_rect[0]) - (client_rect[2] - client_rect[0])
+            border_height = (window_rect[3] - window_rect[1]) - (client_rect[3] - client_rect[1])
+            win32gui.SetWindowPos(
+                hwnd,
+                None,
+                window_rect[0],
+                window_rect[1],
+                int(client_width + border_width),
+                int(client_height + border_height),
+                win32con.SWP_NOZORDER | win32con.SWP_NOACTIVATE,
+            )
+            time.sleep(0.15)
+            return True
+        except Exception as exc:
+            QMessageBox.warning(
+                parent,
+                "Lỗi resize window",
+                f"Không thể resize game window về {client_width}x{client_height}. "
+                f"Capture đã bị hủy.\n\nChi tiết: {exc}",
+            )
+            return False
+
     def _refresh_windows(self):
         """Refresh window list for capture selection."""
         self.window_combo.clear()
@@ -1341,10 +1510,28 @@ class MultiImageAlgorithmTestingDialog(QDialog):
             hwnd = self.window_combo.itemData(index)
             self.selected_window_hwnd = hwnd
             print(f"[DEBUG] Selected window for capture: {hwnd}")
+
+    def _get_new_capture_display_name(self, hwnd, filename: str) -> str:
+        """Prefix a new capture with the character from its MU window title."""
+        index = self.window_combo.findData(hwnd)
+        if index < 0:
+            return filename
+
+        window_title = self.window_combo.itemText(index).strip()
+        match = re.search(r"\(([^()]*)\)\s*$", window_title)
+        if not match:
+            return filename
+
+        title_details = match.group(1).strip()
+        character_name = title_details.rsplit(" - ", 1)[-1].strip()
+        if not character_name:
+            return filename
+        return f"{character_name} - {filename}"
     
-    def _add_temp_capture_to_list(self, temp_path):
+    def _add_temp_capture_to_list(self, temp_path, display_name=None):
         """Add temporary capture to list with remove button."""
         filename = os.path.basename(temp_path)
+        display_name = str(display_name or filename)
         
         # Create custom widget for list item
         item_widget = QWidget()
@@ -1357,7 +1544,7 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         item_layout.addWidget(checkbox)
         
         # Label with filename and status
-        label = QLabel(f"{filename} | Not tested yet (temp)")
+        label = QLabel(f"{display_name} | Not tested yet (temp)")
         label.setStyleSheet("QLabel { padding: 2px; }")
         item_layout.addWidget(label)
         
@@ -1382,14 +1569,16 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         item_widget.checkbox = checkbox
         item_widget.label = label
         item_widget.path = temp_path
+        item_widget.display_name = display_name
         
         # Auto-select and display newly added capture
         self.captures_list.setCurrentItem(item)
         self._on_capture_selected(item)
     
-    def _add_saved_capture_to_list(self, path):
+    def _add_saved_capture_to_list(self, path, display_name=None):
         """Add saved capture (from file) to list with remove button."""
         filename = os.path.basename(path)
+        display_name = str(display_name or filename)
         
         # Create custom widget for list item
         item_widget = QWidget()
@@ -1402,7 +1591,7 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         item_layout.addWidget(checkbox)
         
         # Label with filename and status
-        label = QLabel(f"{filename} | Not tested yet")
+        label = QLabel(f"{display_name} | Not tested yet")
         label.setStyleSheet("QLabel { padding: 2px; }")
         item_layout.addWidget(label)
         
@@ -1427,6 +1616,7 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         item_widget.checkbox = checkbox
         item_widget.label = label
         item_widget.path = path
+        item_widget.display_name = display_name
     
     def _get_capture_data(self, item_data):
         """Get capture data from item data (always a file path now)."""
@@ -1509,6 +1699,14 @@ class MultiImageAlgorithmTestingDialog(QDialog):
                 print(f"[DEBUG] Failed to decode image from: {path}")
                 return
             
+            full_h, full_w = cv_img.shape[:2]
+            self._capture_preview_coordinate_bounds = None
+            if bool(getattr(self.action, "teaching_match_by_coordinates", False)):
+                bounds = self._get_coordinate_matching_bounds(full_w, full_h)
+                if bounds:
+                    x1, y1, x2, y2 = bounds
+                    cv_img = cv_img[y1:y2, x1:x2].copy()
+                    self._capture_preview_coordinate_bounds = bounds
             original_h, original_w = cv_img.shape[:2]
 
             # Apply all algorithms from the algorithms list in sequence if checkbox is checked
@@ -1554,6 +1752,7 @@ class MultiImageAlgorithmTestingDialog(QDialog):
             print(f"[DEBUG] Error loading image {path}: {e}")
             # Fallback to QPixmap (may fail with Unicode paths)
             pixmap = QPixmap(path)
+            self._capture_preview_coordinate_bounds = None
             self._capture_preview_transform = {
                 "src_w": float(pixmap.width()),
                 "src_h": float(pixmap.height()),
@@ -1579,8 +1778,20 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         
         # Set scene rect to match pixmap bounds (keep original size)
         self.capture_scene.setSceneRect(pixmap_item.boundingRect())
-        self._draw_capture_teaching_highlight(pixmap.width(), pixmap.height())
-        self._draw_capture_best_match_highlight(path, pixmap.width(), pixmap.height())
+        if bool(getattr(self.action, "teaching_match_by_coordinates", False)):
+            self._draw_capture_teaching_highlight(
+                pixmap.width(), pixmap.height(), label="Coordinate Matching"
+            )
+        else:
+            self._draw_capture_teaching_highlight(pixmap.width(), pixmap.height())
+        self._draw_capture_best_match_highlight(
+            path, pixmap.width(), pixmap.height()
+        )
+        if bool(getattr(self.action, "teaching_match_by_coordinates", False)):
+            self.capture_view.fitInView(
+                self.capture_scene.sceneRect(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+            )
         
         print(f"[DEBUG] Image displayed in capture_view with algorithm applied")
         
@@ -2234,6 +2445,16 @@ class MultiImageAlgorithmTestingDialog(QDialog):
             if test_img is None or not self.teaching_image_path:
                 return -1.0, None
 
+            coordinate_offset = (0, 0)
+            if bool(getattr(self.action, "teaching_match_by_coordinates", False)):
+                bounds = self._get_coordinate_matching_bounds(
+                    test_img.shape[1], test_img.shape[0]
+                )
+                if bounds:
+                    x1, y1, x2, y2 = bounds
+                    test_img = test_img[y1:y2, x1:x2]
+                    coordinate_offset = (x1, y1)
+
             matching_method = matching_method or self.matching_method_combo.currentData()
             if matching_method == "color":
                 teaching_img = load_image_unicode(self.teaching_image_path)
@@ -2243,11 +2464,17 @@ class MultiImageAlgorithmTestingDialog(QDialog):
                     config = algorithm.get("config", {})
                     teaching_img = self._apply_preprocessing(teaching_img, config)
                     test_img = self._apply_preprocessing(test_img, config)
-                return self._match_by_color_regions(test_img, teaching_img, color_options)
+                score, bbox = self._match_by_color_regions(test_img, teaching_img, color_options)
+                if bbox:
+                    bbox = (bbox[0] + coordinate_offset[0], bbox[1] + coordinate_offset[1], bbox[2], bbox[3])
+                return score, bbox
 
             from ..logic.system_executor.system_executor import SystemExecutor
 
             executor = SystemExecutor(target_window_hwnd=None)
+            coordinate_mode = bool(
+                getattr(self.action, "teaching_match_by_coordinates", False)
+            )
             image_result, max_val = executor.match_template_against_image_with_score_adaptive(
                 screenshot_bgr=test_img,
                 template_path=self.teaching_image_path,
@@ -2259,8 +2486,16 @@ class MultiImageAlgorithmTestingDialog(QDialog):
                 multiscale_step=float(getattr(self.action, "multiscale_step", 0.05) or 0.05),
                 mask_regions=getattr(self.action, "mask_regions", None),
                 preprocessing_algorithms=algorithms,
-                teaching_window_width=getattr(self.action, "teaching_window_width", None) or 800,
-                teaching_window_height=getattr(self.action, "teaching_window_height", None) or 600,
+                teaching_window_width=(
+                    test_img.shape[1]
+                    if coordinate_mode
+                    else getattr(self.action, "teaching_window_width", None) or 800
+                ),
+                teaching_window_height=(
+                    test_img.shape[0]
+                    if coordinate_mode
+                    else getattr(self.action, "teaching_window_height", None) or 600
+                ),
             )
 
             max_val = float(max_val or 0.0)
@@ -2270,7 +2505,12 @@ class MultiImageAlgorithmTestingDialog(QDialog):
             bbox = None
             if image_result and len(image_result) >= 4:
                 x, y, w, h = image_result[:4]
-                bbox = (int(x), int(y), int(w), int(h))
+                bbox = (
+                    int(x) + coordinate_offset[0],
+                    int(y) + coordinate_offset[1],
+                    int(w),
+                    int(h),
+                )
             return score, bbox
         except Exception as e:
             print(f"Error testing {test_path}: {e}")
@@ -2566,7 +2806,10 @@ class MultiImageAlgorithmTestingDialog(QDialog):
                 capture_path = item.data(Qt.ItemDataRole.UserRole)
                 bbox = self.test_match_bboxes.get(capture_path)
                 bbox_text = f" | BBox {bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]}" if bbox else ""
-                widget.label.setText(f"{filename} | Match: {score:.2f} {status}{bbox_text}")
+                display_name = getattr(widget, "display_name", filename)
+                widget.label.setText(
+                    f"{display_name} | Match: {score:.2f} {status}{bbox_text}"
+                )
             if self.captures_list.currentItem() is item:
                 self._on_capture_selected(item)
         
@@ -2578,7 +2821,8 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         if item:
             widget = self.captures_list.itemWidget(item)
             if widget and hasattr(widget, 'label'):
-                widget.label.setText(f"{filename} | Error: {error}")
+                display_name = getattr(widget, "display_name", filename)
+                widget.label.setText(f"{display_name} | Error: {error}")
         self._advance_test_progress(filename)
 
     def _advance_test_progress(self, filename: str) -> None:
@@ -2637,7 +2881,10 @@ class MultiImageAlgorithmTestingDialog(QDialog):
                 status = "✅" if score >= threshold else "❌"
                 best_marker = " ⭐ BEST" if path == best_path else ""
                 filename = os.path.basename(path)
-                widget.label.setText(f"{filename} | Match: {score:.2f} {status}{best_marker}")
+                display_name = getattr(widget, "display_name", filename)
+                widget.label.setText(
+                    f"{display_name} | Match: {score:.2f} {status}{best_marker}"
+                )
     
     def _save_to_action(self):
         """Save current algorithms to action."""
@@ -2817,6 +3064,28 @@ class MultiImageAlgorithmTestingDialog(QDialog):
 
         return self._get_fixed_roi_from_action()
 
+    def _get_coordinate_matching_bounds(
+        self, image_width: int, image_height: int
+    ) -> Optional[tuple[int, int, int, int]]:
+        """Return the teaching ROI expanded by the configured coordinate offset."""
+        roi = self._get_teaching_roi_from_action()
+        if not roi:
+            return None
+        x, y, width, height = roi
+        return expand_coordinate_bounds(
+            x,
+            y,
+            x + width,
+            y + height,
+            getattr(
+                self.action,
+                "teaching_match_coordinate_offset",
+                DEFAULT_COORDINATE_MATCH_OFFSET,
+            ),
+            image_width,
+            image_height,
+        )
+
     def _get_special_event_roi_from_action(self) -> Optional[tuple]:
         """Get event-specific OCR ROI for the current algorithm context."""
         if self.algorithm_field == "imperial_guardian_ocr_algorithms":
@@ -2848,18 +3117,42 @@ class MultiImageAlgorithmTestingDialog(QDialog):
             return (x1, y1, w, h)
         return None
 
-    def _draw_capture_teaching_highlight(self, image_width: int, image_height: int) -> None:
+    def _draw_capture_teaching_highlight(
+        self,
+        image_width: int,
+        image_height: int,
+        label: str = "Teaching ROI",
+    ) -> None:
         """Overlay teaching ROI highlight on the window capture preview."""
-        roi = self._get_teaching_roi_from_action()
-        if not roi:
-            return
-
-        x, y, w, h = roi
         transform_info = getattr(self, "_capture_preview_transform", None) or {}
         src_w = float(transform_info.get("src_w", image_width) or image_width)
         src_h = float(transform_info.get("src_h", image_height) or image_height)
         dst_w = float(transform_info.get("dst_w", image_width) or image_width)
         dst_h = float(transform_info.get("dst_h", image_height) or image_height)
+
+        coordinate_bounds = getattr(
+            self, "_capture_preview_coordinate_bounds", None
+        )
+        if coordinate_bounds:
+            left, top, right, bottom = coordinate_bounds
+            roi_label = f"{label} + offset ({left},{top})-({right},{bottom})"
+            x, y, w, h = 0.0, 0.0, src_w, src_h
+        elif bool(getattr(self.action, "teaching_match_by_coordinates", False)):
+            expanded_bounds = self._get_coordinate_matching_bounds(
+                int(src_w), int(src_h)
+            )
+            if not expanded_bounds:
+                return
+            left, top, right, bottom = expanded_bounds
+            roi_label = f"{label} + offset ({left},{top})-({right},{bottom})"
+            x, y, w, h = left, top, right - left, bottom - top
+        else:
+            roi = self._get_teaching_roi_from_action()
+            if not roi:
+                return
+            x, y, w, h = roi
+            roi_label = f"{label} ({x},{y})-({x + w},{y + h})"
+
         scale_x = (dst_w / src_w) if src_w > 0 else 1.0
         scale_y = (dst_h / src_h) if src_h > 0 else 1.0
         x = float(x) * scale_x
@@ -2877,12 +3170,13 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         if rect.width() <= 0 or rect.height() <= 0:
             return
 
-        overlay_pen = QPen(QColor(255, 214, 10), 2)
+        overlay_pen = QPen(QColor(255, 214, 10), 1)
+        overlay_pen.setCosmetic(True)
         overlay_brush = QBrush(QColor(255, 214, 10, 45))
         rect_item = self.capture_scene.addRect(rect, overlay_pen, overlay_brush)
         rect_item.setZValue(10)
 
-        label_item = QGraphicsSimpleTextItem("Teaching ROI")
+        label_item = QGraphicsSimpleTextItem(roi_label)
         label_item.setBrush(QBrush(QColor(255, 214, 10)))
         label_item.setPos(rect.left() + 4, rect.top() + 4)
         label_item.setZValue(11)
@@ -2895,6 +3189,13 @@ class MultiImageAlgorithmTestingDialog(QDialog):
             return
 
         x, y, w, h = bbox
+        coordinate_bounds = getattr(
+            self, "_capture_preview_coordinate_bounds", None
+        )
+        if coordinate_bounds:
+            left, top, _, _ = coordinate_bounds
+            x = float(x) - left
+            y = float(y) - top
         transform_info = getattr(self, "_capture_preview_transform", None) or {}
         src_w = float(transform_info.get("src_w", image_width) or image_width)
         src_h = float(transform_info.get("src_h", image_height) or image_height)
@@ -2917,13 +3218,10 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         if rect.width() <= 0 or rect.height() <= 0:
             return
 
-        pen_width = max(3, int(round(min(image_width, image_height) / 220)))
-        outline_pen = QPen(QColor(0, 0, 0), pen_width + 2)
-        match_pen = QPen(QColor(255, 0, 255), pen_width)
+        match_pen = QPen(QColor(255, 0, 255), 1)
+        match_pen.setCosmetic(True)
         match_brush = QBrush(QColor(255, 0, 255, 25))
 
-        outline_item = self.capture_scene.addRect(rect, outline_pen, QBrush(Qt.BrushStyle.NoBrush))
-        outline_item.setZValue(20)
         rect_item = self.capture_scene.addRect(rect, match_pen, match_brush)
         rect_item.setZValue(21)
 
@@ -2935,7 +3233,10 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         label_font.setPointSize(max(10, int(round(min(image_width, image_height) / 90))))
         label_item.setFont(label_font)
         label_item.setBrush(QBrush(QColor(255, 0, 255)))
-        label_item.setPos(rect.left() + pen_width, max(0.0, rect.top() - label_item.boundingRect().height() - pen_width))
+        label_item.setPos(
+            rect.left() + 1.0,
+            max(0.0, rect.top() - label_item.boundingRect().height() - 1.0),
+        )
         label_item.setZValue(22)
         self.capture_scene.addItem(label_item)
 
@@ -3004,6 +3305,19 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         try:
             from ..logic.system_executor.system_executor import SystemExecutor
 
+            coordinate_origin = (0, 0)
+            coordinate_mode = bool(
+                getattr(self.action, "teaching_match_by_coordinates", False)
+            )
+            if coordinate_mode:
+                bounds = self._get_coordinate_matching_bounds(
+                    screenshot_bgr.shape[1], screenshot_bgr.shape[0]
+                )
+                if bounds:
+                    left, top, right, bottom = bounds
+                    screenshot_bgr = screenshot_bgr[top:bottom, left:right]
+                    coordinate_origin = (left, top)
+
             executor = SystemExecutor(target_window_hwnd=None)
             image_result, score = executor.match_template_against_image_with_score_adaptive(
                 screenshot_bgr=screenshot_bgr,
@@ -3016,8 +3330,16 @@ class MultiImageAlgorithmTestingDialog(QDialog):
                 multiscale_step=float(getattr(self.action, "multiscale_step", 0.05) or 0.05),
                 mask_regions=getattr(self.action, "mask_regions", None),
                 preprocessing_algorithms=algorithms,
-                teaching_window_width=getattr(self.action, "teaching_window_width", None) or 800,
-                teaching_window_height=getattr(self.action, "teaching_window_height", None) or 600,
+                teaching_window_width=(
+                    screenshot_bgr.shape[1]
+                    if coordinate_mode
+                    else getattr(self.action, "teaching_window_width", None) or 800
+                ),
+                teaching_window_height=(
+                    screenshot_bgr.shape[0]
+                    if coordinate_mode
+                    else getattr(self.action, "teaching_window_height", None) or 600
+                ),
             )
             score = float(score or 0.0)
             if not image_result or len(image_result) < 4:
@@ -3025,7 +3347,12 @@ class MultiImageAlgorithmTestingDialog(QDialog):
                 return None, score
 
             x, y, w, h = image_result[:4]
-            roi = (int(x), int(y), int(w), int(h))
+            roi = (
+                int(x) + coordinate_origin[0],
+                int(y) + coordinate_origin[1],
+                int(w),
+                int(h),
+            )
             print(f"[OCR] Using matching ROI for OCR: {roi}, score={score:.3f}")
             return roi, score
         except Exception as exc:
@@ -3387,7 +3714,7 @@ class MultiImageAlgorithmTestingDialog(QDialog):
                 normalized.append(norm_line)
         return normalized
 
-    def _normalize_post_ocr_text(self, text: str, ignore_diacritics: bool) -> str:
+    def _normalize_post_ocr_text(self, text: tr, ignore_diacritics: bool) -> str:
         """Normalize OCR text for post-analysis matching."""
         import re as _re
         import unicodedata
