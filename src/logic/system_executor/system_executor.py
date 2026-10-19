@@ -15,7 +15,10 @@ from datetime import datetime
 # Import modular components
 from .ocr_engine import OCRFactory
 from .ocr_preprocessor import OCRPreprocessor
-from .template_matching_preprocessor import TemplateMatchingPreprocessor
+from .template_matching_preprocessor import (
+    TemplateMatchingPreprocessor,
+    apply_rgb_range_filter_to_bgr,
+)
 from .window_capture import WindowCapture
 from .mouse_controller import MouseController
 from .gemini_processor import GeminiProcessor
@@ -694,6 +697,9 @@ class SystemExecutor:
                 config = algo.get("config", {})
                 if not config:
                     continue
+
+                if config.get("rgb_range_filter"):
+                    preprocessor.img = apply_rgb_range_filter_to_bgr(preprocessor.img, config)
                 
                 # Apply binary threshold first if specified
                 if config.get("binary_threshold"):

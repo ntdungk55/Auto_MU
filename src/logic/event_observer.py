@@ -3,14 +3,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 import re
-import sys
 import threading
 import time
 from typing import Any, Callable, Literal
 
 
-TriggerMode = Literal["enter", "exit", "source_to_destination", "health_below"]
+TriggerMode = Literal[
+    "enter",
+    "exit",
+    "source_to_destination",
+    "health_below",
+    "training_to_not_training",
+]
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -105,6 +112,8 @@ def registered_event_from_dict(data: dict[str, Any]) -> RegisteredEvent:
     trigger_mode = str(data.get("trigger_mode", "enter"))
     if observer_type == "health":
         trigger_mode = "health_below"
+    elif observer_type == "companion_training":
+        trigger_mode = "training_to_not_training"
     elif trigger_mode not in ("enter", "exit", "source_to_destination"):
         raise ValueError("unsupported event trigger mode")
     return RegisteredEvent(
@@ -127,6 +136,43 @@ class ObserverResult:
     triggered: bool
     status: str
     suppressed_by_focus: bool = False
+
+
+class StableTransitionObserver:
+    """Confirm a directed state transition with consecutive samples.
+
+    A transition is emitted only after ``required_samples`` of the source state,
+    followed by the same number of target-state samples. Unknown or unrelated
+    samples invalidate the in-progress confirmation.
+    """
+
+    def __init__(self, source_state: str, target_state: str, required_samples: int = 2) -> None:
+        self.source_state = source_state
+        self.target_state = target_state
+        self.required_samples = max(1, int(required_samples))
+        self.reset()
+
+    def reset(self) -> None:
+        self._source_samples = 0
+        self._target_samples = 0
+        self._armed = False
+
+    def evaluate(self, state: str | None) -> bool:
+        if state == self.source_state:
+            self._source_samples = min(self.required_samples, self._source_samples + 1)
+            self._target_samples = 0
+            self._armed = self._source_samples >= self.required_samples
+            return False
+        if state == self.target_state and self._armed:
+            self._target_samples += 1
+            if self._target_samples < self.required_samples:
+                return False
+            self._armed = False
+            self._source_samples = 0
+            self._target_samples = 0
+            return True
+        self.reset()
+        return False
 
 
 @dataclass(frozen=True)
@@ -196,33 +242,14 @@ class LocationObserverService:
             return
         location_state = self._parse_state(payload)
         health_state = self._parse_health_state(payload)
-        previous_location = self._parse_previous_state(payload)
-        companion_training = None
-        companion_scores: dict[str, Any] = {}
-        companion_margin: Any = None
-        if isinstance(payload, dict):
-            state_payload = payload.get("state")
-            main_info = state_payload.get("main_info", {}) if isinstance(state_payload, dict) else {}
-            companion = main_info.get("companionTraining", {}) if isinstance(main_info, dict) else {}
-            if isinstance(companion, dict):
-                companion_training = companion.get("state")
-                raw_scores = companion.get("scores")
-                if isinstance(raw_scores, dict):
-                    companion_scores = {
-                        "training": raw_scores.get("training"),
-                        "not_training": raw_scores.get("not_training"),
-                    }
-                companion_margin = companion.get("score_margin")
-        print(
-            "[Companion State] "
-            f"state={companion_training or 'unknown'} "
-            f"training_score={companion_scores.get('training')} "
-            f"not_training_score={companion_scores.get('not_training')} "
-            f"margin={companion_margin}",
-            file=sys.stderr,
-            flush=True,
-        )
-        if location_state is None and health_state is None:
+        companion_state, companion_details = self._parse_companion_training(payload)
+        captured_at = payload.get("captured_at") if isinstance(payload, dict) else None
+        if any(
+            event.enabled and event.observer_type == "companion_training"
+            for event in self._events
+        ):
+            self._log_companion_training_sample(companion_state, companion_details)
+        if location_state is None and health_state is None and companion_state is None:
             self._handle_unavailable()
             return
         if self._was_unavailable:
@@ -234,9 +261,20 @@ class LocationObserverService:
                 self._on_status(event.event_id, "Disabled")
                 continue
             observer = self._observers.setdefault(event.event_id, self._make_observer(event))
-            state = health_state if event.observer_type == "health" else location_state
+            if event.observer_type == "health":
+                state = health_state
+            elif event.observer_type == "companion_training":
+                state = companion_state
+            else:
+                state = location_state
             if event.observer_type == "health":
                 result = observer.evaluate_current_state(state, game_focused=focused)
+            elif event.observer_type == "companion_training":
+                result = observer.evaluate(
+                    state,
+                    game_focused=focused,
+                    captured_at=captured_at,
+                )
             else:
                 result = observer.evaluate(state, game_focused=focused)
             self._on_status(event.event_id, result.status)
@@ -248,7 +286,7 @@ class LocationObserverService:
                     result.suppressed_by_focus,
                     event.observer_type,
                     self._character_name(payload),
-                    self._trigger_details(location_state, health_state),
+                    self._trigger_details(location_state, health_state, companion_details),
                 ))
 
     def _handle_unavailable(self) -> None:
@@ -288,6 +326,43 @@ class LocationObserverService:
         except (TypeError, ValueError):
             return None
 
+    @staticmethod
+    def _parse_companion_training(payload: dict[str, Any] | None) -> tuple[str | None, dict[str, Any]]:
+        if not isinstance(payload, dict) or not bool(payload.get("success")):
+            return None, {}
+        state_payload = payload.get("state")
+        main_info = state_payload.get("main_info", {}) if isinstance(state_payload, dict) else {}
+        companion = main_info.get("companionTraining", {}) if isinstance(main_info, dict) else {}
+        if not isinstance(companion, dict):
+            return None, {}
+        companion_state = str(companion.get("state") or "").strip()
+        if companion_state not in {"training", "not_training"}:
+            return None, dict(companion)
+        return companion_state, dict(companion)
+
+    @staticmethod
+    def _log_companion_training_sample(
+        companion_state: str | None,
+        details: dict[str, Any],
+    ) -> None:
+        session_id = str(details.get("session_id") or "<empty>")
+        if companion_state is None:
+            _LOGGER.error(
+                "[Companion Train Observer] state=unknown session=%s error=%s",
+                session_id,
+                details.get("error") or "Missing or invalid companionTraining payload",
+            )
+            return
+        _LOGGER.info(
+            "[Companion Train Observer] state=%s score=%s threshold=%s session=%s roi=%s capture=%s",
+            companion_state,
+            details.get("score"),
+            details.get("threshold"),
+            session_id,
+            details.get("roi"),
+            details.get("capture_size"),
+        )
+
     @classmethod
     def _parse_previous_state(cls, payload: dict[str, Any] | None) -> LocationState | None:
         if not isinstance(payload, dict):
@@ -316,7 +391,11 @@ class LocationObserverService:
 
     @staticmethod
     def _make_observer(event: RegisteredEvent) -> Any:
-        return HealthEventObserver(event) if event.observer_type == "health" else LocationEventObserver(event)
+        if event.observer_type == "health":
+            return HealthEventObserver(event)
+        if event.observer_type == "companion_training":
+            return CompanionTrainingEventObserver(event)
+        return LocationEventObserver(event)
 
     @staticmethod
     def _character_name(payload: dict[str, Any]) -> str:
@@ -343,7 +422,11 @@ class LocationObserverService:
         return title or "Game"
 
     @staticmethod
-    def _trigger_details(location: LocationState | None, health: HealthState | None) -> dict[str, Any]:
+    def _trigger_details(
+        location: LocationState | None,
+        health: HealthState | None,
+        companion: dict[str, Any],
+    ) -> dict[str, Any]:
         details: dict[str, Any] = {}
         if location is not None:
             details.update({"map": location.map_name, "x": location.x, "y": location.y})
@@ -351,6 +434,14 @@ class LocationObserverService:
             details.update({
                 "current_hp": health.current,
                 "dead": health.current <= 0,
+            })
+        if companion:
+            details.update({
+                "companion_state": companion.get("state"),
+                "score": companion.get("score"),
+                "threshold": companion.get("threshold"),
+                "roi": companion.get("roi"),
+                "session_id": companion.get("session_id"),
             })
         return details
 
@@ -363,19 +454,19 @@ class LocationObserverService:
 
 
 class HealthEventObserver:
-    """Compare one internally retained health state with the next current state."""
+    """Notify only after stable normal-to-low health transitions."""
 
     def __init__(self, event: RegisteredEvent) -> None:
         self.event = event
         self._current_state: HealthState | None = None
         self._last_trigger_captured_at: float | None = None
-        self._armed = True
+        self._transition = StableTransitionObserver("normal", "below")
         self._status = "Waiting for initial state"
 
     def reset(self) -> None:
         self._current_state = None
         self._last_trigger_captured_at = None
-        self._armed = True
+        self._transition.reset()
         self._status = "Waiting for initial state"
 
     def evaluate_current_state(
@@ -386,24 +477,20 @@ class HealthEventObserver:
     ) -> ObserverResult:
         """Evaluate one newly captured health state against the one retained state."""
         if current_state is None:
+            self._transition.reset()
+            self._current_state = None
+            self._status = "Waiting for valid health state"
             return ObserverResult(False, "Waiting for valid health state")
-        if self._current_state is None:
-            self._current_state = current_state
-            self._status = "Waiting for initial state"
-            return ObserverResult(False, self._status)
-
-        previous_state = self._current_state
         self._current_state = current_state
         threshold = self.event.health_threshold
-        if current_state.current >= threshold:
-            self._armed = True
-            self._status = f"HP normal ({current_state.current})"
+        current_kind = "normal" if current_state.current >= threshold else "below"
+        triggered = self._transition.evaluate(current_kind)
+        if not triggered:
+            if current_kind == "normal":
+                self._status = f"Waiting stable HP normal ({current_state.current})"
+            else:
+                self._status = f"Waiting stable HP below {threshold} ({current_state.current})"
             return ObserverResult(False, self._status)
-        if not self._armed or previous_state.current < threshold or current_state.current == previous_state.current:
-            self._status = f"HP below {threshold} ({current_state.current})"
-            return ObserverResult(False, self._status)
-
-        self._armed = False
         if game_focused:
             self._status = "Ignored: game focused"
             return ObserverResult(True, self._status, suppressed_by_focus=True)
@@ -419,25 +506,62 @@ class HealthEventObserver:
         game_focused: bool,
     ) -> ObserverResult:
         if previous_state is None or current_state is None:
+            self._transition.reset()
             return ObserverResult(False, "Waiting for valid health state")
-        threshold = self.event.health_threshold
-        if current_state.current >= threshold:
-            self._armed = True
-            self._status = f"HP normal ({current_state.current})"
-            return ObserverResult(False, self._status)
-        if self._armed and is_health_below_transition(previous_state, current_state, threshold):
-            captured_at = float(current_captured_at) if current_captured_at is not None else None
-            if captured_at is not None and captured_at == self._last_trigger_captured_at:
+        self.evaluate_current_state(previous_state, game_focused=False)
+        result = self.evaluate_current_state(current_state, game_focused=game_focused)
+        if result.triggered and current_captured_at is not None:
+            captured_at = float(current_captured_at)
+            if captured_at == self._last_trigger_captured_at:
                 return ObserverResult(False, self._status)
             self._last_trigger_captured_at = captured_at
-            self._armed = False
-            if game_focused:
-                self._status = "Ignored: game focused"
-                return ObserverResult(True, self._status, suppressed_by_focus=True)
-            self._status = f"HP below {threshold} ({current_state.current})"
-            return ObserverResult(True, self._status)
-        self._status = f"HP below {threshold} ({current_state.current})"
-        return ObserverResult(False, self._status)
+        return result
+
+
+class CompanionTrainingEventObserver:
+    """Notify when a companion stably changes from training to not training."""
+
+    def __init__(self, event: RegisteredEvent) -> None:
+        self.event = event
+        self._transition = StableTransitionObserver("training", "not_training")
+        self._last_captured_at: float | str | None = None
+        self._status = "Waiting for stable training state"
+
+    def reset(self) -> None:
+        self._transition.reset()
+        self._last_captured_at = None
+        self._status = "Waiting for stable training state"
+
+    def evaluate(
+        self,
+        state: str | None,
+        *,
+        game_focused: bool,
+        captured_at: Any = None,
+    ) -> ObserverResult:
+        if captured_at is not None:
+            try:
+                capture_key: float | str = float(captured_at)
+            except (TypeError, ValueError):
+                capture_key = str(captured_at)
+            if capture_key == self._last_captured_at:
+                return ObserverResult(False, self._status)
+            self._last_captured_at = capture_key
+        if state not in {"training", "not_training"}:
+            self._transition.reset()
+            self._status = "Waiting for valid companion training state"
+            return ObserverResult(False, self._status)
+        if not self._transition.evaluate(state):
+            self._status = (
+                "Waiting stable training" if state == "training"
+                else "Waiting stable not training"
+            )
+            return ObserverResult(False, self._status)
+        if game_focused:
+            self._status = "Ignored: game focused"
+            return ObserverResult(True, self._status, suppressed_by_focus=True)
+        self._status = "Companion changed: training -> not_training"
+        return ObserverResult(True, self._status)
 
 
 class LocationEventObserver:

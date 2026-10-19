@@ -41,9 +41,9 @@ def load_configured_credentials() -> tuple[str, str]:
 
 
 def send_configured_message(text: str) -> Tuple[bool, str]:
-    """Send a message using the credentials configured in Telegram Settings."""
+    """Send configured AI text without interpreting user content as HTML."""
     bot_token, chat_id = load_configured_credentials()
-    return TelegramNotifier.send_message(bot_token, chat_id, text)
+    return TelegramNotifier.send_message(bot_token, chat_id, text, parse_mode=None)
 
 
 class TelegramNotifier:
@@ -52,7 +52,12 @@ class TelegramNotifier:
     BASE_URL = "https://api.telegram.org/bot{token}/{method}"
     
     @staticmethod
-    def send_message(bot_token: str, chat_id: str, text: str, parse_mode: str = "HTML") -> Tuple[bool, str]:
+    def send_message(
+        bot_token: str,
+        chat_id: str,
+        text: str,
+        parse_mode: Optional[str] = "HTML",
+    ) -> Tuple[bool, str]:
         """
         Send text message to Telegram chat
         
@@ -78,8 +83,16 @@ class TelegramNotifier:
         
         try:
             response = requests.post(url, json=payload, timeout=10)
-            response.raise_for_status()
-            data = response.json()
+            try:
+                data = response.json()
+            except ValueError:
+                data = {}
+
+            if response.status_code >= 400:
+                description = str(data.get("description") or response.reason or "Unknown error")
+                error_msg = f"Telegram API {response.status_code}: {description}"
+                logger.error(f"Telegram send failed: {error_msg}")
+                return False, error_msg
             
             if data.get("ok"):
                 logger.info(f"Telegram message sent to {chat_id}")
