@@ -92,6 +92,7 @@ class TeachingAlgorithmTestDialog(QDialog):
         window_group = QGroupBox("Window game")
         window_layout = QFormLayout(window_group)
         self.window_combo = QComboBox()
+        self.window_combo.currentIndexChanged.connect(self._on_window_selected)
         window_layout.addRow("Chọn window:", self.window_combo)
         window_buttons = QHBoxLayout()
         refresh_button = QPushButton("Làm mới")
@@ -567,15 +568,41 @@ class TeachingAlgorithmTestDialog(QDialog):
             self.algorithms_list.addItem("Chưa có thuật toán")
 
     def _capture_teaching_image(self) -> None:
-        if not self.target_window_hwnd:
+        selected_index = self.window_combo.currentIndex()
+        selected_value = (
+            self.window_combo.currentData() if selected_index >= 0 else None
+        )
+        try:
+            selected_hwnd = int(selected_value) if selected_value else None
+        except (TypeError, ValueError):
+            selected_hwnd = None
+
+        if not selected_hwnd:
             QMessageBox.warning(self, "Cảnh báo", "Chưa chọn window game.")
             return
-        if not self._resize_game_window(self.target_window_hwnd):
+
+        try:
+            import win32gui
+
+            if not win32gui.IsWindow(selected_hwnd):
+                QMessageBox.warning(
+                    self,
+                    "Cảnh báo",
+                    "Window game vừa chọn không còn tồn tại. Hãy bấm Làm mới và chọn lại.",
+                )
+                return
+        except ImportError:
+            pass
+
+        # The combobox is the source of truth at click time. Never fall back to
+        # a handle cached when this edit dialog was opened.
+        self.target_window_hwnd = selected_hwnd
+        if not self._resize_game_window(selected_hwnd):
             return
         image_path = self._pending_teaching_dir / "teaching.png"
         metadata_path = self._pending_teaching_dir / "teaching.json"
         dialog = ImageCaptureDialog(
-            self.target_window_hwnd,
+            selected_hwnd,
             parent=self,
             tool_id="teaching_lab",
             hide_click_selection=True,
@@ -735,4 +762,3 @@ class TeachingAlgorithmTestDialog(QDialog):
     def reject(self) -> None:
         shutil.rmtree(self._pending_teaching_dir, ignore_errors=True)
         super().reject()
-

@@ -29,6 +29,7 @@ from ..logic.window_detector import WindowDetector
 import os
 import re
 import json
+import copy
 import cv2
 import numpy as np
 import threading
@@ -239,6 +240,16 @@ def _apply_dominant_color_merge_to_bgr(img: np.ndarray, config: dict) -> np.ndar
     return merged_colors[inverse].reshape(quantized.shape)
 
 
+def _load_bgr_image_unicode(path: str) -> Optional[np.ndarray]:
+    """Load a BGR image without relying on OpenCV's Unicode path support."""
+    try:
+        with open(path, "rb") as image_file:
+            file_bytes = np.frombuffer(image_file.read(), dtype=np.uint8)
+        return cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+    except Exception:
+        return None
+
+
 # Default algorithms for template matching - nhóm theo loại với phân cách
 DEFAULT_ALGORITHMS = [
     # === BASIC PROCESSING ===
@@ -377,6 +388,48 @@ DEFAULT_ALGORITHMS = [
 ]
 
 
+class PreviewProcessingWorker(QThread):
+    """Apply a preview algorithm snapshot without blocking the Qt UI thread."""
+
+    completed = pyqtSignal(int, object)
+    failed = pyqtSignal(int, str)
+
+    def __init__(self, request: dict, processor, parent=None):
+        super().__init__(parent)
+        self.request = request
+        self.processor = processor
+
+    def _process_image(self, image: Optional[np.ndarray]) -> Optional[np.ndarray]:
+        if image is None:
+            return None
+
+        processed = image.copy()
+        for algorithm in self.request["algorithms"]:
+            if self.isInterruptionRequested():
+                return None
+            processed = self.processor(processed, algorithm.get("config", {}))
+        return processed
+
+    def run(self) -> None:
+        request_id = int(self.request["id"])
+        try:
+            teaching_image = self._process_image(self.request.get("teaching_image"))
+            if self.isInterruptionRequested():
+                return
+            capture_image = self._process_image(self.request.get("capture_image"))
+            if self.isInterruptionRequested():
+                return
+
+            result = dict(self.request)
+            result.pop("teaching_image", None)
+            result.pop("capture_image", None)
+            result["teaching_processed"] = teaching_image
+            result["capture_processed"] = capture_image
+            self.completed.emit(request_id, result)
+        except Exception as exc:
+            self.failed.emit(request_id, str(exc))
+
+
 class MultiImageAlgorithmTestingDialog(QDialog):
     """Dialog for testing multiple window captures with preprocessing algorithms."""
     
@@ -437,6 +490,12 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         self.test_match_bboxes = {}  # {capture_path: (x, y, w, h)}
         self.algorithms = DEFAULT_ALGORITHMS.copy()
         self.stop_testing = False
+        self._preview_request_id = 0
+        self._preview_worker = None
+        self._pending_preview_request = None
+        self._preview_dialog_closing = False
+        self.preview_processing_label = None
+        self.preview_processing_indicator = None
 
         # Parameter widgets can emit dozens of valueChanged signals while the
         # user drags them. Refresh both previews only after input settles.
@@ -465,7 +524,7 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         
         # OCR UI components (will be initialized in _init_ui)
         self.ocr_engine_combo = None
-        self.ocr_match_teaching_checkbox = None
+        self.ocr_scope_combo = None
         self.run_ocr_btn = None
         self.ocr_progress_bar = None
         self.ocr_results_table = None
@@ -575,6 +634,19 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         self.algorithms_list.verticalScrollBar().setPageStep(30)   # Page scroll step
         
         algo_layout.addWidget(self.algorithms_list, stretch=0)  # No stretch - fixed size
+
+        processing_row = QHBoxLayout()
+        self.preview_processing_label = QLabel("Đang xử lý preview…")
+        self.preview_processing_label.setVisible(False)
+        processing_row.addWidget(self.preview_processing_label)
+        self.preview_processing_indicator = QProgressBar()
+        self.preview_processing_indicator.setRange(0, 0)
+        self.preview_processing_indicator.setTextVisible(False)
+        self.preview_processing_indicator.setFixedWidth(180)
+        self.preview_processing_indicator.setVisible(False)
+        processing_row.addWidget(self.preview_processing_indicator)
+        processing_row.addStretch()
+        algo_layout.addLayout(processing_row)
         
         return algo_widget
 
@@ -594,15 +666,19 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         self.ocr_engine_combo.addItems(self.available_ocr_engines)
         controls_layout.addWidget(self.ocr_engine_combo)
 
-        self.ocr_match_teaching_checkbox = QCheckBox("Tìm ROI bằng ảnh Teaching")
-        self.ocr_match_teaching_checkbox.setChecked(False)
-        self.ocr_match_teaching_checkbox.setToolTip(
-            "Bỏ chọn để OCR toàn bộ capture. Chọn để chỉ OCR vùng khớp với ảnh Teaching."
+        controls_layout.addWidget(QLabel("Chế độ OCR:"))
+        self.ocr_scope_combo = QComboBox()
+        self.ocr_scope_combo.addItem("OCR nếu matching", "matching")
+        self.ocr_scope_combo.addItem("OCR theo tọa độ", "coordinate")
+        self.ocr_scope_combo.addItem("OCR toàn bộ màn hình", "full")
+        self.ocr_scope_combo.setCurrentIndex(2)
+        self.ocr_scope_combo.setMinimumWidth(190)
+        self.ocr_scope_combo.setToolTip(
+            "Matching: OCR vùng khớp Teaching | "
+            "Tọa độ: OCR trực tiếp Teaching coordinates + offset | "
+            "Toàn bộ: OCR nguyên capture"
         )
-        self.ocr_match_teaching_checkbox.setEnabled(
-            bool(self.teaching_image_path and os.path.exists(self.teaching_image_path))
-        )
-        controls_layout.addWidget(self.ocr_match_teaching_checkbox)
+        controls_layout.addWidget(self.ocr_scope_combo)
         
         # Run OCR button
         self.run_ocr_btn = QPushButton("▶️ Run OCR")
@@ -949,18 +1025,11 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         if not self.teaching_image_path or not os.path.exists(self.teaching_image_path):
             return
 
-        previous_size = getattr(self, "_teaching_preview_size", None)
-        previous_transform = self.teaching_view.transform()
-        previous_center = self.teaching_view.mapToScene(
-            self.teaching_view.viewport().rect().center()
-        )
+        self._invalidate_background_preview_requests()
         
         # Load image using cv2 for algorithm processing
         try:
-            # Use Unicode-safe loading method
-            with open(self.teaching_image_path, 'rb') as f:
-                file_bytes = np.frombuffer(f.read(), dtype=np.uint8)
-            cv_img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+            cv_img = _load_bgr_image_unicode(self.teaching_image_path)
             
             if cv_img is None:
                 # Fallback to QPixmap
@@ -1008,10 +1077,22 @@ class MultiImageAlgorithmTestingDialog(QDialog):
             # No upscale if fallback
             self._teaching_preview_upscale = 1.0
         
+        self._display_teaching_pixmap(pixmap, preserve_view_transform)
+
+    def _display_teaching_pixmap(
+        self, pixmap: QPixmap, preserve_view_transform: bool
+    ) -> None:
+        """Update the teaching scene on the UI thread."""
         if pixmap.isNull():
             print(f"[DEBUG] Failed to load teaching image pixmap")
             return
-        
+
+        previous_size = getattr(self, "_teaching_preview_size", None)
+        previous_transform = self.teaching_view.transform()
+        previous_center = self.teaching_view.mapToScene(
+            self.teaching_view.viewport().rect().center()
+        )
+
         # Set default upscale if not set
         if not hasattr(self, '_teaching_preview_upscale'):
             self._teaching_preview_upscale = 1.0
@@ -1193,8 +1274,25 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         except Exception as e:
             print(f"[WARN] Failed to cleanup temp dir: {e}")
     
+    def _shutdown_preview_processing(self) -> None:
+        """Stop pending preview work before the dialog is destroyed."""
+        if self._preview_dialog_closing:
+            return
+
+        self._preview_dialog_closing = True
+        self._preview_refresh_timer.stop()
+        self._pending_preview_request = None
+        if self._preview_worker and self._preview_worker.isRunning():
+            self._preview_worker.requestInterruption()
+            self._preview_worker.wait()
+
+    def done(self, result: int) -> None:
+        self._shutdown_preview_processing()
+        super().done(result)
+
     def closeEvent(self, event):
         """Handle dialog close event."""
+        self._shutdown_preview_processing()
         self._cleanup_temp_dir()
         # Remove from atexit to prevent double cleanup
         try:
@@ -1874,11 +1972,7 @@ class MultiImageAlgorithmTestingDialog(QDialog):
     
     def _on_capture_selected(self, item, preserve_view_transform: bool = False):
         """Show selected capture in preview with algorithms from list applied."""
-        previous_size = getattr(self, "_capture_preview_size", None)
-        previous_transform = self.capture_view.transform()
-        previous_center = self.capture_view.mapToScene(
-            self.capture_view.viewport().rect().center()
-        )
+        self._invalidate_background_preview_requests()
         item_data = item.data(Qt.ItemDataRole.UserRole)
         capture_data = self._get_capture_data(item_data)
         
@@ -1896,23 +1990,20 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         
         # Use Unicode-safe loading method
         try:
-            # Load image using cv2.imdecode for Unicode path support
-            with open(path, 'rb') as f:
-                file_bytes = np.frombuffer(f.read(), dtype=np.uint8)
-            cv_img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+            cv_img = _load_bgr_image_unicode(path)
             
             if cv_img is None:
                 print(f"[DEBUG] Failed to decode image from: {path}")
                 return
             
             full_h, full_w = cv_img.shape[:2]
-            self._capture_preview_coordinate_bounds = None
+            coordinate_bounds = None
             if bool(getattr(self.action, "teaching_match_by_coordinates", False)):
                 bounds = self._get_coordinate_matching_bounds(full_w, full_h)
                 if bounds:
                     x1, y1, x2, y2 = bounds
                     cv_img = cv_img[y1:y2, x1:x2].copy()
-                    self._capture_preview_coordinate_bounds = bounds
+                    coordinate_bounds = bounds
             original_h, original_w = cv_img.shape[:2]
 
             # Apply all algorithms from the algorithms list in sequence if checkbox is checked
@@ -1936,14 +2027,6 @@ class MultiImageAlgorithmTestingDialog(QDialog):
             else:
                 print(f"[DEBUG] Algorithm preview disabled - showing original image")
 
-            processed_h, processed_w = processed_img.shape[:2]
-            self._capture_preview_transform = {
-                "src_w": float(original_w),
-                "src_h": float(original_h),
-                "dst_w": float(processed_w),
-                "dst_h": float(processed_h),
-            }
-            
             # Use processed image for display
             # Convert BGR to RGB for Qt
             rgb_img = cv2.cvtColor(processed_img, cv2.COLOR_BGR2RGB)
@@ -1958,18 +2041,46 @@ class MultiImageAlgorithmTestingDialog(QDialog):
             print(f"[DEBUG] Error loading image {path}: {e}")
             # Fallback to QPixmap (may fail with Unicode paths)
             pixmap = QPixmap(path)
-            self._capture_preview_coordinate_bounds = None
-            self._capture_preview_transform = {
-                "src_w": float(pixmap.width()),
-                "src_h": float(pixmap.height()),
-                "dst_w": float(pixmap.width()),
-                "dst_h": float(pixmap.height()),
-            }
-            
+            coordinate_bounds = None
+            original_w = pixmap.width()
+            original_h = pixmap.height()
+
+        self._display_capture_pixmap(
+            pixmap,
+            path,
+            original_w,
+            original_h,
+            coordinate_bounds,
+            preserve_view_transform,
+        )
+
+    def _display_capture_pixmap(
+        self,
+        pixmap: QPixmap,
+        path: str,
+        source_width: int,
+        source_height: int,
+        coordinate_bounds: Optional[tuple],
+        preserve_view_transform: bool,
+    ) -> None:
+        """Update the capture scene on the UI thread."""
         if pixmap.isNull():
             print(f"[DEBUG] Failed to load pixmap from: {path}")
             return
-        
+
+        previous_size = getattr(self, "_capture_preview_size", None)
+        previous_transform = self.capture_view.transform()
+        previous_center = self.capture_view.mapToScene(
+            self.capture_view.viewport().rect().center()
+        )
+        self._capture_preview_coordinate_bounds = coordinate_bounds
+        self._capture_preview_transform = {
+            "src_w": float(source_width),
+            "src_h": float(source_height),
+            "dst_w": float(pixmap.width()),
+            "dst_h": float(pixmap.height()),
+        }
+
         print(f"[DEBUG] Pixmap loaded: {pixmap.width()}x{pixmap.height()}")
         
         # Display pixmap at original size
@@ -2465,16 +2576,174 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         self._preview_refresh_timer.start()
 
     def _refresh_algorithm_previews_preserving_view(self) -> None:
-        """Refresh expensive algorithm previews once after input settles."""
+        """Queue the latest preview snapshot for background processing."""
         if not self.apply_algorithms_checkbox.isChecked():
             return
 
-        self._load_teaching_preview(preserve_view_transform=True)
+        algorithms = copy.deepcopy(self._get_current_algorithms())
+        teaching_image = _load_bgr_image_unicode(self.teaching_image_path)
+        teaching_upscale = 1.0
+        for algorithm in algorithms:
+            upscale = algorithm.get("config", {}).get("upscale")
+            if upscale:
+                teaching_upscale *= float(upscale)
+
+        capture_image = None
+        capture_path = None
+        capture_source_size = None
+        capture_coordinate_bounds = None
         current_item = self.captures_list.currentItem()
         if current_item:
-            self._on_capture_selected(
-                current_item, preserve_view_transform=True
+            item_data = current_item.data(Qt.ItemDataRole.UserRole)
+            capture_data = self._get_capture_data(item_data)
+            if capture_data:
+                capture_path = capture_data.get("path")
+                capture_image = _load_bgr_image_unicode(capture_path)
+                if capture_image is not None:
+                    full_h, full_w = capture_image.shape[:2]
+                    if bool(getattr(self.action, "teaching_match_by_coordinates", False)):
+                        capture_coordinate_bounds = self._get_coordinate_matching_bounds(
+                            full_w, full_h
+                        )
+                        if capture_coordinate_bounds:
+                            x1, y1, x2, y2 = capture_coordinate_bounds
+                            capture_image = capture_image[y1:y2, x1:x2].copy()
+                    capture_source_size = (
+                        int(capture_image.shape[1]),
+                        int(capture_image.shape[0]),
+                    )
+
+        if teaching_image is None and capture_image is None:
+            print("[DEBUG] Cannot queue preview processing: no image could be loaded")
+            return
+
+        self._preview_request_id += 1
+        request = {
+            "id": self._preview_request_id,
+            "algorithms": algorithms,
+            "teaching_image": teaching_image,
+            "teaching_upscale": teaching_upscale,
+            "capture_image": capture_image,
+            "capture_path": capture_path,
+            "capture_source_size": capture_source_size,
+            "capture_coordinate_bounds": capture_coordinate_bounds,
+        }
+        self._pending_preview_request = request
+        self._set_preview_processing_busy(True)
+
+        if self._preview_worker and self._preview_worker.isRunning():
+            self._preview_worker.requestInterruption()
+        else:
+            pending = self._pending_preview_request
+            self._pending_preview_request = None
+            self._start_preview_processing_worker(pending)
+
+    def _start_preview_processing_worker(self, request: dict) -> None:
+        """Start one worker; newer requests remain coalesced in pending state."""
+        if self._preview_dialog_closing:
+            return
+
+        worker = PreviewProcessingWorker(request, self._apply_preprocessing, self)
+        self._preview_worker = worker
+        worker.completed.connect(self._on_preview_processing_completed)
+        worker.failed.connect(self._on_preview_processing_failed)
+        worker.finished.connect(
+            lambda active_worker=worker: self._on_preview_processing_finished(
+                active_worker
             )
+        )
+        worker.finished.connect(worker.deleteLater)
+        worker.start()
+
+    def _on_preview_processing_completed(self, request_id: int, result: dict) -> None:
+        """Display only the newest worker result on the Qt UI thread."""
+        if self._preview_dialog_closing or request_id != self._preview_request_id:
+            return
+
+        teaching_processed = result.get("teaching_processed")
+        if teaching_processed is not None:
+            self._teaching_preview_upscale = float(
+                result.get("teaching_upscale", 1.0) or 1.0
+            )
+            self._display_teaching_pixmap(
+                self._bgr_image_to_pixmap(teaching_processed),
+                preserve_view_transform=True,
+            )
+
+        capture_processed = result.get("capture_processed")
+        capture_source_size = result.get("capture_source_size")
+        capture_path = result.get("capture_path")
+        if capture_processed is not None and capture_source_size and capture_path:
+            self._display_capture_pixmap(
+                self._bgr_image_to_pixmap(capture_processed),
+                capture_path,
+                capture_source_size[0],
+                capture_source_size[1],
+                result.get("capture_coordinate_bounds"),
+                preserve_view_transform=True,
+            )
+
+    def _on_preview_processing_failed(self, request_id: int, error: str) -> None:
+        if request_id == self._preview_request_id:
+            print(f"[DEBUG] Background preview processing failed: {error}")
+
+    def _on_preview_processing_finished(
+        self, finished_worker: PreviewProcessingWorker
+    ) -> None:
+        if self._preview_worker is finished_worker:
+            self._preview_worker = None
+
+        if self._preview_dialog_closing:
+            return
+
+        pending = self._pending_preview_request
+        self._pending_preview_request = None
+        if pending is not None:
+            self._start_preview_processing_worker(pending)
+        else:
+            self._set_preview_processing_busy(False)
+
+    def _invalidate_background_preview_requests(self) -> None:
+        """Prevent an obsolete worker result from replacing a newer UI state."""
+        worker_running = bool(
+            self._preview_worker and self._preview_worker.isRunning()
+        )
+        if self._pending_preview_request is None and not worker_running:
+            return
+
+        self._preview_request_id += 1
+        self._pending_preview_request = None
+        if worker_running:
+            self._preview_worker.requestInterruption()
+        self._set_preview_processing_busy(False)
+
+    def _set_preview_processing_busy(self, busy: bool) -> None:
+        if self.preview_processing_label:
+            self.preview_processing_label.setVisible(bool(busy))
+        if self.preview_processing_indicator:
+            self.preview_processing_indicator.setVisible(bool(busy))
+
+    @staticmethod
+    def _bgr_image_to_pixmap(image: np.ndarray) -> QPixmap:
+        """Create a detached QPixmap from a processed OpenCV image."""
+        if image.ndim == 2:
+            q_image = QImage(
+                image.data,
+                image.shape[1],
+                image.shape[0],
+                image.strides[0],
+                QImage.Format.Format_Grayscale8,
+            ).copy()
+        else:
+            rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            q_image = QImage(
+                rgb_image.data,
+                rgb_image.shape[1],
+                rgb_image.shape[0],
+                rgb_image.strides[0],
+                QImage.Format.Format_RGB888,
+            ).copy()
+        return QPixmap.fromImage(q_image)
     
     def _get_algorithm_parameters(self, algo: dict) -> dict:
         """Get algorithm parameters (for backward compatibility)."""
@@ -2502,7 +2771,8 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         """Keep only pixels within configured RGB ranges and hide the rest."""
         return _apply_rgb_range_filter_to_bgr(img, config)
     
-    def _apply_preprocessing(self, img: np.ndarray, config: dict) -> np.ndarray:
+    @staticmethod
+    def _apply_preprocessing(img: np.ndarray, config: dict) -> np.ndarray:
         """Apply preprocessing to image using TemplateMatchingPreprocessor."""
         if not config:
             return img
@@ -2511,7 +2781,7 @@ class MultiImageAlgorithmTestingDialog(QDialog):
             img = _apply_dominant_color_merge_to_bgr(img, config)
 
         if config.get("rgb_range_filter"):
-            img = self._apply_rgb_range_filter(img, config)
+            img = _apply_rgb_range_filter_to_bgr(img, config)
         
         # Apply binary threshold first if specified
         if config.get("binary_threshold"):
@@ -3473,32 +3743,35 @@ class MultiImageAlgorithmTestingDialog(QDialog):
 
         engine_name = self.ocr_engine_combo.currentText().lower()
         algorithms = self._get_current_algorithms()
-        use_teaching_roi = bool(
-            self.ocr_match_teaching_checkbox
-            and self.ocr_match_teaching_checkbox.isChecked()
-        )
+        ocr_scope = str(self.ocr_scope_combo.currentData() or "full")
         matching_roi = None
         matching_score = 0.0
         fixed_roi = None
 
-        if use_teaching_roi:
+        if ocr_scope == "matching":
             matching_roi, matching_score = self._get_matching_roi_for_ocr(
                 image_path, algorithms
             )
-            fallback_roi = (
-                self._get_special_event_roi_from_action()
-                or self._get_fixed_roi_from_action()
-            )
-            if not matching_roi and not fallback_roi:
+            if not matching_roi:
                 self._show_ocr_message(
                     "Không tìm thấy matching ROI "
-                    f"(score={matching_score:.3f}). Bỏ chọn 'Tìm ROI bằng ảnh Teaching' "
-                    "để OCR toàn bộ capture."
+                    f"(score={matching_score:.3f}). Hãy chọn 'OCR theo tọa độ' "
+                    "nếu muốn bỏ qua matching."
                 )
                 return
-            fixed_roi = matching_roi or fallback_roi
+            fixed_roi = matching_roi
+        elif ocr_scope == "coordinate":
+            fixed_roi = self._get_coordinate_ocr_roi(image_path)
+            if not fixed_roi:
+                self._show_ocr_message(
+                    "Không có vùng OCR theo tọa độ hợp lệ. Hãy chọn "
+                    "'Matching theo tọa độ' trong dialog hiệu chỉnh và kiểm tra "
+                    "tọa độ Teaching + offset."
+                )
+                return
+            print(f"[OCR] Coordinate mode, matching skipped: ROI={fixed_roi}")
         else:
-            print("[OCR] Teaching ROI matching disabled; OCR toàn bộ capture")
+            print("[OCR] Full-screen mode, matching skipped")
 
         screenshot_name = os.path.basename(image_path)
         if matching_roi:
@@ -3520,10 +3793,47 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         print(f"🎯 ROI: {fixed_roi if fixed_roi else 'None (full image)'}")
         print(f"{'='*60}\n")
 
-        if use_teaching_roi:
+        print(f"[OCR] Mode: {ocr_scope}")
+        if ocr_scope == "matching":
             print(f"[OCR] Matching ROI: {matching_roi if matching_roi else 'None'} score={matching_score:.3f}")
         print(f"[OCR] Final OCR ROI: {fixed_roi if fixed_roi else 'None (full image)'}")
         self._start_ocr_thread(image_path, engine_name, algorithms, fixed_roi, screenshot_name)
+
+    def _get_coordinate_ocr_roi(self, image_path: str) -> Optional[tuple]:
+        """Return exactly the Teaching coordinates plus offset, without matching or fallback."""
+        if not bool(getattr(self.action, "teaching_match_by_coordinates", False)):
+            return None
+
+        screenshot_bgr = _load_bgr_image_unicode(image_path)
+        if screenshot_bgr is None:
+            return None
+        image_height, image_width = screenshot_bgr.shape[:2]
+
+        coordinates = (
+            getattr(self.action, "teaching_corner_x1", None),
+            getattr(self.action, "teaching_corner_y1", None),
+            getattr(self.action, "teaching_corner_x2", None),
+            getattr(self.action, "teaching_corner_y2", None),
+        )
+        if any(value is None for value in coordinates):
+            return None
+
+        bounds = expand_coordinate_bounds(
+            *(int(value) for value in coordinates),
+            getattr(
+                self.action,
+                "teaching_match_coordinate_offset",
+                DEFAULT_COORDINATE_MATCH_OFFSET,
+            ),
+            image_width,
+            image_height,
+        )
+        if not bounds:
+            return None
+        left, top, right, bottom = bounds
+        if right <= left or bottom <= top:
+            return None
+        return left, top, right - left, bottom - top
 
     def _get_matching_roi_for_ocr(self, image_path: str, algorithms: list) -> tuple[Optional[tuple], float]:
         """Return the matched template bbox so OCR reads the matched region instead of the whole screenshot."""
