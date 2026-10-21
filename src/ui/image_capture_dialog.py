@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
                              QDialogButtonBox,
                              QGraphicsView, QGraphicsScene, QMessageBox,
                              QGraphicsRectItem, QGraphicsEllipseItem, QGraphicsLineItem)
-from PyQt6.QtCore import QLineF
+from PyQt6.QtCore import QLineF, QTimer
 from PyQt6.QtCore import Qt, QRect, QRectF, QPoint, QPointF
 from PyQt6.QtGui import QPixmap, QPainter, QPen, QColor, QImage, QMouseEvent, QCursor
 import win32gui
@@ -14,6 +14,7 @@ from ctypes import wintypes
 import numpy as np
 import cv2
 import os
+from datetime import datetime
 from ..logic.window_detector import WindowDetector
 from ..logic.app_paths import get_runtime_root
 from ..logic.teaching_matching import (
@@ -63,12 +64,14 @@ _ensure_dpi_awareness()
 class CropSaveDialog(QDialog):
     """Choose a managed learning folder and confirm a cropped PNG save."""
 
-    def __init__(self, crop: QPixmap, learning_root: str, parent=None):
+    def __init__(self, crop: QPixmap, learning_root: str, capture_timestamp: datetime | None = None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Lưu ảnh teaching")
         self.resize(620, 500)
         self.learning_root = os.path.abspath(learning_root)
         self.selected_path = ""
+        self.capture_timestamp = capture_timestamp or datetime.now()
+        self.generated_filename = f"capture_{self.capture_timestamp.strftime('%Y%m%d_%H%M%S')}.png"
         os.makedirs(self.learning_root, exist_ok=True)
 
         layout = QVBoxLayout(self)
@@ -99,7 +102,8 @@ class CropSaveDialog(QDialog):
         layout.addLayout(folder_row)
 
         self.filename_edit = QLineEdit()
-        self.filename_edit.setPlaceholderText("Tên file, không cần nhập .png")
+        self.filename_edit.setText(self.generated_filename)
+        self.filename_edit.setReadOnly(True)
         layout.addWidget(QLabel("Tên file:"))
         layout.addWidget(self.filename_edit)
         self._refresh_folders()
@@ -175,19 +179,17 @@ class CropSaveDialog(QDialog):
 
     def _accept_path(self) -> None:
         folder = self.folder_combo.currentText().strip()
-        filename = self.filename_edit.text().strip()
+        filename = self.generated_filename
         if not folder:
             QMessageBox.warning(self, "Thiếu loại learning", "Hãy tạo hoặc chọn một thư mục learning.")
             return
-        if not filename:
-            QMessageBox.warning(self, "Thiếu tên file", "Vui lòng nhập tên file.")
-            return
-        if os.path.basename(filename) != filename or filename in {".", ".."}:
-            QMessageBox.warning(self, "Tên file không hợp lệ", "Chỉ được nhập tên file, không nhập đường dẫn.")
-            return
-        if not filename.lower().endswith(".png"):
-            filename += ".png"
-        self.selected_path = os.path.join(self.learning_root, folder, filename)
+        candidate = os.path.join(self.learning_root, folder, filename)
+        suffix = 1
+        while os.path.exists(candidate):
+            stem, extension = os.path.splitext(filename)
+            candidate = os.path.join(self.learning_root, folder, f"{stem}_{suffix:02d}{extension}")
+            suffix += 1
+        self.selected_path = candidate
         self.accept()
 
 class ImageGraphicsView(QGraphicsView):
@@ -537,6 +539,7 @@ class ImageCaptureDialog(QDialog):
         self.tool_id = tool_id  # UUID instead of name
         self.captured_image = None
         self._captured_bgr = None  # BGR array để save (giống runtime capture)
+        self._capture_timestamp: datetime | None = None
         self.selection_rect = None
         self.click_point = None
         self.drawing_selection = False
@@ -755,7 +758,7 @@ class ImageCaptureDialog(QDialog):
             QMessageBox.warning(self, "Chưa có ảnh", "Hãy chụp ảnh và chọn vùng crop trước.")
             return
         learning_root = os.path.join(get_runtime_root(), "images", "learning")
-        dialog = CropSaveDialog(crop, learning_root, self)
+        dialog = CropSaveDialog(crop, learning_root, self._capture_timestamp, self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         path = dialog.selected_path
@@ -763,7 +766,19 @@ class ImageCaptureDialog(QDialog):
         if not crop.save(path, "PNG"):
             QMessageBox.critical(self, "Lỗi lưu ảnh", f"Không thể lưu ảnh:\n{path}")
             return
-        QMessageBox.information(self, "Đã lưu ảnh", f"Đã lưu ảnh teaching:\n{path}")
+        self._show_save_toast("Đã chụp và lưu ảnh teaching")
+
+    def _show_save_toast(self, message: str) -> None:
+        toast = QLabel(message, self)
+        toast.setStyleSheet(
+            "background-color: #263238; color: white; padding: 8px 14px; "
+            "border-radius: 4px;"
+        )
+        toast.adjustSize()
+        toast.move(max(10, (self.width() - toast.width()) // 2), 12)
+        toast.raise_()
+        toast.show()
+        QTimer.singleShot(1000, toast.deleteLater)
     
     def capture_screenshot(self):
         """Chụp screenshot của window"""
@@ -837,6 +852,7 @@ class ImageCaptureDialog(QDialog):
                 img._arr = arr_rgb  # Giữ reference để tránh garbage collection
                 
                 self.captured_image = QPixmap.fromImage(img)
+                self._capture_timestamp = datetime.now()
             else:
                 raise Exception("Không thể copy window content")
             
