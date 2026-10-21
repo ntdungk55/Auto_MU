@@ -1,6 +1,6 @@
 {
   "id": "ebb71ab0-8e64-4164-851a-5b8881eb441e",
-  "name": "Tham gia sá»± kiá»‡n QuÃ¡i váº­t táº¥n cÃ´ng",
+  "name": "Tham gia sÃ¡Â»Â± kiÃ¡Â»â€¡n QuÃƒÂ¡i vÃ¡ÂºÂ­t tÃ¡ÂºÂ¥n cÃƒÂ´ng",
   "settings": {
     "loop_enabled": true,
     "loop_mode": "forever",
@@ -18,10 +18,10 @@
   },
   "actions": [
     {
-      "name": "Báº¯t thá»i quÃ¡i váº­t xuáº¥t hiá»‡n",
+      "name": "BÃ¡ÂºÂ¯t thÃ¡Â»Âi quÃƒÂ¡i vÃ¡ÂºÂ­t xuÃ¡ÂºÂ¥t hiÃ¡Â»â€¡n",
       "purpose": "",
-      "action_type": "ThÃ´ng bÃ¡o sá»± kiá»‡n",
-      "mode": "Chá»§ Ä‘á»™ng",
+      "action_type": "ThÃƒÂ´ng bÃƒÂ¡o sÃ¡Â»Â± kiÃ¡Â»â€¡n",
+      "mode": "ChÃ¡Â»Â§ Ã„â€˜Ã¡Â»â„¢ng",
       "value": "",
       "image_path": null,
       "click_x": null,
@@ -89,10 +89,10 @@
       "mask_regions": []
     },
     {
-      "name": "Nháº¥n ESC Ä‘á»ƒ thoÃ¡t Dialog",
+      "name": "NhÃ¡ÂºÂ¥n ESC Ã„â€˜Ã¡Â»Æ’ thoÃƒÂ¡t Dialog",
       "purpose": "",
-      "action_type": "áº¤n PhÃ­m",
-      "mode": "Chá»§ Ä‘á»™ng",
+      "action_type": "Ã¡ÂºÂ¤n PhÃƒÂ­m",
+      "mode": "ChÃ¡Â»Â§ Ã„â€˜Ã¡Â»â„¢ng",
       "value": "esc",
       "image_path": null,
       "click_x": null,
@@ -151,12 +151,12 @@
       "mask_regions": []
     },
     {
-      "name": "Báº¯t áº£nh xem Ä‘Ã£ Ä‘Ã³ng háº¿t chÆ°a",
+      "name": "BÃ¡ÂºÂ¯t Ã¡ÂºÂ£nh xem Ã„â€˜ÃƒÂ£ Ã„â€˜ÃƒÂ³ng hÃ¡ÂºÂ¿t chÃ†Â°a",
       "purpose": "",
-      "action_type": "Báº¯t HÃ¬nh áº¢nh",
-      "mode": "Chá»§ Ä‘á»™ng",
+      "action_type": "BÃ¡ÂºÂ¯t HÃƒÂ¬nh Ã¡ÂºÂ¢nh",
+      "mode": "ChÃ¡Â»Â§ Ã„â€˜Ã¡Â»â„¢ng",
       "value": "",
-      "image_path": "images/teaching/ebb71ab0-8e64-4164-851a-5b8881eb441e/capture_1768403871.png",
+      "image_path": "assets/teaching/ebb71ab0-8e64-4164-851a-5b8881eb441e/capture_1768403871.png",
       "click_x": null,
       "click_y": null,
       "alt_click": false,
@@ -215,10 +215,10 @@
       "teaching_window_height": 600
     },
     {
-      "name": "Nháº¥n esc láº§n ná»¯a",
+      "name": "NhÃ¡ÂºÂ¥n esc lÃ¡ÂºÂ§n nÃ¡Â»Â¯a",
       "purpose": "",
-      "action_type": "áº¤n PhÃ­m",
-      "mode": "Chá»§ Ä‘á»™ng",
+      "action_type": "Ã¡ÂºÂ¤n PhÃƒÂ­m",
+      "mode": "ChÃ¡Â»Â§ Ã„â€˜Ã¡Â»â„¢ng",
       "value": "esc",
       "image_path": null,
       "click_x": null,
@@ -277,10 +277,10 @@
       "mask_regions": []
     },
     {
-      "name": "Má»Ÿ Daily Events dialog",
+      "name": "MÃ¡Â»Å¸ Daily Events dialog",
       "purpose": "",
-      "action_type": "áº¤n PhÃ­m",
-      "mode": "Chá»§ Ä‘á»™ng",
+      "action_type": "Ã¡ÂºÂ¤n PhÃƒÂ­m",
+      "mode": "ChÃ¡Â»Â§ Ã„â€˜Ã¡Â»â„¢ng",
       "value": "s",
       "image_path": null,
       "click_x": null,
@@ -339,12 +339,12 @@
       "mask_regions": []
     },
     {
-      "name": "Má»Ÿ Event dialog",
+      "name": "MÃ¡Â»Å¸ Event dialog",
       "purpose": "",
-      "action_type": "Click Chuá»™t",
-      "mode": "Chá»§ Ä‘á»™ng",
+      "action_type": "Click ChuÃ¡Â»â„¢t",
+      "mode": "ChÃ¡Â»Â§ Ã„â€˜Ã¡Â»â„¢ng",
       "value": "",
-      "image_path": "images/teaching/ebb71ab0-8e64-4164-851a-5b8881eb441e/capture_1768378362.png",
+      "image_path": "assets/teaching/ebb71ab0-8e64-4164-851a-5b8881eb441e/capture_1768378362.png",
       "click_x": 89,
       "click_y": 51,
       "alt_click": false,
@@ -403,12 +403,12 @@
       "teaching_window_height": 600
     },
     {
-      "name": "Äi Ä‘áº¿n sá»± kiá»‡n quáº£i váº­t táº¥n cÃ´ng",
+      "name": "Ã„Âi Ã„â€˜Ã¡ÂºÂ¿n sÃ¡Â»Â± kiÃ¡Â»â€¡n quÃ¡ÂºÂ£i vÃ¡ÂºÂ­t tÃ¡ÂºÂ¥n cÃƒÂ´ng",
       "purpose": "",
-      "action_type": "Click Chuá»™t",
-      "mode": "Chá»§ Ä‘á»™ng",
+      "action_type": "Click ChuÃ¡Â»â„¢t",
+      "mode": "ChÃ¡Â»Â§ Ã„â€˜Ã¡Â»â„¢ng",
       "value": "",
-      "image_path": "images/teaching/ebb71ab0-8e64-4164-851a-5b8881eb441e/capture_1768462839.png",
+      "image_path": "assets/teaching/ebb71ab0-8e64-4164-851a-5b8881eb441e/capture_1768462839.png",
       "click_x": 769,
       "click_y": 178,
       "alt_click": false,
@@ -486,12 +486,12 @@
       "teaching_window_height": 600
     },
     {
-      "name": "XÃ¡c nháº­n move map",
+      "name": "XÃƒÂ¡c nhÃ¡ÂºÂ­n move map",
       "purpose": "",
-      "action_type": "Click Chuá»™t",
-      "mode": "Chá»§ Ä‘á»™ng",
+      "action_type": "Click ChuÃ¡Â»â„¢t",
+      "mode": "ChÃ¡Â»Â§ Ã„â€˜Ã¡Â»â„¢ng",
       "value": "",
-      "image_path": "images/teaching/ebb71ab0-8e64-4164-851a-5b8881eb441e/capture_1768379301.png",
+      "image_path": "assets/teaching/ebb71ab0-8e64-4164-851a-5b8881eb441e/capture_1768379301.png",
       "click_x": 140,
       "click_y": 103,
       "alt_click": false,
@@ -550,12 +550,12 @@
       "teaching_window_height": 600
     },
     {
-      "name": "Check xem Ä‘Ã£ á»Ÿ Davias chÆ°a",
+      "name": "Check xem Ã„â€˜ÃƒÂ£ Ã¡Â»Å¸ Davias chÃ†Â°a",
       "purpose": "",
-      "action_type": "Báº¯t HÃ¬nh áº¢nh",
-      "mode": "Chá»§ Ä‘á»™ng",
+      "action_type": "BÃ¡ÂºÂ¯t HÃƒÂ¬nh Ã¡ÂºÂ¢nh",
+      "mode": "ChÃ¡Â»Â§ Ã„â€˜Ã¡Â»â„¢ng",
       "value": "",
-      "image_path": "images/teaching/ebb71ab0-8e64-4164-851a-5b8881eb441e/capture_1768449987.png",
+      "image_path": "assets/teaching/ebb71ab0-8e64-4164-851a-5b8881eb441e/capture_1768449987.png",
       "click_x": null,
       "click_y": null,
       "alt_click": false,
@@ -639,10 +639,10 @@
       "teaching_window_height": 600
     },
     {
-      "name": "Tham gia sá»± kiá»‡n",
+      "name": "Tham gia sÃ¡Â»Â± kiÃ¡Â»â€¡n",
       "purpose": "",
-      "action_type": "Chá»",
-      "mode": "Chá»§ Ä‘á»™ng",
+      "action_type": "ChÃ¡Â»Â",
+      "mode": "ChÃ¡Â»Â§ Ã„â€˜Ã¡Â»â„¢ng",
       "value": "",
       "image_path": null,
       "click_x": null,
@@ -701,12 +701,12 @@
       "mask_regions": []
     },
     {
-      "name": "áº¤n vÃ o chá»§ party ",
+      "name": "Ã¡ÂºÂ¤n vÃƒÂ o chÃ¡Â»Â§ party ",
       "purpose": "",
-      "action_type": "Click Chuá»™t",
-      "mode": "Chá»§ Ä‘á»™ng",
+      "action_type": "Click ChuÃ¡Â»â„¢t",
+      "mode": "ChÃ¡Â»Â§ Ã„â€˜Ã¡Â»â„¢ng",
       "value": "",
-      "image_path": "images/teaching/ebb71ab0-8e64-4164-851a-5b8881eb441e/capture_1768408210.png",
+      "image_path": "assets/teaching/ebb71ab0-8e64-4164-851a-5b8881eb441e/capture_1768408210.png",
       "click_x": 68,
       "click_y": 18,
       "alt_click": false,
@@ -772,12 +772,12 @@
       "teaching_window_height": 600
     },
     {
-      "name": "Äi Ä‘áº¿n chá»§ party",
+      "name": "Ã„Âi Ã„â€˜Ã¡ÂºÂ¿n chÃ¡Â»Â§ party",
       "purpose": "",
-      "action_type": "Click Chuá»™t",
-      "mode": "Chá»§ Ä‘á»™ng",
+      "action_type": "Click ChuÃ¡Â»â„¢t",
+      "mode": "ChÃ¡Â»Â§ Ã„â€˜Ã¡Â»â„¢ng",
       "value": "",
-      "image_path": "images/teaching/ebb71ab0-8e64-4164-851a-5b8881eb441e/capture_1768410701.png",
+      "image_path": "assets/teaching/ebb71ab0-8e64-4164-851a-5b8881eb441e/capture_1768410701.png",
       "click_x": 84,
       "click_y": 24,
       "alt_click": false,

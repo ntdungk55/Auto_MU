@@ -261,7 +261,7 @@ class TeachingAlgorithmTestDialog(QDialog):
 
     def _save_dialog_config(self, teaching_image_path: Path) -> bool:
         """Persist setup data, including algorithm parameter values."""
-        session_root = self.project_root / "assets" / "teaching" / "algorithm_tests"
+        session_root = self.project_root / "build" / "images" / "algorithm_testing" / "sessions"
         session_root.mkdir(parents=True, exist_ok=True)
         if self.session_dir is None:
             session_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
@@ -737,7 +737,7 @@ class TeachingAlgorithmTestDialog(QDialog):
             tool_id="teaching_lab",
             algorithm_field="preprocessing_algorithms",
         )
-        session_root = self.project_root / "assets" / "teaching" / "algorithm_tests"
+        session_root = self.project_root / "build" / "images" / "algorithm_testing" / "sessions"
         session_root.mkdir(parents=True, exist_ok=True)
         dialog.test_sessions_dir = str(session_root)
         if self.session_dir:

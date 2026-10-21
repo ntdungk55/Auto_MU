@@ -16,14 +16,14 @@
     "block_input_enabled": false,
     "block_input_duration": 3.0,
     "target_window_title": "",
-    "window_capture_dir": "images/algorithm_testing/1b45e999-7ebc-4a05-8391-cc056d7cd768/window_captures"
+    "window_capture_dir": "build/images/algorithm_testing/1b45e999-7ebc-4a05-8391-cc056d7cd768/window_captures"
   },
   "actions": [
     {
       "name": "dfdsf",
       "purpose": "",
-      "action_type": "Báº¯t HÃ¬nh áº¢nh",
-      "mode": "Chá»§ Ä‘á»™ng",
+      "action_type": "BÃ¡ÂºÂ¯t HÃƒÂ¬nh Ã¡ÂºÂ¢nh",
+      "mode": "ChÃ¡Â»Â§ Ã„â€˜Ã¡Â»â„¢ng",
       "value": "",
       "image_path": null,
       "enable_post_key_image_check": false,

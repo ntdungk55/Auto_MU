@@ -511,7 +511,7 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         self.current_test_completed = 0
         self.current_test_window_title = ""
         self.test_sessions_dir = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "..", "..", "assets", "algorithm_tests")
+            os.path.join(os.path.dirname(__file__), "..", "..", "..", "build", "images", "algorithm_testing", "sessions")
         )
         os.makedirs(self.test_sessions_dir, exist_ok=True)
         
@@ -806,7 +806,7 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         layout.addLayout(btn_row)
         
         # Auto-save label
-        save_path = f"images/algorithm_testing/{self.tool_id}/{self.action.name}/window_captures/"
+        save_path = f"build/images/algorithm_testing/{self.tool_id}/{self.action.name}/window_captures/"
         layout.addWidget(QLabel(f"Auto-saved to: {save_path}"))
         
         # Algorithm Management - sửa thành horizontal layout với OCR section
@@ -1347,7 +1347,7 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         safe_action_name = re.sub(r'[<>:"/\\|?*]', "", action_name).strip().rstrip(". ")
         if not safe_action_name:
             safe_action_name = "unnamed_action"
-        folder = f"images/algorithm_testing/{self.tool_id}/{safe_action_name}/window_captures/"
+        folder = f"build/images/algorithm_testing/{self.tool_id}/{safe_action_name}/window_captures/"
         os.makedirs(folder, exist_ok=True)
         return folder
 

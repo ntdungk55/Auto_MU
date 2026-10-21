@@ -47,7 +47,7 @@ class TeachingAlgorithmLabWidget(QWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.project_root = Path(__file__).resolve().parents[2]
-        self.test_sessions_dir = self.project_root / "assets" / "teaching" / "algorithm_tests"
+        self.test_sessions_dir = self.project_root / "build" / "images" / "algorithm_testing" / "sessions"
         self._build_ui()
         self._load_test_sessions()
 

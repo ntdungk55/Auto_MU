@@ -24,7 +24,7 @@ def load_teaching_session(project_root: Path, session_id: str) -> dict[str, Any]
         raise ValueError("Invalid trainingTeachingSessionId")
 
     sessions_root = (
-        Path(project_root) / "assets" / "teaching" / "algorithm_tests"
+        Path(project_root) / "build" / "images" / "algorithm_testing" / "sessions"
     ).resolve()
     session_dir = (sessions_root / normalized_id).resolve()
     try:

@@ -16,7 +16,7 @@ import cv2
 import os
 from datetime import datetime
 from ..logic.window_detector import WindowDetector
-from ..logic.app_paths import get_runtime_root
+from ..logic.app_paths import get_runtime_root, get_teaching_root
 from ..logic.teaching_matching import (
     expand_coordinate_bounds,
     normalize_coordinate_match_offset,
@@ -646,7 +646,7 @@ class ImageCaptureDialog(QDialog):
 
     @staticmethod
     def _sanitize_tool_folder_name(name: str) -> str:
-        """Windows-safe folder name for storing teaching images under images/<tool_name>/."""
+        """Windows-safe folder name for storing teaching images under assets/teaching/<tool_name>/."""
         try:
             s = str(name or "").strip()
         except Exception:
@@ -1020,7 +1020,7 @@ class ImageCaptureDialog(QDialog):
             img_rect = QRectF(0, 0, original_image_width, original_image_height)
             selection_rect = selection_rect.intersected(img_rect)
         
-        # Save teaching images under images/teaching/<tool_id>/ if tool_id is provided
+        # Save teaching images under assets/teaching/<tool_id>/ if tool_id is provided
         # If loaded from existing and no new capture, return existing path
         if self._loaded_from_existing and self._existing_image_path:
             print(f"[DEBUG] Reusing existing image path: {self._existing_image_path}")
@@ -1029,7 +1029,7 @@ class ImageCaptureDialog(QDialog):
             cropped_height = self.captured_image.height()
         else:
             # Save new file
-            base_dir = os.path.join("images", "teaching")
+            base_dir = get_teaching_root()
             # Use tool_id as folder name (UUID)
             images_dir = os.path.join(base_dir, self.tool_id) if self.tool_id else base_dir
             # Make absolute path to ensure consistency

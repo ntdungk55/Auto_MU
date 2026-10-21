@@ -20,10 +20,10 @@
   },
   "actions": [
     {
-      "name": "Báº­t báº£n Ä‘á»“ trÆ°á»›c khi Ä‘i Ä‘áº¿n NPC",
+      "name": "BÃ¡ÂºÂ­t bÃ¡ÂºÂ£n Ã„â€˜Ã¡Â»â€œ trÃ†Â°Ã¡Â»â€ºc khi Ã„â€˜i Ã„â€˜Ã¡ÂºÂ¿n NPC",
       "purpose": "",
-      "action_type": "áº¤n PhÃ­m",
-      "mode": "Chá»§ Ä‘á»™ng",
+      "action_type": "Ã¡ÂºÂ¤n PhÃƒÂ­m",
+      "mode": "ChÃ¡Â»Â§ Ã„â€˜Ã¡Â»â„¢ng",
       "value": "tab",
       "image_path": null,
       "enable_post_key_image_check": false,
@@ -158,10 +158,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Äi tá»›i gáº§n NPC",
+      "name": "Ã„Âi tÃ¡Â»â€ºi gÃ¡ÂºÂ§n NPC",
       "purpose": "",
-      "action_type": "Click Chuá»™t",
-      "mode": "Chá»§ Ä‘á»™ng",
+      "action_type": "Click ChuÃ¡Â»â„¢t",
+      "mode": "ChÃ¡Â»Â§ Ã„â€˜Ã¡Â»â„¢ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Auto_MU\\images\\517d73a9-3c5d-46d7-8f35-8a92976a58aa\\capture_1785026962.png",
       "enable_post_key_image_check": false,
@@ -303,10 +303,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "ÄÃ³ng báº£n Ä‘á»“ sau khi click vÃ o NPC",
+      "name": "Ã„ÂÃƒÂ³ng bÃ¡ÂºÂ£n Ã„â€˜Ã¡Â»â€œ sau khi click vÃƒÂ o NPC",
       "purpose": "",
-      "action_type": "áº¤n PhÃ­m",
-      "mode": "Chá»§ Ä‘á»™ng",
+      "action_type": "Ã¡ÂºÂ¤n PhÃƒÂ­m",
+      "mode": "ChÃ¡Â»Â§ Ã„â€˜Ã¡Â»â„¢ng",
       "value": "tab",
       "image_path": null,
       "enable_post_key_image_check": false,
@@ -441,12 +441,12 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Click vÃ o NPC",
+      "name": "Click vÃƒÂ o NPC",
       "purpose": "",
-      "action_type": "Click Chuá»™t",
-      "mode": "Chá»§ Ä‘á»™ng",
+      "action_type": "Click ChuÃ¡Â»â„¢t",
+      "mode": "ChÃ¡Â»Â§ Ã„â€˜Ã¡Â»â„¢ng",
       "value": "",
-      "image_path": "images/teaching/517d73a9-3c5d-46d7-8f35-8a92976a58aa/capture_1768033196.png",
+      "image_path": "assets/teaching/517d73a9-3c5d-46d7-8f35-8a92976a58aa/capture_1768033196.png",
       "enable_post_key_image_check": false,
       "post_key_check_delay": 1.0,
       "post_key_retry_count": 0,
@@ -582,10 +582,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Chá»n táº§ng ",
+      "name": "ChÃ¡Â»Ân tÃ¡ÂºÂ§ng ",
       "purpose": "",
-      "action_type": "Click Chuá»™t",
-      "mode": "Chá»§ Ä‘á»™ng",
+      "action_type": "Click ChuÃ¡Â»â„¢t",
+      "mode": "ChÃ¡Â»Â§ Ã„â€˜Ã¡Â»â„¢ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Auto_MU\\images\\517d73a9-3c5d-46d7-8f35-8a92976a58aa\\capture_1785078102.png",
       "enable_post_key_image_check": false,
@@ -720,10 +720,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Click vÃ o button xÃ¡c nháº­n báº¯t Ä‘áº§u vÃ²ng Ä‘áº¥u má»›i ",
+      "name": "Click vÃƒÂ o button xÃƒÂ¡c nhÃ¡ÂºÂ­n bÃ¡ÂºÂ¯t Ã„â€˜Ã¡ÂºÂ§u vÃƒÂ²ng Ã„â€˜Ã¡ÂºÂ¥u mÃ¡Â»â€ºi ",
       "purpose": "",
-      "action_type": "Click Chuá»™t",
-      "mode": "Chá»§ Ä‘á»™ng",
+      "action_type": "Click ChuÃ¡Â»â„¢t",
+      "mode": "ChÃ¡Â»Â§ Ã„â€˜Ã¡Â»â„¢ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Auto_MU\\images\\517d73a9-3c5d-46d7-8f35-8a92976a58aa\\capture_1785078138.png",
       "enable_post_key_image_check": false,
@@ -858,10 +858,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Báº­t Auto",
+      "name": "BÃ¡ÂºÂ­t Auto",
       "purpose": "",
-      "action_type": "áº¤n PhÃ­m",
-      "mode": "Chá»§ Ä‘á»™ng",
+      "action_type": "Ã¡ÂºÂ¤n PhÃƒÂ­m",
+      "mode": "ChÃ¡Â»Â§ Ã„â€˜Ã¡Â»â„¢ng",
       "value": "home",
       "image_path": null,
       "enable_post_key_image_check": false,
@@ -998,8 +998,8 @@
     {
       "name": "Detect completion dialog",
       "purpose": "",
-      "action_type": "Äá»c thá»¥ Ä‘á»™ng",
-      "mode": "Chá»§ Ä‘á»™ng",
+      "action_type": "Ã„ÂÃ¡Â»Âc thÃ¡Â»Â¥ Ã„â€˜Ã¡Â»â„¢ng",
+      "mode": "ChÃ¡Â»Â§ Ã„â€˜Ã¡Â»â„¢ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Auto_MU\\images\\517d73a9-3c5d-46d7-8f35-8a92976a58aa\\capture_1785078222.png",
       "enable_post_key_image_check": false,
@@ -1134,10 +1134,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "ÄÃ³ng dialog thÃ´ng bÃ¡o cá»§a Event",
+      "name": "Ã„ÂÃƒÂ³ng dialog thÃƒÂ´ng bÃƒÂ¡o cÃ¡Â»Â§a Event",
       "purpose": "",
-      "action_type": "áº¤n PhÃ­m",
-      "mode": "Chá»§ Ä‘á»™ng",
+      "action_type": "Ã¡ÂºÂ¤n PhÃƒÂ­m",
+      "mode": "ChÃ¡Â»Â§ Ã„â€˜Ã¡Â»â„¢ng",
       "value": "esc",
       "image_path": null,
       "enable_post_key_image_check": false,
@@ -1272,10 +1272,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Chá» nháº·t Ä‘á»“ sau khi hoÃ n thÃ nh",
+      "name": "ChÃ¡Â»Â nhÃ¡ÂºÂ·t Ã„â€˜Ã¡Â»â€œ sau khi hoÃƒÂ n thÃƒÂ nh",
       "purpose": "",
-      "action_type": "Chá»",
-      "mode": "Chá»§ Ä‘á»™ng",
+      "action_type": "ChÃ¡Â»Â",
+      "mode": "ChÃ¡Â»Â§ Ã„â€˜Ã¡Â»â„¢ng",
       "value": "",
       "image_path": null,
       "enable_post_key_image_check": false,

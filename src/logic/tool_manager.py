@@ -468,7 +468,7 @@ class Tool:
         )
 
 class ToolManager:
-    def __init__(self, tools_dir: str = "tools", images_dir: str = "images/teaching"):
+    def __init__(self, tools_dir: str = "tools", images_dir: str = "assets/teaching"):
         self.tools_dir = tools_dir
         # Keep callers that pass the old root compatible with the new layout.
         self.images_dir = os.path.join(images_dir, "teaching") if images_dir == "images" else images_dir

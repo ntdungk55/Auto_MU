@@ -31,9 +31,23 @@ def get_images_root() -> str:
     return os.path.join(get_runtime_root(), "images")
 
 
+def get_assets_root() -> str:
+    """Return the application-managed resource root."""
+    if getattr(sys, "frozen", False):
+        return os.path.join(get_runtime_root(), "assets")
+
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    return os.path.join(project_root, "assets")
+
+
 def get_teaching_root() -> str:
     """Return the managed root for tool teaching assets."""
-    return os.path.join(get_images_root(), "teaching")
+    return os.path.join(get_assets_root(), "teaching")
+
+
+def get_algorithm_testing_root() -> str:
+    """Return the mutable root for algorithm-testing sessions and captures."""
+    return os.path.join(get_images_root(), "algorithm_testing")
 
 
 def get_tool_teaching_dir(tool_id: str | None) -> str:
