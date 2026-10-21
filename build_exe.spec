@@ -3,7 +3,7 @@
 
 import sys
 import os
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
 
 block_cipher = None
 
@@ -25,6 +25,8 @@ hiddenimports = [
     'pytesseract',
     'openai',
     'requests',
+    'onnxruntime',
+    'onnxruntime.capi.onnxruntime_pybind11_state',
 ]
 
 # Add src submodules
@@ -39,11 +41,19 @@ hiddenimports += collect_submodules('src.infrastructure')
 datas = []
 if os.path.exists(os.path.join('assets', 'scenario_engine')):
     datas.append((os.path.join('assets', 'scenario_engine'), os.path.join('assets', 'scenario_engine')))
+if os.path.exists(os.path.join('assets', 'models', 'yolo')):
+    datas.append((os.path.join('assets', 'models', 'yolo'), os.path.join('assets', 'models', 'yolo')))
+
+# ONNX Runtime loads native DLLs dynamically; collect its Python modules,
+# package data, and native binaries explicitly for the frozen executable.
+onnx_datas, onnx_binaries, onnx_hiddenimports = collect_all('onnxruntime')
+datas += onnx_datas
+hiddenimports += onnx_hiddenimports
 
 a = Analysis(
     ['main.py'],
     pathex=['.'],
-    binaries=[],
+    binaries=onnx_binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],

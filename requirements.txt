@@ -6,6 +6,7 @@ numpy
 Pillow
 winsdk
 openai
+onnxruntime
 pynput
 pytesseract
 easyocr

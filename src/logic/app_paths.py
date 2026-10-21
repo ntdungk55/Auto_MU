@@ -36,6 +36,11 @@ def get_images_root() -> str:
     return os.path.join(get_runtime_root(), "images")
 
 
+def get_learning_root() -> str:
+    """Return the runtime root containing user teaching/source image folders."""
+    return os.path.join(get_images_root(), "learning")
+
+
 def get_assets_root() -> str:
     """Return the application-managed resource root."""
     if getattr(sys, "frozen", False):
@@ -56,6 +61,16 @@ def get_teaching_root() -> str:
 def get_algorithm_testing_root() -> str:
     """Return the mutable root for algorithm-testing sessions and captures."""
     return os.path.join(get_images_root(), "algorithm_testing")
+
+
+def get_yolo_models_root() -> str:
+    """Return the mutable runtime directory for YOLO ONNX models."""
+    return os.path.join(get_runtime_root(), "models", "yolo")
+
+
+def get_yolo_datasets_root() -> str:
+    """Return the mutable runtime directory for YOLO datasets and labels."""
+    return os.path.join(get_runtime_root(), "datasets", "yolo")
 
 
 def get_scenario_engine_root() -> str:

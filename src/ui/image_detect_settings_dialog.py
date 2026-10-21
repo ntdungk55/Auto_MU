@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                              QWidget, QFileDialog, QScrollArea, QListWidget, QAbstractItemView)
 from PyQt6.QtCore import Qt
 from ..logic.action_type import AutoAction
+from ..logic.app_paths import get_yolo_models_root
 from .algorithm_display_utils import update_algorithms_display
 import os
 import json
@@ -330,6 +331,41 @@ class ImageDetectSettingsDialog(QDialog):
         
         teaching_group.setLayout(teaching_layout)
         layout.addWidget(teaching_group)
+
+        # YOLO recognition (optional; template matching remains the default)
+        yolo_group = QGroupBox("Nhận diện YOLO (ONNX CPU)")
+        yolo_layout = QVBoxLayout()
+        self.yolo_checkbox = QCheckBox("Dùng YOLO thay cho template matching")
+        yolo_layout.addWidget(self.yolo_checkbox)
+
+        yolo_model_row = QHBoxLayout()
+        self.yolo_model_input = QLineEdit()
+        self.yolo_model_input.setPlaceholderText(
+            os.path.join(get_yolo_models_root(), "model.onnx")
+        )
+        yolo_model_row.addWidget(self.yolo_model_input)
+        self.yolo_model_btn = QPushButton("Chọn model .onnx")
+        self.yolo_model_btn.clicked.connect(self._select_yolo_model)
+        yolo_model_row.addWidget(self.yolo_model_btn)
+        yolo_layout.addLayout(yolo_model_row)
+
+        yolo_threshold_row = QHBoxLayout()
+        yolo_threshold_row.addWidget(QLabel("Confidence:"))
+        self.yolo_confidence_spin = QDoubleSpinBox()
+        self.yolo_confidence_spin.setRange(0.01, 0.99)
+        self.yolo_confidence_spin.setSingleStep(0.01)
+        self.yolo_confidence_spin.setDecimals(2)
+        yolo_threshold_row.addWidget(self.yolo_confidence_spin)
+        yolo_threshold_row.addWidget(QLabel("IoU:"))
+        self.yolo_iou_spin = QDoubleSpinBox()
+        self.yolo_iou_spin.setRange(0.01, 0.99)
+        self.yolo_iou_spin.setSingleStep(0.01)
+        self.yolo_iou_spin.setDecimals(2)
+        yolo_threshold_row.addWidget(self.yolo_iou_spin)
+        yolo_threshold_row.addStretch()
+        yolo_layout.addLayout(yolo_threshold_row)
+        yolo_group.setLayout(yolo_layout)
+        layout.addWidget(yolo_group)
         
         # Template Matching Preprocessing section
         self._add_template_matching_preprocessing_section(layout)
@@ -478,6 +514,14 @@ class ImageDetectSettingsDialog(QDialog):
             self.action.image_path = dest_path
             self.image_path_label.setText(f"Đã chọn: {filename}")
             self._update_image_button_text()
+
+    def _select_yolo_model(self):
+        """Select an ONNX model while keeping model files separate from teaching assets."""
+        filepath, _ = QFileDialog.getOpenFileName(
+            self, "Chọn YOLO model", get_yolo_models_root(), "ONNX Models (*.onnx)"
+        )
+        if filepath:
+            self.yolo_model_input.setText(filepath)
     
     def _open_algorithm_testing_dialog(self):
         """Open Multi-Image Algorithm Testing Dialog."""
@@ -788,6 +832,11 @@ class ImageDetectSettingsDialog(QDialog):
             filename = os.path.basename(self.action.image_path)
             self.image_path_label.setText(f"Đã chọn: {filename}")
         self._update_image_button_text()
+
+        self.yolo_checkbox.setChecked(bool(getattr(self.action, "yolo_enabled", False)))
+        self.yolo_model_input.setText(str(getattr(self.action, "yolo_model_path", "") or ""))
+        self.yolo_confidence_spin.setValue(float(getattr(self.action, "yolo_confidence", 0.25) or 0.25))
+        self.yolo_iou_spin.setValue(float(getattr(self.action, "yolo_iou", 0.45) or 0.45))
         
         # Template matching algorithms
         self._update_template_algorithms_display()
@@ -829,6 +878,10 @@ class ImageDetectSettingsDialog(QDialog):
             "notification_filter_keywords": str(self.notification_filter_input.text() or "").strip(),
             "notification_dedup_minutes": int(self.notification_dedup_spin.value()),
             "image_path": self.action.image_path,
+            "yolo_enabled": bool(self.yolo_checkbox.isChecked()),
+            "yolo_model_path": str(self.yolo_model_input.text() or "").strip(),
+            "yolo_confidence": float(self.yolo_confidence_spin.value()),
+            "yolo_iou": float(self.yolo_iou_spin.value()),
             "teaching_corner_x1": getattr(self.action, "teaching_corner_x1", None),
             "teaching_corner_y1": getattr(self.action, "teaching_corner_y1", None),
             "teaching_corner_x2": getattr(self.action, "teaching_corner_x2", None),

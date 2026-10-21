@@ -14,9 +14,10 @@ from ctypes import wintypes
 import numpy as np
 import cv2
 import os
+import json
 from datetime import datetime
 from ..logic.window_detector import WindowDetector
-from ..logic.app_paths import get_runtime_root, get_teaching_root
+from ..logic.app_paths import get_app_state_path, get_runtime_root, get_teaching_root
 from ..logic.teaching_matching import (
     expand_coordinate_bounds,
     normalize_coordinate_match_offset,
@@ -35,6 +36,30 @@ PW_RENDERFULLCONTENT = 0x00000002
 user32 = ctypes.windll.user32
 user32.PrintWindow.argtypes = [wintypes.HWND, wintypes.HDC, ctypes.c_uint]
 user32.PrintWindow.restype = wintypes.BOOL
+
+
+def _load_last_learning_folder() -> str:
+    try:
+        with open(get_app_state_path(), "r", encoding="utf-8") as handle:
+            state = json.load(handle) or {}
+        return str(state.get("teaching_last_learning_folder") or "").strip()
+    except (OSError, TypeError, ValueError):
+        return ""
+
+
+def _save_last_learning_folder(folder_name: str) -> None:
+    try:
+        path = get_app_state_path()
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                state = json.load(handle) or {}
+        except (OSError, TypeError, ValueError):
+            state = {}
+        state["teaching_last_learning_folder"] = str(folder_name or "").strip()
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(state, handle, ensure_ascii=False, indent=2)
+    except (OSError, TypeError, ValueError):
+        pass
 
 # DPI Awareness constants
 DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4
@@ -106,7 +131,7 @@ class CropSaveDialog(QDialog):
         self.filename_edit.setReadOnly(True)
         layout.addWidget(QLabel("Tên file:"))
         layout.addWidget(self.filename_edit)
-        self._refresh_folders()
+        self._refresh_folders(_load_last_learning_folder())
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -190,6 +215,7 @@ class CropSaveDialog(QDialog):
             candidate = os.path.join(self.learning_root, folder, f"{stem}_{suffix:02d}{extension}")
             suffix += 1
         self.selected_path = candidate
+        _save_last_learning_folder(folder)
         self.accept()
 
 class ImageGraphicsView(QGraphicsView):

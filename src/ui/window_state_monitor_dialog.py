@@ -4,24 +4,37 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import threading
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Callable
 
+import cv2
+import numpy as np
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QRectF
 from PyQt6.QtGui import QColor, QFont, QImage, QPainter, QPen
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QDialog,
+    QDoubleSpinBox,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QMessageBox,
     QPushButton,
+    QFileDialog,
+    QLineEdit,
     QScrollArea,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
 from .image_capture_dialog import ImageCaptureDialog
+from .yolo_settings_dialog import YoloSettingsDialog
+from ..logic.app_paths import get_app_state_path, get_learning_root, get_runtime_root
+from ..logic.vision.yolo import YoloDetector
+from ..logic.vision.yolo.exceptions import YoloError
 
 
 STATE_NAMES = (
@@ -45,11 +58,59 @@ STATE_COLORS = (
 PREVIEW_MARGIN = 12
 
 
+def _default_yolo_settings() -> dict[str, Any]:
+    return {
+        "source_folder": get_learning_root(),
+        "model_path": "",
+        "confidence": 0.25,
+        "iou": 0.45,
+    }
+
+
+def _load_yolo_settings() -> dict[str, Any]:
+    settings = _default_yolo_settings()
+    try:
+        with open(get_app_state_path(), "r", encoding="utf-8") as handle:
+            state = json.load(handle) or {}
+        saved = state.get("window_state_yolo_settings", {})
+        if isinstance(saved, dict):
+            settings.update({
+                "source_folder": str(saved.get("source_folder") or settings["source_folder"]),
+                "model_path": str(saved.get("model_path") or ""),
+                "confidence": float(saved.get("confidence", settings["confidence"])),
+                "iou": float(saved.get("iou", settings["iou"])),
+            })
+    except (OSError, TypeError, ValueError):
+        pass
+    return settings
+
+
+def _save_yolo_settings(settings: dict[str, Any]) -> None:
+    try:
+        path = get_app_state_path()
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                state = json.load(handle) or {}
+        except (OSError, TypeError, ValueError):
+            state = {}
+        state["window_state_yolo_settings"] = {
+            "source_folder": str(settings.get("source_folder") or get_learning_root()),
+            "model_path": str(settings.get("model_path") or ""),
+            "confidence": float(settings.get("confidence", 0.25)),
+            "iou": float(settings.get("iou", 0.45)),
+        }
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(state, handle, ensure_ascii=False, indent=2)
+    except (OSError, TypeError, ValueError):
+        pass
+
+
 class WindowStateMonitorWorker(QThread):
     """Poll the existing MCP Window State service without running OCR again."""
 
     snapshot_ready = pyqtSignal(object)
     request_failed = pyqtSignal(str)
+    yolo_log = pyqtSignal(str)
 
     def __init__(self, tool_client: Any, enabled_states: set[str], parent=None) -> None:
         super().__init__(parent)
@@ -58,11 +119,51 @@ class WindowStateMonitorWorker(QThread):
         self._stop_event = threading.Event()
         self._enabled_states = set(enabled_states)
         self._configuration_dirty = True
+        self._yolo_enabled = False
+        self._yolo_source_folder = ""
+        self._yolo_model_path = ""
+        self._yolo_confidence = 0.25
+        self._yolo_iou = 0.45
+        self._yolo_detector: YoloDetector | None = None
 
     def set_enabled_states(self, enabled_states: set[str]) -> None:
         with self._lock:
             self._enabled_states = set(enabled_states)
             self._configuration_dirty = True
+
+    def set_yolo_config(
+        self,
+        enabled: bool,
+        source_folder: str,
+        model_path: str,
+        confidence: float,
+        iou: float,
+    ) -> None:
+        with self._lock:
+            changed = (
+                self._yolo_enabled != bool(enabled)
+                or self._yolo_source_folder != str(source_folder or "")
+                or self._yolo_model_path != str(model_path or "")
+                or self._yolo_confidence != float(confidence)
+                or self._yolo_iou != float(iou)
+            )
+            self._yolo_enabled = bool(enabled)
+            self._yolo_source_folder = str(source_folder or "")
+            self._yolo_model_path = str(model_path or "")
+            self._yolo_confidence = float(confidence)
+            self._yolo_iou = float(iou)
+            if changed:
+                self._yolo_detector = None
+                self._log(
+                    "config changed: enabled=%s source=%s model=%s confidence=%.2f iou=%.2f"
+                    % (
+                        self._yolo_enabled,
+                        self._yolo_source_folder or "window-state",
+                        self._yolo_model_path or "default",
+                        self._yolo_confidence,
+                        self._yolo_iou,
+                    )
+                )
 
     def stop(self) -> None:
         self._stop_event.set()
@@ -87,10 +188,126 @@ class WindowStateMonitorWorker(QThread):
                     {},
                     timeout_seconds=4.0,
                 )
+                payload = self._run_yolo(payload)
                 self.snapshot_ready.emit(payload)
             except Exception as error:
                 self.request_failed.emit(str(error))
             self._stop_event.wait(0.75)
+
+    def _run_yolo(self, payload: object) -> object:
+        with self._lock:
+            enabled = self._yolo_enabled
+            source_folder = self._yolo_source_folder
+            model_path = self._yolo_model_path
+            confidence = self._yolo_confidence
+            iou = self._yolo_iou
+            detector = self._yolo_detector
+        if not enabled or not isinstance(payload, dict):
+            return payload
+
+        encoded = str(payload.get("image_jpeg_base64") or "")
+        if not encoded:
+            payload["yolo_error"] = "Window State chưa có ảnh nguồn"
+            self._log("error: Window State payload has no image")
+            return payload
+        try:
+            image_bytes = np.frombuffer(base64.b64decode(encoded), dtype=np.uint8)
+            preview_image = cv2.imdecode(image_bytes, cv2.IMREAD_COLOR)
+            if preview_image is None:
+                raise YoloError("Không giải mã được ảnh Window State")
+            source_result = self._load_source_image(source_folder)
+            if source_result is None:
+                source_image = preview_image
+                source_image_path = "window-state snapshot"
+            else:
+                source_image, source_image_path = source_result
+            if detector is None:
+                detector = YoloDetector(model_path=model_path or None)
+                with self._lock:
+                    self._yolo_detector = detector
+            detections = detector.detect(source_image, confidence=confidence, iou=iou)
+            debug = detector.last_debug
+            source_h, source_w = source_image.shape[:2]
+            preview_h, preview_w = preview_image.shape[:2]
+            scale_x = preview_w / max(1, source_w)
+            scale_y = preview_h / max(1, source_h)
+            payload["yolo_detections"] = [
+                {
+                    "class_id": item.class_id,
+                    "class_name": item.class_name,
+                    "confidence": item.confidence,
+                    "x1": item.x1 * scale_x,
+                    "y1": item.y1 * scale_y,
+                    "x2": item.x2 * scale_x,
+                    "y2": item.y2 * scale_y,
+                }
+                for item in detections
+            ]
+            payload["yolo_error"] = ""
+            self._log(
+                "inference ok: source_folder=%s source_image=%s model=%s "
+                "raw_candidates=%d max_confidence=%.3f threshold=%.3f "
+                "candidates_after_threshold=%d detections=%d"
+                % (
+                    source_folder or "window-state",
+                    source_image_path,
+                    model_path or "default",
+                    int(debug.get("raw_candidates", 0)),
+                    float(debug.get("max_confidence", 0.0)),
+                    float(debug.get("threshold", confidence)),
+                    int(debug.get("candidates_after_threshold", 0)),
+                    len(detections),
+                )
+            )
+            for item in detections:
+                self._log(
+                    "detection class_id=%d class=%s confidence=%.3f box=(%d,%d,%d,%d)"
+                    % (
+                        item.class_id,
+                        item.class_name or "unknown",
+                        item.confidence,
+                        item.x1,
+                        item.y1,
+                        item.x2,
+                        item.y2,
+                    )
+                )
+        except YoloError as error:
+            payload["yolo_detections"] = []
+            payload["yolo_error"] = str(error)
+            self._log(f"inference error: {error}")
+        except Exception as error:
+            payload["yolo_detections"] = []
+            payload["yolo_error"] = f"{type(error).__name__}: {error}"
+            self._log(f"unexpected error: {type(error).__name__}: {error}")
+        return payload
+
+    def _log(self, message: str) -> None:
+        line = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [YOLO] {message}"
+        try:
+            log_dir = os.path.join(get_runtime_root(), "logs")
+            os.makedirs(log_dir, exist_ok=True)
+            with open(os.path.join(log_dir, "yolo_runtime.log"), "a", encoding="utf-8") as handle:
+                handle.write(line + "\n")
+        except OSError:
+            pass
+        print(line)
+        self.yolo_log.emit(line)
+
+    @staticmethod
+    def _load_source_image(folder: str) -> tuple[np.ndarray, str] | None:
+        if not folder or not os.path.isdir(folder):
+            return None
+        candidates = [
+            path for path in Path(folder).rglob("*")
+            if path.is_file() and path.suffix.lower() in {".png", ".jpg", ".jpeg", ".bmp", ".webp"}
+        ]
+        if not candidates:
+            return None
+        latest = max(candidates, key=lambda path: path.stat().st_mtime)
+        data = np.fromfile(str(latest), dtype=np.uint8)
+        image = cv2.imdecode(data, cv2.IMREAD_COLOR)
+        return (image, str(latest)) if image is not None else None
 
 
 class WindowStateCanvas(QWidget):
@@ -100,6 +317,7 @@ class WindowStateCanvas(QWidget):
         super().__init__(parent)
         self._image = QImage()
         self._states: list[dict[str, Any]] = []
+        self._yolo_detections: list[dict[str, Any]] = []
         self.setMinimumSize(640, 480)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
@@ -114,6 +332,8 @@ class WindowStateCanvas(QWidget):
                 pass
         states = payload.get("states")
         self._states = list(states) if isinstance(states, list) else []
+        detections = payload.get("yolo_detections")
+        self._yolo_detections = list(detections) if isinstance(detections, list) else []
         self.update()
 
     def paintEvent(self, _event) -> None:
@@ -164,6 +384,24 @@ class WindowStateCanvas(QWidget):
             label = self._result_label(state)
             if label:
                 self._draw_roi_label(painter, roi_rect, label, color)
+
+        for detection in self._yolo_detections:
+            box = self._rectangle(detection)
+            if box is None:
+                continue
+            rect = self._scaled_rect(box, image_rect, scale_x, scale_y)
+            color = QColor("#34d399")
+            pen = QPen(color, 2)
+            pen.setCosmetic(True)
+            painter.setPen(pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRect(rect)
+            name = str(detection.get("class_name") or detection.get("class_id", "object"))
+            try:
+                score = f"{float(detection.get('confidence')):.3f}"
+            except (TypeError, ValueError):
+                score = "-"
+            self._draw_roi_label(painter, rect, f"{name}: {score}", color)
 
     def _target_image_rect(self) -> QRectF:
         margin = float(PREVIEW_MARGIN)
@@ -281,11 +519,18 @@ class WindowStateMonitorDialog(QDialog):
         layout = QVBoxLayout(self)
 
         control_panel = QGroupBox("Control panel")
-        control_layout = QHBoxLayout(control_panel)
+        control_layout = QVBoxLayout(control_panel)
         capture_btn = QPushButton("Chụp teaching")
         capture_btn.clicked.connect(self._open_teaching_capture)
-        control_layout.addWidget(capture_btn)
-        control_layout.addStretch(1)
+        capture_row = QHBoxLayout()
+        capture_row.addWidget(capture_btn)
+        capture_row.addStretch(1)
+        control_layout.addLayout(capture_row)
+
+        self._yolo_settings = _load_yolo_settings()
+        yolo_settings_btn = QPushButton("YOLO Settings")
+        yolo_settings_btn.clicked.connect(self._open_yolo_settings)
+        capture_row.addWidget(yolo_settings_btn)
         layout.addWidget(control_panel)
 
         self.canvas = WindowStateCanvas()
@@ -308,12 +553,18 @@ class WindowStateMonitorDialog(QDialog):
             self._state_buttons[name] = button
             cards_layout.addWidget(button)
             self._refresh_state_button(name)
+        self._state_buttons["yolo"] = QPushButton("YOLO")
+        self._state_buttons["yolo"].setCheckable(True)
+        self._state_buttons["yolo"].clicked.connect(self._toggle_yolo)
+        cards_layout.addWidget(self._state_buttons["yolo"])
+        self._refresh_state_button("yolo")
         cards_layout.addStretch(1)
         cards_scroll.setWidget(cards_container)
         layout.addWidget(cards_scroll)
 
         self._worker = WindowStateMonitorWorker(tool_client, self._enabled_states, self)
         self._worker.snapshot_ready.connect(self._on_snapshot)
+        self._worker.yolo_log.connect(self._on_yolo_log)
         self._worker.start()
 
     def _open_teaching_capture(self) -> None:
@@ -340,6 +591,24 @@ class WindowStateMonitorDialog(QDialog):
         if self._on_enabled_states_changed is not None:
             self._on_enabled_states_changed(current)
 
+    def _toggle_yolo(self, enabled: bool) -> None:
+        self._refresh_state_button("yolo")
+        self._worker.set_yolo_config(
+            enabled=enabled,
+            source_folder=self._yolo_settings["source_folder"],
+            model_path=self._yolo_settings["model_path"],
+            confidence=self._yolo_settings["confidence"],
+            iou=self._yolo_settings["iou"],
+        )
+
+    def _open_yolo_settings(self) -> None:
+        dialog = YoloSettingsDialog(self._yolo_settings, parent=self)
+        if dialog.exec():
+            self._yolo_settings = dialog.get_settings()
+            _save_yolo_settings(self._yolo_settings)
+            if self._state_buttons["yolo"].isChecked():
+                self._toggle_yolo(True)
+
     def _refresh_state_button(self, name: str) -> None:
         button = self._state_buttons[name]
         if button.isChecked():
@@ -361,6 +630,10 @@ class WindowStateMonitorDialog(QDialog):
             return
         if payload.get("image_jpeg_base64"):
             self.canvas.set_snapshot(payload)
+
+    def _on_yolo_log(self, message: str) -> None:
+        if "error" in message.lower():
+            self._state_buttons["yolo"].setToolTip(message)
 
     def closeEvent(self, event) -> None:
         self._worker.stop()
