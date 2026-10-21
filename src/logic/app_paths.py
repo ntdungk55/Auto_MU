@@ -39,7 +39,10 @@ def get_images_root() -> str:
 def get_assets_root() -> str:
     """Return the application-managed resource root."""
     if getattr(sys, "frozen", False):
-        return os.path.join(get_runtime_root(), "assets")
+        # One-file PyInstaller builds unpack bundled static assets into
+        # _MEIPASS for the lifetime of the process.
+        bundle_root = getattr(sys, "_MEIPASS", get_runtime_root())
+        return os.path.join(bundle_root, "assets")
 
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     return os.path.join(project_root, "assets")
