@@ -49,6 +49,10 @@ from src.logic.event_observer import (
     registered_event_from_dict,
 )
 from src.ui.event_management_dialog import EventManagementDialog
+from src.ui.window_state_monitor_dialog import (
+    STATE_NAMES as WINDOW_STATE_NAMES,
+    WindowStateMonitorDialog,
+)
 
 try:
     from PIL import Image
@@ -759,8 +763,8 @@ class GeminiChatWidget(QWidget):
         load_event_registrations: Callable[[], list[dict]] | None = None,
         save_event_registrations: Callable[[list[dict]], None] | None = None,
         create_ai_process_controller: Callable[[str, str, str], object] | None = None,
-        load_tab_ai_settings: Callable[[object], dict[str, str]] | None = None,
-        save_tab_ai_settings: Callable[[object, str, str], None] | None = None,
+        load_tab_ai_settings: Callable[[object], dict[str, object]] | None = None,
+        save_tab_ai_settings: Callable[..., None] | None = None,
         managed_process_tab: bool = False,
         on_managed_process_change: Callable[[object, object], None] | None = None,
         on_managed_process_title_changed: Callable[[object, str], None] | None = None,
@@ -802,6 +806,8 @@ class GeminiChatWidget(QWidget):
         self._ai_process_controller = None
         self._selected_game_target = None
         self._scenario_tool_client: ScenarioToolClient | None = None
+        self._window_state_monitor: WindowStateMonitorDialog | None = None
+        self._window_state_enabled = set(WINDOW_STATE_NAMES)
         self._chat_ready = False
         self._typing_indicator: _TypingIndicator | None = None
         self._turn_running = False
@@ -976,6 +982,12 @@ class GeminiChatWidget(QWidget):
         self.event_messages_btn.clicked.connect(self._open_event_messages)
         self.composer_actions.addWidget(self.event_messages_btn, 0)
 
+        self.window_state_btn = QPushButton("Window State")
+        self.window_state_btn.setToolTip("Theo dõi ảnh gốc, ROI, mask và kết quả Window State")
+        self.window_state_btn.setMinimumHeight(30)
+        self.window_state_btn.clicked.connect(self._open_window_state_monitor)
+        self.composer_actions.addWidget(self.window_state_btn, 0)
+
         self.auto_messages_btn = QPushButton("Tự động")
         self.auto_messages_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_BrowserReload))
         self.auto_messages_btn.setIconSize(QSize(16, 16))
@@ -1112,6 +1124,16 @@ class GeminiChatWidget(QWidget):
             self._prepare_scenario_tools()
             if self._scenario_tool_client is not None:
                 self._scenario_tool_client.synchronize_selected_target(target)
+                self._scenario_tool_client.call_tool(
+                    "configure_window_states",
+                    {
+                        "enabled_states": [
+                            name for name in WINDOW_STATE_NAMES
+                            if name in self._window_state_enabled
+                        ]
+                    },
+                    timeout_seconds=5.0,
+                )
         except Exception as error:
             QMessageBox.warning(self, "Không thể chuẩn bị MCP", str(error))
             self._detach_ai_process_controller()
@@ -1169,6 +1191,7 @@ class GeminiChatWidget(QWidget):
 
     def release_process_target(self) -> None:
         """Stop all resources that belong to this process tab without closing the game."""
+        self._close_window_state_monitor()
         self._stop_event_service()
         self._cancel_active_turn()
         self._message_queue.clear()
@@ -1197,6 +1220,7 @@ class GeminiChatWidget(QWidget):
         self._scenario_tool_client = tool_client
 
     def _dispose_scenario_tools(self):
+        self._close_window_state_monitor()
         tool_client = self._scenario_tool_client
         self._scenario_tool_client = None
         if tool_client is None:
@@ -1398,6 +1422,9 @@ class GeminiChatWidget(QWidget):
         self.prompt.setEnabled(available)
         self.attach_btn.setEnabled(available)
         self.auto_messages_btn.setEnabled(available)
+        self.window_state_btn.setEnabled(
+            available and self._selected_game_target is not None
+        )
         self.settings_btn.setEnabled(True)
         self.attach_row.setVisible(bool(self._attach_path))
         self.attach_row.setEnabled(available)
@@ -1466,12 +1493,19 @@ class GeminiChatWidget(QWidget):
     def _load_settings_for_target(self, target: object) -> None:
         self._tab_provider = None
         self._tab_models.clear()
+        self._window_state_enabled = set(WINDOW_STATE_NAMES)
         if self._load_tab_ai_settings is None:
             return
         try:
             settings = self._load_tab_ai_settings(target) or {}
             provider = str(settings.get("provider", "") or "").strip().casefold()
             model = str(settings.get("model", "") or "").strip()
+            saved_states = settings.get("window_state_enabled")
+            if isinstance(saved_states, list):
+                self._window_state_enabled = {
+                    str(name) for name in saved_states
+                    if str(name) in WINDOW_STATE_NAMES
+                }
             if provider in {"openrouter", "gemini", "ollama"}:
                 self._tab_provider = provider
                 if model:
@@ -1479,6 +1513,53 @@ class GeminiChatWidget(QWidget):
         except Exception:
             pass
         self._refresh_model_selector()
+
+    def _save_window_state_enabled(self, enabled_states: set[str]) -> None:
+        self._window_state_enabled = {
+            name for name in WINDOW_STATE_NAMES if name in enabled_states
+        }
+        target = self._selected_game_target
+        if target is None or self._save_tab_ai_settings is None:
+            return
+        self._save_tab_ai_settings(
+            target,
+            self._current_provider(),
+            self._current_model(),
+            [name for name in WINDOW_STATE_NAMES if name in self._window_state_enabled],
+        )
+
+    def _open_window_state_monitor(self) -> None:
+        if self._selected_game_target is None or self._scenario_tool_client is None:
+            QMessageBox.warning(self, "Window State", "Chưa có process game được kết nối.")
+            return
+        dialog = self._window_state_monitor
+        if dialog is not None:
+            dialog.show()
+            dialog.raise_()
+            dialog.activateWindow()
+            return
+        title = str(
+            getattr(self._selected_game_target, "window_title", "Game window")
+            or "Game window"
+        )
+        dialog = WindowStateMonitorDialog(
+            tool_client=self._scenario_tool_client,
+            target_title=title,
+            target_window_hwnd=int(getattr(self._selected_game_target, "hwnd", 0) or 0),
+            enabled_states=set(self._window_state_enabled),
+            on_enabled_states_changed=self._save_window_state_enabled,
+            parent=self,
+        )
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        dialog.destroyed.connect(lambda: setattr(self, "_window_state_monitor", None))
+        self._window_state_monitor = dialog
+        dialog.show()
+
+    def _close_window_state_monitor(self) -> None:
+        dialog = self._window_state_monitor
+        self._window_state_monitor = None
+        if dialog is not None:
+            dialog.close()
 
     def _save_current_tab_settings(self, provider: str, model: str) -> None:
         clean_provider = str(provider or "").strip().casefold()
@@ -2090,16 +2171,26 @@ class GeminiChatWidget(QWidget):
     def _event_ai_prompt(trigger: EventTrigger) -> str:
         """Build the AI input; Telegram delivery is decided by the AI/tool flow."""
         prompt = str(trigger.prompt or "").strip()
-        if trigger.observer_type != "health":
+        if trigger.observer_type not in {"health", "companion_training"}:
             return prompt
         details = trigger.details or {}
-        context = (
-            "Health event đã phát. "
-            f"Nhân vật: {trigger.character_name or 'Game'}. "
-            f"HP hiện tại: {details.get('current_hp', '?')}. "
-            f"Map: {details.get('map', '?')}, tọa độ: "
-            f"{details.get('x', '?')},{details.get('y', '?')}."
-        )
+        if trigger.observer_type == "health":
+            context = (
+                "Health event đã phát. "
+                f"Nhân vật: {trigger.character_name or 'Game'}. "
+                f"HP hiện tại: {details.get('current_hp', '?')}. "
+                f"Map: {details.get('map', '?')}, tọa độ: "
+                f"{details.get('x', '?')},{details.get('y', '?')}."
+            )
+        else:
+            context = (
+                "Companion Training event đã phát: training -> not_training. "
+                f"Nhân vật: {trigger.character_name or 'Game'}. "
+                f"Score: {details.get('score', '?')}; threshold: {details.get('threshold', '?')}; "
+                f"ROI: {details.get('roi', '?')}; session: {details.get('session_id', '?')}. "
+                f"Map: {details.get('map', '?')}, tọa độ: "
+                f"{details.get('x', '?')},{details.get('y', '?')}."
+            )
         if prompt:
             return f"{prompt}\n\n{context}"
         return context

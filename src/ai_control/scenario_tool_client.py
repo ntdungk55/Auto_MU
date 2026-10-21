@@ -38,7 +38,12 @@ class ScenarioToolClient:
             raise RuntimeError(self._mcp_client.status_snapshot().message)
         return self._mcp_client.refresh_tools(timeout_seconds=timeout_seconds)
 
-    def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    def call_tool(
+        self,
+        name: str,
+        arguments: dict[str, Any] | None = None,
+        timeout_seconds: float | None = None,
+    ) -> dict[str, Any]:
         """Forward one Gemini call while binding the shared MCP selection to this chat tab."""
         clean_name = str(name or "").strip()
         payload = dict(arguments or {})
@@ -46,7 +51,13 @@ class ScenarioToolClient:
         # Keep selecting and invoking together so another chat tab cannot redirect a call.
         with _TARGETED_TOOL_CALL_LOCK:
             self._synchronize_selected_target()
-            return self._text_result_payload(self._mcp_client.call_tool(clean_name, payload))
+            return self._text_result_payload(
+                self._mcp_client.call_tool(
+                    clean_name,
+                    payload,
+                    timeout_seconds=timeout_seconds,
+                )
+            )
 
     def load_scenario_snapshot(self) -> dict[str, Any]:
         """Read the catalog once when a Gemini chat session is created."""

@@ -1,4 +1,5 @@
 from src.logic.event_observer import (
+    CompanionTrainingEventObserver,
     HealthEventObserver,
     HealthState,
     LocationCondition,
@@ -140,38 +141,35 @@ def health_event(threshold: int = 100) -> RegisteredEvent:
     )
 
 
-def test_health_observer_skips_initial_state_and_triggers_on_crossing() -> None:
-    observer = HealthEventObserver(health_event())
-
-    assert observer.evaluate_window_pair(previous_state=None, current_state=HealthState(150), game_focused=False).triggered is False
-    assert observer.evaluate_window_pair(previous_state=HealthState(150), current_state=HealthState(99), current_captured_at=1, game_focused=False).triggered is True
-    assert observer.evaluate_window_pair(previous_state=HealthState(99), current_state=HealthState(80), current_captured_at=2, game_focused=False).triggered is False
-
-
-def test_health_observer_uses_window_state_previous_sample_on_first_evaluation() -> None:
-    observer = HealthEventObserver(health_event())
-    result = observer.evaluate_window_pair(
-        previous_state=HealthState(6321),
-        current_state=HealthState(0),
-        current_captured_at=1,
-        game_focused=False,
+def companion_event() -> RegisteredEvent:
+    return RegisteredEvent(
+        event_id="companion-event",
+        name="Companion stopped training",
+        prompt="",
+        enabled=True,
+        observer_type="companion_training",
+        trigger_mode="training_to_not_training",  # type: ignore[arg-type]
+        source=None,
+        destination=None,
     )
 
-    assert result.triggered is True
 
-
-def test_health_observer_uses_window_pair_even_after_current_zero_was_seen() -> None:
+def test_health_observer_requires_two_normal_then_two_below_samples() -> None:
     observer = HealthEventObserver(health_event())
-    observer.evaluate_window_pair(previous_state=None, current_state=HealthState(0), game_focused=False)
 
-    result = observer.evaluate_window_pair(
-        previous_state=HealthState(6321),
-        current_state=HealthState(0),
-        current_captured_at=1,
-        game_focused=False,
-    )
+    assert observer.evaluate_current_state(HealthState(150), game_focused=False).triggered is False
+    assert observer.evaluate_current_state(HealthState(150), game_focused=False).triggered is False
+    assert observer.evaluate_current_state(HealthState(99), game_focused=False).triggered is False
+    assert observer.evaluate_current_state(HealthState(80), game_focused=False).triggered is True
 
-    assert result.triggered is True
+
+def test_health_observer_unknown_sample_resets_confirmation() -> None:
+    observer = HealthEventObserver(health_event())
+    observer.evaluate_current_state(HealthState(150), game_focused=False)
+    observer.evaluate_current_state(HealthState(150), game_focused=False)
+    assert observer.evaluate_current_state(None, game_focused=False).triggered is False
+    assert observer.evaluate_current_state(HealthState(99), game_focused=False).triggered is False
+    assert observer.evaluate_current_state(HealthState(80), game_focused=False).triggered is False
 
 
 def test_health_transition_rule_matches_logger_pair() -> None:
@@ -181,31 +179,20 @@ def test_health_transition_rule_matches_logger_pair() -> None:
 
 def test_health_observer_rearms_after_health_recovers() -> None:
     observer = HealthEventObserver(health_event())
-    observer.evaluate_window_pair(previous_state=None, current_state=HealthState(150), game_focused=False)
-    observer.evaluate_window_pair(previous_state=HealthState(150), current_state=HealthState(99), current_captured_at=1, game_focused=False)
-
-    observer.evaluate_window_pair(previous_state=HealthState(99), current_state=HealthState(100), current_captured_at=2, game_focused=False)
-    assert observer.evaluate_window_pair(previous_state=HealthState(100), current_state=HealthState(99), current_captured_at=3, game_focused=False).triggered is True
+    for value in (150, 150, 99, 99):
+        observer.evaluate_current_state(HealthState(value), game_focused=False)
+    assert observer.evaluate_current_state(HealthState(150), game_focused=False).triggered is False
+    assert observer.evaluate_current_state(HealthState(150), game_focused=False).triggered is False
+    assert observer.evaluate_current_state(HealthState(99), game_focused=False).triggered is False
+    assert observer.evaluate_current_state(HealthState(99), game_focused=False).triggered is True
 
 
 def test_health_observer_emits_once_until_health_recovers() -> None:
     observer = HealthEventObserver(health_event())
-
-    first = observer.evaluate_window_pair(
-        previous_state=HealthState(8190),
-        current_state=HealthState(0),
-        current_captured_at=1,
-        game_focused=False,
-    )
-    repeated_pair = observer.evaluate_window_pair(
-        previous_state=HealthState(8190),
-        current_state=HealthState(0),
-        current_captured_at=2,
-        game_focused=False,
-    )
-
-    assert first.triggered is True
-    assert repeated_pair.triggered is False
+    for value in (8190, 8190, 0):
+        observer.evaluate_current_state(HealthState(value), game_focused=False)
+    assert observer.evaluate_current_state(HealthState(0), game_focused=False).triggered is True
+    assert observer.evaluate_current_state(HealthState(0), game_focused=False).triggered is False
 
 
 def test_health_observer_compares_one_retained_state_with_new_state() -> None:
@@ -213,8 +200,8 @@ def test_health_observer_compares_one_retained_state_with_new_state() -> None:
 
     assert observer.evaluate_current_state(HealthState(8190), game_focused=False).triggered is False
     assert observer.evaluate_current_state(HealthState(8190), game_focused=False).triggered is False
-    assert observer.evaluate_current_state(HealthState(0), game_focused=False).triggered is True
     assert observer.evaluate_current_state(HealthState(0), game_focused=False).triggered is False
+    assert observer.evaluate_current_state(HealthState(0), game_focused=False).triggered is True
 
 
 def test_character_name_uses_name_after_last_dash_in_window_title() -> None:
@@ -231,14 +218,32 @@ def test_character_name_uses_name_after_last_dash_in_window_title() -> None:
 
 def test_health_observer_focus_suppresses_delivery_but_consumes_crossing() -> None:
     observer = HealthEventObserver(health_event())
-    observer.evaluate_window_pair(previous_state=None, current_state=HealthState(150), game_focused=False)
-
-    suppressed = observer.evaluate_window_pair(previous_state=HealthState(150), current_state=HealthState(99), current_captured_at=1, game_focused=True)
-    repeated = observer.evaluate_window_pair(previous_state=HealthState(99), current_state=HealthState(80), current_captured_at=2, game_focused=False)
+    observer.evaluate_current_state(HealthState(150), game_focused=False)
+    observer.evaluate_current_state(HealthState(150), game_focused=False)
+    observer.evaluate_current_state(HealthState(99), game_focused=False)
+    suppressed = observer.evaluate_current_state(HealthState(80), game_focused=True)
+    repeated = observer.evaluate_current_state(HealthState(80), game_focused=False)
 
     assert suppressed.triggered is True
     assert suppressed.suppressed_by_focus is True
     assert repeated.triggered is False
+
+
+def test_companion_observer_requires_two_training_then_two_not_training_samples() -> None:
+    observer = CompanionTrainingEventObserver(companion_event())
+    for value in ("training", "training", "not_training"):
+        assert observer.evaluate(value, game_focused=False).triggered is False
+    assert observer.evaluate("not_training", game_focused=False).triggered is True
+    assert observer.evaluate("not_training", game_focused=False).triggered is False
+
+
+def test_companion_observer_unknown_state_resets_confirmation() -> None:
+    observer = CompanionTrainingEventObserver(companion_event())
+    observer.evaluate("training", game_focused=False)
+    observer.evaluate("training", game_focused=False)
+    assert observer.evaluate(None, game_focused=False).triggered is False
+    assert observer.evaluate("not_training", game_focused=False).triggered is False
+    assert observer.evaluate("not_training", game_focused=False).triggered is False
 
 
 def test_health_normalizer_accepts_death_state_with_only_zero() -> None:

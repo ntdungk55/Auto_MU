@@ -12,6 +12,7 @@ import cv2
 from samples.ai_game_controller.infrastructure.window_capture import GameWindowCapture
 from src.ai_control.companion_switcher import PROJECT_ROOT, TEACHING_PATH, _match
 from src.logic.system_executor.mouse_controller import MouseController
+from src.logic.teaching_session_matcher import match_teaching_session_against_image
 
 
 STATE_CHANGE_TIMEOUT_SECONDS = 2.0
@@ -251,21 +252,31 @@ def start_autoplay_management(target: dict[str, Any]) -> dict[str, Any]:
 
 
 def get_companion_training_state(target: dict[str, Any]) -> dict[str, Any]:
-    """Return whether slot-1 companion shows the taught training play icon."""
+    """Return the binary companion Train state from the referenced Teaching session."""
     target_result = dict(target)
+    session_id = ""
     try:
         hwnd = int(target_result["hwnd"])
         _wake_target(hwnd)
         config = _config()["mainInfo"]["companionManagement1"]
-        result = _state_from_templates(
-            _capture(hwnd), config["roi"], config["trainingStateTemplates"],
-            icon_roi_relative=config.get("trainingIconRoiRelative"),
-            edge_matching=bool(config.get("edgeMatching", False)),
-            threshold_override=config.get("edgeThreshold"),
+        session_id = str(config.get("trainingTeachingSessionId") or "").strip()
+        result = match_teaching_session_against_image(
+            _capture(hwnd),
+            project_root=PROJECT_ROOT,
+            session_id=session_id,
         )
-        if result["state"] is None:
-            return {"success": False, "target": target_result, **result,
-                    "error": "Could not identify the companion training icon."}
-        return {"success": True, "target": target_result, **result}
+        state = "training" if result["matched"] else "not_training"
+        return {
+            "success": True,
+            "target": target_result,
+            "state": state,
+            **result,
+        }
     except Exception as error:
-        return {"success": False, "target": target_result, "error": str(error)}
+        return {
+            "success": False,
+            "target": target_result,
+            "state": None,
+            "session_id": session_id,
+            "error": str(error),
+        }

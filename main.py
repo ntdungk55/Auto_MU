@@ -1673,7 +1673,7 @@ class MainWindow(QMainWindow):
         }
         self._save_app_state(state)
 
-    def _load_ai_settings_for_target(self, target: object) -> dict[str, str]:
+    def _load_ai_settings_for_target(self, target: object) -> dict[str, object]:
         state = self._load_app_state()
         settings = state.get("ai_chat_settings_by_process", {}).get(self._ai_process_key(target), {})
         if not isinstance(settings, dict):
@@ -1682,19 +1682,39 @@ class MainWindow(QMainWindow):
         model = str(settings.get("model", "") or "").strip()
         if not model:
             model = self._get_saved_ai_model(provider)
-        return {"provider": provider, "model": model}
+        enabled_states = settings.get("window_state_enabled")
+        return {
+            "provider": provider,
+            "model": model,
+            "window_state_enabled": (
+                list(enabled_states) if isinstance(enabled_states, list) else None
+            ),
+        }
 
-    def _save_ai_settings_for_target(self, target: object, provider: str, model: str) -> None:
+    def _save_ai_settings_for_target(
+        self,
+        target: object,
+        provider: str,
+        model: str,
+        window_state_enabled: list[str] | None = None,
+    ) -> None:
         clean_provider = str(provider or "").strip().casefold()
         clean_model = str(model or "").strip()
         if clean_provider not in {"openrouter", "gemini", "ollama"}:
             raise ValueError("Provider của tab AI Chat không hợp lệ")
         state = self._load_app_state()
         by_process = state.setdefault("ai_chat_settings_by_process", {})
-        by_process[self._ai_process_key(target)] = {
+        process_key = self._ai_process_key(target)
+        settings = dict(by_process.get(process_key, {}) or {})
+        settings.update({
             "provider": clean_provider,
             "model": clean_model,
-        }
+        })
+        if window_state_enabled is not None:
+            settings["window_state_enabled"] = [
+                str(name) for name in window_state_enabled
+            ]
+        by_process[process_key] = settings
         self._save_app_state(state)
 
     def _get_saved_ai_key(self, provider: str) -> str:
