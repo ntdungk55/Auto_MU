@@ -22,8 +22,8 @@
     {
       "name": "Track Imperial Guardian event start",
       "purpose": "",
-      "action_type": "Đọc thụ động",
-      "mode": "Chủ động",
+      "action_type": "Äá»c thá»¥ Ä‘á»™ng",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Test5\\images\\bdc5f4c2-0cfa-4e10-b462-530a8d26aad5\\capture_1779697220.png",
       "enable_post_key_image_check": false,
@@ -102,13 +102,13 @@
       "event_prepare_end_s": 60,
       "mask_regions": [],
       "window_capture_paths": [
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5/Track Imperial Guardian event start/window_captures/capture_006.png",
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5/Track Imperial Guardian event start/window_captures/capture_007.png",
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5/Track Imperial Guardian event start/window_captures/capture_008.png",
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5/Track Imperial Guardian event start/window_captures/capture_009.png"
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5/Track Imperial Guardian event start/window_captures/capture_006.png",
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5/Track Imperial Guardian event start/window_captures/capture_007.png",
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5/Track Imperial Guardian event start/window_captures/capture_008.png",
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5/Track Imperial Guardian event start/window_captures/capture_009.png"
       ],
       "window_capture_results": {
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5/Track Imperial Guardian event start/window_captures/capture_006.png": 0.9534821510314941
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5/Track Imperial Guardian event start/window_captures/capture_006.png": 0.9534821510314941
       },
       "preprocessing_algorithms": [],
       "template_matching_algorithms": [],
@@ -118,7 +118,7 @@
             "grayscale": true
           },
           "id": "grayscale",
-          "name": "🔘 Grayscale Only"
+          "name": "ðŸ”˜ Grayscale Only"
         },
         {
           "config": {
@@ -126,7 +126,7 @@
             "sharpen_strength": 1.0
           },
           "id": "sharpen",
-          "name": "⚡ Sharpen",
+          "name": "âš¡ Sharpen",
           "parameters": {
             "sharpen_strength": {
               "default": 1.0,
@@ -143,7 +143,7 @@
             "upscale": 3.0
           },
           "id": "upscale_3x",
-          "name": "🔍 Upscale 3x",
+          "name": "ðŸ” Upscale 3x",
           "parameters": {
             "upscale": {
               "default": 3.0,
@@ -165,7 +165,7 @@
             "adaptive_threshold_type": 1
           },
           "id": "adaptive_threshold_mean",
-          "name": "◐ Adaptive Threshold (Mean)",
+          "name": "â— Adaptive Threshold (Mean)",
           "parameters": {
             "adaptive_block_size": {
               "default": 11,
@@ -261,10 +261,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "mở bản đồ",
+      "name": "má»Ÿ báº£n Ä‘á»“",
       "purpose": "",
-      "action_type": "Ấn Phím",
-      "mode": "Chủ động",
+      "action_type": "áº¤n PhÃ­m",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "m",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Test5\\images\\bdc5f4c2-0cfa-4e10-b462-530a8d26aad5\\capture_1779778389.png",
       "enable_post_key_image_check": true,
@@ -399,10 +399,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Đi tới event map",
+      "name": "Äi tá»›i event map",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Test5\\images\\bdc5f4c2-0cfa-4e10-b462-530a8d26aad5\\capture_1779778521.png",
       "enable_post_key_image_check": false,
@@ -481,9 +481,9 @@
       "event_prepare_end_s": 60,
       "mask_regions": [],
       "window_capture_paths": [
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_001.png",
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_002.png",
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_003.png"
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_001.png",
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_002.png",
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_003.png"
       ],
       "window_capture_results": {
         "C:\\Users\\ENDUSE~1\\AppData\\Local\\Temp\\multi_image_test_p7bs7ds1\\capture_001.png": 0.9847700595855713,
@@ -496,7 +496,7 @@
             "grayscale": true
           },
           "id": "grayscale",
-          "name": "🔘 Grayscale Only"
+          "name": "ðŸ”˜ Grayscale Only"
         }
       ],
       "template_matching_algorithms": [
@@ -505,7 +505,7 @@
             "grayscale": true
           },
           "id": "grayscale",
-          "name": "🔘 Grayscale Only"
+          "name": "ðŸ”˜ Grayscale Only"
         }
       ],
       "ocr_algorithms": [],
@@ -561,10 +561,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "mở map",
+      "name": "má»Ÿ map",
       "purpose": "",
-      "action_type": "Ấn Phím",
-      "mode": "Chủ động",
+      "action_type": "áº¤n PhÃ­m",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "tab",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Test5\\images\\bdc5f4c2-0cfa-4e10-b462-530a8d26aad5\\capture_1779778784.png",
       "enable_post_key_image_check": true,
@@ -699,10 +699,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "đi tới NPC IG",
+      "name": "Ä‘i tá»›i NPC IG",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Test5\\images\\bdc5f4c2-0cfa-4e10-b462-530a8d26aad5\\capture_1779778969.png",
       "enable_post_key_image_check": false,
@@ -781,10 +781,10 @@
       "event_prepare_end_s": 60,
       "mask_regions": [],
       "window_capture_paths": [
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_004.png",
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_005.png",
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_006.png",
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_007.png"
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_004.png",
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_005.png",
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_006.png",
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_007.png"
       ],
       "window_capture_results": {
         "C:\\Users\\ENDUSE~1\\AppData\\Local\\Temp\\multi_image_test_qwej2ppa\\capture_001.png": 1.0,
@@ -798,7 +798,7 @@
             "grayscale": true
           },
           "id": "grayscale",
-          "name": "🔘 Grayscale Only"
+          "name": "ðŸ”˜ Grayscale Only"
         }
       ],
       "template_matching_algorithms": [
@@ -807,7 +807,7 @@
             "grayscale": true
           },
           "id": "grayscale",
-          "name": "🔘 Grayscale Only"
+          "name": "ðŸ”˜ Grayscale Only"
         }
       ],
       "ocr_algorithms": [],
@@ -863,10 +863,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "đóng map",
+      "name": "Ä‘Ã³ng map",
       "purpose": "",
-      "action_type": "Ấn Phím",
-      "mode": "Chủ động",
+      "action_type": "áº¤n PhÃ­m",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "tab",
       "image_path": null,
       "enable_post_key_image_check": false,
@@ -1001,10 +1001,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Ấn vào NPC",
+      "name": "áº¤n vÃ o NPC",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Test5\\images\\bdc5f4c2-0cfa-4e10-b462-530a8d26aad5\\capture_1779779211.png",
       "enable_post_key_image_check": false,
@@ -1139,10 +1139,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "ấn vào enter dialog Jerint the Assistant",
+      "name": "áº¥n vÃ o enter dialog Jerint the Assistant",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Test5\\images\\bdc5f4c2-0cfa-4e10-b462-530a8d26aad5\\capture_1779781112.png",
       "enable_post_key_image_check": false,
@@ -1221,12 +1221,12 @@
       "event_prepare_end_s": 60,
       "mask_regions": [],
       "window_capture_paths": [
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_008.png",
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_009.png",
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_010.png",
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_011.png",
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_012.png",
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_013.png"
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_008.png",
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_009.png",
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_010.png",
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_011.png",
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_012.png",
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_013.png"
       ],
       "window_capture_results": {
         "C:\\Users\\ENDUSE~1\\AppData\\Local\\Temp\\multi_image_test_18pfy6oa\\capture_001.png": 0.9998366236686707,
@@ -1241,7 +1241,7 @@
             "grayscale": true
           },
           "id": "grayscale",
-          "name": "🔘 Grayscale Only"
+          "name": "ðŸ”˜ Grayscale Only"
         }
       ],
       "template_matching_algorithms": [
@@ -1250,7 +1250,7 @@
             "grayscale": true
           },
           "id": "grayscale",
-          "name": "🔘 Grayscale Only"
+          "name": "ðŸ”˜ Grayscale Only"
         }
       ],
       "ocr_algorithms": [],
@@ -1306,10 +1306,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Kiểm tra xem đã ai vào khi click vào NPC chưa?",
+      "name": "Kiá»ƒm tra xem Ä‘Ã£ ai vÃ o khi click vÃ o NPC chÆ°a?",
       "purpose": "",
-      "action_type": "Bắt Hình Ảnh",
-      "mode": "Chủ động",
+      "action_type": "Báº¯t HÃ¬nh áº¢nh",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Test5\\images\\bdc5f4c2-0cfa-4e10-b462-530a8d26aad5\\capture_1779868049.png",
       "enable_post_key_image_check": false,
@@ -1388,27 +1388,27 @@
       "event_prepare_end_s": 60,
       "mask_regions": [],
       "window_capture_paths": [
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_014.png",
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_015.png",
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_016.png",
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_017.png",
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5/Kiểm tra xem đã ai vào khi click vào NPC chưa/window_captures/capture_001.png",
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5/Kiểm tra xem đã ai vào khi click vào NPC chưa/window_captures/capture_002.png",
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5/Kiểm tra xem đã ai vào khi click vào NPC chưa/window_captures/capture_003.png",
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5/Kiểm tra xem đã ai vào khi click vào NPC chưa/window_captures/capture_004.png",
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5/Kiểm tra xem đã ai vào khi click vào NPC chưa/window_captures/capture_005.png",
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5/Kiểm tra xem đã ai vào khi click vào NPC chưa/window_captures/capture_006.png"
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_014.png",
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_015.png",
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_016.png",
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_017.png",
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5/Kiá»ƒm tra xem Ä‘Ã£ ai vÃ o khi click vÃ o NPC chÆ°a/window_captures/capture_001.png",
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5/Kiá»ƒm tra xem Ä‘Ã£ ai vÃ o khi click vÃ o NPC chÆ°a/window_captures/capture_002.png",
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5/Kiá»ƒm tra xem Ä‘Ã£ ai vÃ o khi click vÃ o NPC chÆ°a/window_captures/capture_003.png",
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5/Kiá»ƒm tra xem Ä‘Ã£ ai vÃ o khi click vÃ o NPC chÆ°a/window_captures/capture_004.png",
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5/Kiá»ƒm tra xem Ä‘Ã£ ai vÃ o khi click vÃ o NPC chÆ°a/window_captures/capture_005.png",
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5/Kiá»ƒm tra xem Ä‘Ã£ ai vÃ o khi click vÃ o NPC chÆ°a/window_captures/capture_006.png"
       ],
       "window_capture_results": {
         "C:\\Users\\ENDUSE~1\\AppData\\Local\\Temp\\multi_image_test_irdcpd7s\\capture_001.png": 0.9824212193489075,
         "C:\\Users\\ENDUSE~1\\AppData\\Local\\Temp\\multi_image_test_irdcpd7s\\capture_002.png": 0.8916348218917847,
         "C:\\Users\\ENDUSE~1\\AppData\\Local\\Temp\\multi_image_test_irdcpd7s\\capture_003.png": 0.8867250084877014,
         "C:\\Users\\ENDUSE~1\\AppData\\Local\\Temp\\multi_image_test_irdcpd7s\\capture_004.png": 0.8756405115127563,
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_014.png": 0.9702954888343811,
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_015.png": 0.9994857311248779,
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_016.png": 0.9998742341995239,
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_017.png": 0.9951543807983398,
-        "images/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5/Kiểm tra xem đã ai vào khi click vào NPC chưa/window_captures/capture_001.png": 0.9999998807907104,
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_014.png": 0.9702954888343811,
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_015.png": 0.9994857311248779,
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_016.png": 0.9998742341995239,
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5//window_captures/capture_017.png": 0.9951543807983398,
+        "images/algorithm_testing/bdc5f4c2-0cfa-4e10-b462-530a8d26aad5/Kiá»ƒm tra xem Ä‘Ã£ ai vÃ o khi click vÃ o NPC chÆ°a/window_captures/capture_001.png": 0.9999998807907104,
         "C:\\Users\\ENDUSE~1\\AppData\\Local\\Temp\\multi_image_test_cironida\\capture_001.png": 0.5499833226203918,
         "C:\\Users\\ENDUSE~1\\AppData\\Local\\Temp\\multi_image_test_cironida\\capture_002.png": 0.5498414635658264,
         "C:\\Users\\ENDUSE~1\\AppData\\Local\\Temp\\multi_image_test_cironida\\capture_003.png": 0.5499833226203918,
@@ -1421,7 +1421,7 @@
             "grayscale": true
           },
           "id": "grayscale",
-          "name": "🔘 Grayscale Only"
+          "name": "ðŸ”˜ Grayscale Only"
         }
       ],
       "template_matching_algorithms": [
@@ -1430,7 +1430,7 @@
             "grayscale": true
           },
           "id": "grayscale",
-          "name": "🔘 Grayscale Only"
+          "name": "ðŸ”˜ Grayscale Only"
         }
       ],
       "ocr_algorithms": [],
@@ -1486,10 +1486,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Đóng dialog thông báo IG đã đóng",
+      "name": "ÄÃ³ng dialog thÃ´ng bÃ¡o IG Ä‘Ã£ Ä‘Ã³ng",
       "purpose": "",
-      "action_type": "Ấn Phím",
-      "mode": "Chủ động",
+      "action_type": "áº¤n PhÃ­m",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "esc",
       "image_path": null,
       "enable_post_key_image_check": false,
@@ -1624,10 +1624,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "quét thông tin IG",
+      "name": "quÃ©t thÃ´ng tin IG",
       "purpose": "",
       "action_type": "Dynamic OCR Condition",
-      "mode": "Chủ động",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Test5\\images\\bdc5f4c2-0cfa-4e10-b462-530a8d26aad5\\capture_1779957204.png",
       "enable_post_key_image_check": false,
@@ -1724,14 +1724,14 @@
             "grayscale": true
           },
           "id": "grayscale",
-          "name": "🔘 Grayscale Only"
+          "name": "ðŸ”˜ Grayscale Only"
         },
         {
           "config": {
             "upscale": 3.0
           },
           "id": "upscale_3x",
-          "name": "🔍 Upscale 3x",
+          "name": "ðŸ” Upscale 3x",
           "parameters": {
             "upscale": {
               "default": 3.0,
@@ -1753,7 +1753,7 @@
             "adaptive_threshold_type": 1
           },
           "id": "adaptive_threshold_mean",
-          "name": "◐ Adaptive Threshold (Mean)",
+          "name": "â— Adaptive Threshold (Mean)",
           "parameters": {
             "adaptive_block_size": {
               "default": 11,
@@ -1803,14 +1803,14 @@
             "grayscale": true
           },
           "id": "grayscale",
-          "name": "🔘 Grayscale Only"
+          "name": "ðŸ”˜ Grayscale Only"
         },
         {
           "config": {
             "upscale": 3.0
           },
           "id": "upscale_3x",
-          "name": "🔍 Upscale 3x",
+          "name": "ðŸ” Upscale 3x",
           "parameters": {
             "upscale": {
               "default": 3.0,
@@ -1832,7 +1832,7 @@
             "adaptive_threshold_type": 1
           },
           "id": "adaptive_threshold_mean",
-          "name": "◐ Adaptive Threshold (Mean)",
+          "name": "â— Adaptive Threshold (Mean)",
           "parameters": {
             "adaptive_block_size": {
               "default": 11,
@@ -1881,7 +1881,7 @@
             "remove_small_components": true
           },
           "id": "remove_small_components",
-          "name": "🎯 Remove Small Components",
+          "name": "ðŸŽ¯ Remove Small Components",
           "parameters": {
             "min_component_area": {
               "default": 50,
@@ -1900,14 +1900,14 @@
             "grayscale": true
           },
           "id": "grayscale",
-          "name": "🔘 Grayscale Only"
+          "name": "ðŸ”˜ Grayscale Only"
         },
         {
           "config": {
             "upscale": 3.0
           },
           "id": "upscale_3x",
-          "name": "🔍 Upscale 3x",
+          "name": "ðŸ” Upscale 3x",
           "parameters": {
             "upscale": {
               "default": 3.0,
@@ -1924,7 +1924,7 @@
             "sharpen": true
           },
           "id": "sharpen",
-          "name": "⚡ Sharpen",
+          "name": "âš¡ Sharpen",
           "parameters": {
             "sharpen_strength": {
               "default": 1.0,
@@ -1946,7 +1946,7 @@
             "adaptive_threshold_type": 1
           },
           "id": "adaptive_threshold_mean",
-          "name": "◐ Adaptive Threshold (Mean)",
+          "name": "â— Adaptive Threshold (Mean)",
           "parameters": {
             "adaptive_block_size": {
               "default": 11,
@@ -1995,7 +1995,7 @@
             "remove_small_components": true
           },
           "id": "remove_small_components",
-          "name": "🎯 Remove Small Components",
+          "name": "ðŸŽ¯ Remove Small Components",
           "parameters": {
             "min_component_area": {
               "default": 50,
@@ -2060,10 +2060,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Ấn vào tham gia sự kiện",
+      "name": "áº¤n vÃ o tham gia sá»± kiá»‡n",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Test5\\images\\bdc5f4c2-0cfa-4e10-b462-530a8d26aad5\\capture_1780397449.png",
       "enable_post_key_image_check": false,
@@ -2200,8 +2200,8 @@
     {
       "name": "",
       "purpose": "",
-      "action_type": "Chờ",
-      "mode": "Chủ động",
+      "action_type": "Chá»",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": null,
       "enable_post_key_image_check": false,
@@ -2336,10 +2336,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "đi tới cổng ",
+      "name": "Ä‘i tá»›i cá»•ng ",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Test5\\images\\bdc5f4c2-0cfa-4e10-b462-530a8d26aad5\\capture_1780475034.png",
       "enable_post_key_image_check": false,
@@ -2474,10 +2474,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Đi vào bên trong của stage",
+      "name": "Äi vÃ o bÃªn trong cá»§a stage",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": null,
       "enable_post_key_image_check": false,
@@ -2615,10 +2615,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Đi vào bên trong của stage",
+      "name": "Äi vÃ o bÃªn trong cá»§a stage",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": null,
       "enable_post_key_image_check": false,
@@ -2756,10 +2756,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Đi tới phá 2 trụ",
+      "name": "Äi tá»›i phÃ¡ 2 trá»¥",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": null,
       "enable_post_key_image_check": false,
@@ -2897,10 +2897,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Đi vào trong 1",
+      "name": "Äi vÃ o trong 1",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": null,
       "enable_post_key_image_check": false,
@@ -3038,10 +3038,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Đi vào trong 2",
+      "name": "Äi vÃ o trong 2",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": null,
       "enable_post_key_image_check": false,
@@ -3179,10 +3179,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Đi vào tới portal",
+      "name": "Äi vÃ o tá»›i portal",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": null,
       "enable_post_key_image_check": false,
@@ -3322,8 +3322,8 @@
     {
       "name": "",
       "purpose": "",
-      "action_type": "Chờ",
-      "mode": "Chủ động",
+      "action_type": "Chá»",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": null,
       "enable_post_key_image_check": false,
@@ -3458,10 +3458,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Đi tới cổng vào stage 2",
+      "name": "Äi tá»›i cá»•ng vÃ o stage 2",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": null,
       "enable_post_key_image_check": false,
@@ -3599,10 +3599,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Đi vào giữa bãi chính",
+      "name": "Äi vÃ o giá»¯a bÃ£i chÃ­nh",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": null,
       "enable_post_key_image_check": false,
@@ -3740,10 +3740,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Đi tới cổng sau bãi chính",
+      "name": "Äi tá»›i cá»•ng sau bÃ£i chÃ­nh",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": null,
       "enable_post_key_image_check": false,
@@ -3881,10 +3881,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Đi tới 2 cột ",
+      "name": "Äi tá»›i 2 cá»™t ",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": null,
       "enable_post_key_image_check": false,
@@ -4022,10 +4022,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Đi tới cổng portal 1/2",
+      "name": "Äi tá»›i cá»•ng portal 1/2",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": null,
       "enable_post_key_image_check": false,
@@ -4163,10 +4163,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Đi tới cổng portal 2/2",
+      "name": "Äi tá»›i cá»•ng portal 2/2",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": null,
       "enable_post_key_image_check": false,
@@ -4304,10 +4304,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Đi tới portal ",
+      "name": "Äi tá»›i portal ",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": null,
       "enable_post_key_image_check": false,
@@ -4445,10 +4445,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Chờ cho đến khi sang stage 3",
+      "name": "Chá» cho Ä‘áº¿n khi sang stage 3",
       "purpose": "",
-      "action_type": "Chờ",
-      "mode": "Chủ động",
+      "action_type": "Chá»",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": null,
       "enable_post_key_image_check": false,
@@ -4583,10 +4583,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Quay về với team train ",
+      "name": "Quay vá» vá»›i team train ",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": null,
       "enable_post_key_image_check": false,
@@ -4724,10 +4724,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Ấn vào Go to Character",
-      "purpose": "Phải ấn vào được team member để về vị trí train",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "name": "áº¤n vÃ o Go to Character",
+      "purpose": "Pháº£i áº¥n vÃ o Ä‘Æ°á»£c team member Ä‘á»ƒ vá» vá»‹ trÃ­ train",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Test5\\images\\bdc5f4c2-0cfa-4e10-b462-530a8d26aad5\\capture_1779782101.png",
       "enable_post_key_image_check": false,
@@ -4813,7 +4813,7 @@
             "grayscale": true
           },
           "id": "grayscale",
-          "name": "🔘 Grayscale Only"
+          "name": "ðŸ”˜ Grayscale Only"
         }
       ],
       "template_matching_algorithms": [
@@ -4822,7 +4822,7 @@
             "grayscale": true
           },
           "id": "grayscale",
-          "name": "🔘 Grayscale Only"
+          "name": "ðŸ”˜ Grayscale Only"
         }
       ],
       "ocr_algorithms": [],

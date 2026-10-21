@@ -453,7 +453,7 @@ class DynamicOCRConditionSettingsDialog(QDialog):
             return
 
         parent_dialog = self.parent()
-        base_dir = "images"
+        base_dir = os.path.join("images", "teaching")
         try:
             from .image_capture_dialog import ImageCaptureDialog as _ICD
             sub = _ICD._sanitize_tool_folder_name(getattr(parent_dialog, "tool_name", None))

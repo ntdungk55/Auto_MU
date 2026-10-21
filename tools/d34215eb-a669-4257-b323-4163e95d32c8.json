@@ -1,6 +1,6 @@
-{
+﻿{
   "id": "d34215eb-a669-4257-b323-4163e95d32c8",
-  "name": "Đào ngọc",
+  "name": "ÄÃ o ngá»c",
   "settings": {
     "loop_enabled": true,
     "loop_mode": "forever",
@@ -22,8 +22,8 @@
     {
       "name": "",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Test5\\images\\capture_1781925478.png",
       "enable_post_key_image_check": false,
@@ -160,8 +160,8 @@
     {
       "name": "",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Test5\\images\\d34215eb-a669-4257-b323-4163e95d32c8\\capture_1781925662.png",
       "enable_post_key_image_check": false,
@@ -298,8 +298,8 @@
     {
       "name": "",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Test5\\images\\d34215eb-a669-4257-b323-4163e95d32c8\\capture_1781925750.png",
       "enable_post_key_image_check": false,

@@ -1,4 +1,4 @@
-{
+﻿{
   "id": "099c65e0-a8e7-43cd-b52c-eda74f4c1cb3",
   "name": "Click chuot trai",
   "settings": {
@@ -22,8 +22,8 @@
     {
       "name": "click ",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Auto_MU\\images\\099c65e0-a8e7-43cd-b52c-eda74f4c1cb3\\capture_1783859026.png",
       "enable_post_key_image_check": false,
@@ -160,8 +160,8 @@
     {
       "name": "xac nhan",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Auto_MU\\images\\099c65e0-a8e7-43cd-b52c-eda74f4c1cb3\\capture_1783859243.png",
       "enable_post_key_image_check": false,

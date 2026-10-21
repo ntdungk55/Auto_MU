@@ -1,5 +1,5 @@
 {
-  "name": "Tham gia sự kiện Mê Cung Gương",
+  "name": "Tham gia sá»± kiá»‡n MÃª Cung GÆ°Æ¡ng",
   "settings": {
     "loop_enabled": true,
     "loop_mode": "forever",
@@ -17,10 +17,10 @@
   },
   "actions": [
     {
-      "name": "Bắt thời gian rồng xuất hiện",
+      "name": "Báº¯t thá»i gian rá»“ng xuáº¥t hiá»‡n",
       "purpose": "",
-      "action_type": "Thông báo sự kiện",
-      "mode": "Chủ động",
+      "action_type": "ThÃ´ng bÃ¡o sá»± kiá»‡n",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": null,
       "click_x": null,
@@ -86,10 +86,10 @@
       "mask_regions": []
     },
     {
-      "name": "Nhấn ESC để thoát Dialog",
+      "name": "Nháº¥n ESC Ä‘á»ƒ thoÃ¡t Dialog",
       "purpose": "",
-      "action_type": "Ấn Phím",
-      "mode": "Chủ động",
+      "action_type": "áº¤n PhÃ­m",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "esc",
       "image_path": null,
       "click_x": null,
@@ -148,12 +148,12 @@
       "mask_regions": []
     },
     {
-      "name": "Bắt ảnh xem đã đóng hết chưa",
+      "name": "Báº¯t áº£nh xem Ä‘Ã£ Ä‘Ã³ng háº¿t chÆ°a",
       "purpose": "",
-      "action_type": "Bắt Hình Ảnh",
-      "mode": "Chủ động",
+      "action_type": "Báº¯t HÃ¬nh áº¢nh",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
-      "image_path": "images/bfa42078-d30c-4275-adef-f13c4ec16bbd/capture_1768403871.png",
+      "image_path": "images/teaching/bfa42078-d30c-4275-adef-f13c4ec16bbd/capture_1768403871.png",
       "click_x": null,
       "click_y": null,
       "alt_click": false,
@@ -212,10 +212,10 @@
       "teaching_window_height": 600
     },
     {
-      "name": "Nhấn esc lần nữa",
+      "name": "Nháº¥n esc láº§n ná»¯a",
       "purpose": "",
-      "action_type": "Ấn Phím",
-      "mode": "Chủ động",
+      "action_type": "áº¤n PhÃ­m",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "esc",
       "image_path": null,
       "click_x": null,
@@ -274,10 +274,10 @@
       "mask_regions": []
     },
     {
-      "name": "Mở Daily Events dialog",
+      "name": "Má»Ÿ Daily Events dialog",
       "purpose": "",
-      "action_type": "Ấn Phím",
-      "mode": "Chủ động",
+      "action_type": "áº¤n PhÃ­m",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "s",
       "image_path": null,
       "click_x": null,
@@ -336,12 +336,12 @@
       "mask_regions": []
     },
     {
-      "name": "Mở Event dialog",
+      "name": "Má»Ÿ Event dialog",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
-      "image_path": "images/bfa42078-d30c-4275-adef-f13c4ec16bbd/capture_1768378362.png",
+      "image_path": "images/teaching/bfa42078-d30c-4275-adef-f13c4ec16bbd/capture_1768378362.png",
       "click_x": 89,
       "click_y": 51,
       "alt_click": false,
@@ -400,12 +400,12 @@
       "teaching_window_height": 600
     },
     {
-      "name": "Đi đến sự kiện Mê cung gương",
+      "name": "Äi Ä‘áº¿n sá»± kiá»‡n MÃª cung gÆ°Æ¡ng",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
-      "image_path": "images/bfa42078-d30c-4275-adef-f13c4ec16bbd/capture_1768441463.png",
+      "image_path": "images/teaching/bfa42078-d30c-4275-adef-f13c4ec16bbd/capture_1768441463.png",
       "click_x": 431,
       "click_y": 19,
       "alt_click": false,
@@ -477,12 +477,12 @@
       "teaching_window_height": 600
     },
     {
-      "name": "Xác nhận move map",
+      "name": "XÃ¡c nháº­n move map",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
-      "image_path": "images/bfa42078-d30c-4275-adef-f13c4ec16bbd/capture_1768379301.png",
+      "image_path": "images/teaching/bfa42078-d30c-4275-adef-f13c4ec16bbd/capture_1768379301.png",
       "click_x": 140,
       "click_y": 103,
       "alt_click": false,
@@ -541,12 +541,12 @@
       "teaching_window_height": 600
     },
     {
-      "name": "Check xem đã ở Davias chưa",
+      "name": "Check xem Ä‘Ã£ á»Ÿ Davias chÆ°a",
       "purpose": "",
-      "action_type": "Bắt Hình Ảnh",
-      "mode": "Chủ động",
+      "action_type": "Báº¯t HÃ¬nh áº¢nh",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
-      "image_path": "images/bfa42078-d30c-4275-adef-f13c4ec16bbd/capture_1768407709.png",
+      "image_path": "images/teaching/bfa42078-d30c-4275-adef-f13c4ec16bbd/capture_1768407709.png",
       "click_x": null,
       "click_y": null,
       "alt_click": false,
@@ -605,10 +605,10 @@
       "teaching_window_height": 600
     },
     {
-      "name": "Tham gia sự kiện",
+      "name": "Tham gia sá»± kiá»‡n",
       "purpose": "",
-      "action_type": "Chờ",
-      "mode": "Chủ động",
+      "action_type": "Chá»",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": null,
       "click_x": null,
@@ -667,12 +667,12 @@
       "mask_regions": []
     },
     {
-      "name": "Ấn vào chủ party ",
+      "name": "áº¤n vÃ o chá»§ party ",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
-      "image_path": "images/bfa42078-d30c-4275-adef-f13c4ec16bbd/capture_1768408210.png",
+      "image_path": "images/teaching/bfa42078-d30c-4275-adef-f13c4ec16bbd/capture_1768408210.png",
       "click_x": 68,
       "click_y": 18,
       "alt_click": false,
@@ -731,12 +731,12 @@
       "teaching_window_height": 600
     },
     {
-      "name": "Đi đến chủ party",
+      "name": "Äi Ä‘áº¿n chá»§ party",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
-      "image_path": "images/bfa42078-d30c-4275-adef-f13c4ec16bbd/capture_1768410701.png",
+      "image_path": "images/teaching/bfa42078-d30c-4275-adef-f13c4ec16bbd/capture_1768410701.png",
       "click_x": 84,
       "click_y": 24,
       "alt_click": false,

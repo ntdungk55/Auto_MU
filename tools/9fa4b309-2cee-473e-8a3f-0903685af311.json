@@ -1,6 +1,6 @@
-{
+﻿{
   "id": "9fa4b309-2cee-473e-8a3f-0903685af311",
-  "name": "Đi Blood Castle",
+  "name": "Äi Blood Castle",
   "settings": {
     "loop_enabled": false,
     "loop_mode": "forever",
@@ -20,8 +20,8 @@
     {
       "name": "Test Mask",
       "purpose": "Test",
-      "action_type": "Bắt Hình Ảnh",
-      "mode": "Chủ động",
+      "action_type": "Báº¯t HÃ¬nh áº¢nh",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": "test.png",
       "click_x": null,

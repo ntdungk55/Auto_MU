@@ -806,7 +806,7 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         layout.addLayout(btn_row)
         
         # Auto-save label
-        save_path = f"images/{self.tool_id}/{self.action.name}/window_captures/"
+        save_path = f"images/algorithm_testing/{self.tool_id}/{self.action.name}/window_captures/"
         layout.addWidget(QLabel(f"Auto-saved to: {save_path}"))
         
         # Algorithm Management - sửa thành horizontal layout với OCR section
@@ -1347,7 +1347,7 @@ class MultiImageAlgorithmTestingDialog(QDialog):
         safe_action_name = re.sub(r'[<>:"/\\|?*]', "", action_name).strip().rstrip(". ")
         if not safe_action_name:
             safe_action_name = "unnamed_action"
-        folder = f"images/{self.tool_id}/{safe_action_name}/window_captures/"
+        folder = f"images/algorithm_testing/{self.tool_id}/{safe_action_name}/window_captures/"
         os.makedirs(folder, exist_ok=True)
         return folder
 

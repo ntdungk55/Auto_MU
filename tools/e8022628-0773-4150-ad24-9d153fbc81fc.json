@@ -20,8 +20,8 @@
     {
       "name": "test",
       "purpose": "",
-      "action_type": "Đọc thụ động",
-      "mode": "Chủ động",
+      "action_type": "Äá»c thá»¥ Ä‘á»™ng",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Test5\\images\\e8022628-0773-4150-ad24-9d153fbc81fc\\capture_1776134493.png",
       "click_x": null,
@@ -81,7 +81,7 @@
       "event_prepare_end_s": 60,
       "mask_regions": [],
       "window_capture_paths": [
-        "images/default/test/window_captures/capture_008.png"
+        "images/fixtures/default/test/window_captures/capture_008.png"
       ],
       "window_capture_results": {},
       "preprocessing_algorithms": [],
@@ -94,7 +94,7 @@
             "threshold_value": 55
           },
           "id": "binary_threshold",
-          "name": "⚫ Binary Threshold",
+          "name": "âš« Binary Threshold",
           "parameters": {
             "threshold_type": {
               "choices": [
@@ -126,7 +126,7 @@
             "upscale": 3.0
           },
           "id": "upscale_3x",
-          "name": "🔍 Upscale 3x",
+          "name": "ðŸ” Upscale 3x",
           "parameters": {
             "upscale": {
               "default": 3.0,
@@ -160,7 +160,7 @@
             "upscale": 3.0
           },
           "id": "upscale_3x",
-          "name": "🔍 Upscale 3x",
+          "name": "ðŸ” Upscale 3x",
           "parameters": {
             "upscale": {
               "default": 3.0,
@@ -177,7 +177,7 @@
             "grayscale": true
           },
           "id": "grayscale",
-          "name": "🔘 Grayscale Only"
+          "name": "ðŸ”˜ Grayscale Only"
         },
         {
           "config": {
@@ -186,7 +186,7 @@
             "threshold_value": 64
           },
           "id": "binary_threshold",
-          "name": "⚫ Binary Threshold",
+          "name": "âš« Binary Threshold",
           "parameters": {
             "threshold_type": {
               "choices": [
@@ -227,14 +227,14 @@
             "grayscale": true
           },
           "id": "grayscale",
-          "name": "🔘 Grayscale Only"
+          "name": "ðŸ”˜ Grayscale Only"
         },
         {
           "config": {
             "upscale": 3.0
           },
           "id": "upscale_3x",
-          "name": "🔍 Upscale 3x",
+          "name": "ðŸ” Upscale 3x",
           "parameters": {
             "upscale": {
               "default": 3.0,
@@ -252,7 +252,7 @@
             "enhance_contrast": true
           },
           "id": "enhance_contrast",
-          "name": "✨ Enhance Contrast",
+          "name": "âœ¨ Enhance Contrast",
           "parameters": {
             "contrast_level": {
               "default": 1.5,
@@ -277,7 +277,7 @@
             "grayscale": true
           },
           "id": "grayscale",
-          "name": "🔘 Grayscale Only"
+          "name": "ðŸ”˜ Grayscale Only"
         },
         {
           "config": {
@@ -285,7 +285,7 @@
             "enhance_contrast": true
           },
           "id": "enhance_contrast",
-          "name": "✨ Enhance Contrast",
+          "name": "âœ¨ Enhance Contrast",
           "parameters": {
             "contrast_level": {
               "default": 1.5,
@@ -302,7 +302,7 @@
             "upscale": 3.0
           },
           "id": "upscale_3x",
-          "name": "🔍 Upscale 3x",
+          "name": "ðŸ” Upscale 3x",
           "parameters": {
             "upscale": {
               "default": 3.0,

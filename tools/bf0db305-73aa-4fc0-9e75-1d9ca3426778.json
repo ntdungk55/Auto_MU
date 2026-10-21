@@ -1,6 +1,6 @@
 {
   "id": "bf0db305-73aa-4fc0-9e75-1d9ca3426778",
-  "name": "Tham gia sự kiện Rồng đỏ",
+  "name": "Tham gia sá»± kiá»‡n Rá»“ng Ä‘á»",
   "settings": {
     "loop_enabled": true,
     "loop_mode": "forever",
@@ -18,10 +18,10 @@
   },
   "actions": [
     {
-      "name": "Bắt thời gian rồng xuất hiện",
+      "name": "Báº¯t thá»i gian rá»“ng xuáº¥t hiá»‡n",
       "purpose": "",
-      "action_type": "Thông báo sự kiện",
-      "mode": "Chủ động",
+      "action_type": "ThÃ´ng bÃ¡o sá»± kiá»‡n",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": null,
       "click_x": null,
@@ -168,10 +168,10 @@
       "ocr_algorithms": []
     },
     {
-      "name": "Nhấn ESC để thoát Dialog",
+      "name": "Nháº¥n ESC Ä‘á»ƒ thoÃ¡t Dialog",
       "purpose": "",
-      "action_type": "Ấn Phím",
-      "mode": "Chủ động",
+      "action_type": "áº¤n PhÃ­m",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "esc",
       "image_path": null,
       "click_x": null,
@@ -237,10 +237,10 @@
       "ocr_algorithms": []
     },
     {
-      "name": "Bắt ảnh xem đã đóng hết chưa",
+      "name": "Báº¯t áº£nh xem Ä‘Ã£ Ä‘Ã³ng háº¿t chÆ°a",
       "purpose": "",
-      "action_type": "Bắt Hình Ảnh",
-      "mode": "Chủ động",
+      "action_type": "Báº¯t HÃ¬nh áº¢nh",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Test5\\images\\bf0db305-73aa-4fc0-9e75-1d9ca3426778\\capture_1773029747.png",
       "click_x": null,
@@ -300,9 +300,9 @@
       "event_prepare_end_s": 60,
       "mask_regions": [],
       "window_capture_paths": [
-        "images/bf0db305-73aa-4fc0-9e75-1d9ca3426778/Bắt ảnh xem đã đóng hết chưa/window_captures/capture_001.png",
-        "images/bf0db305-73aa-4fc0-9e75-1d9ca3426778/Bắt ảnh xem đã đóng hết chưa/window_captures/capture_002.png",
-        "images/bf0db305-73aa-4fc0-9e75-1d9ca3426778/Bắt ảnh xem đã đóng hết chưa/window_captures/capture_003.png"
+        "images/algorithm_testing/bf0db305-73aa-4fc0-9e75-1d9ca3426778/Báº¯t áº£nh xem Ä‘Ã£ Ä‘Ã³ng háº¿t chÆ°a/window_captures/capture_001.png",
+        "images/algorithm_testing/bf0db305-73aa-4fc0-9e75-1d9ca3426778/Báº¯t áº£nh xem Ä‘Ã£ Ä‘Ã³ng háº¿t chÆ°a/window_captures/capture_002.png",
+        "images/algorithm_testing/bf0db305-73aa-4fc0-9e75-1d9ca3426778/Báº¯t áº£nh xem Ä‘Ã£ Ä‘Ã³ng háº¿t chÆ°a/window_captures/capture_003.png"
       ],
       "window_capture_results": {
         "C:\\Users\\ENDUSE~1\\AppData\\Local\\Temp\\multi_image_test_fhu3vjte\\capture_001.png": 0.985077977180481,
@@ -315,7 +315,7 @@
             "grayscale": true
           },
           "id": "grayscale",
-          "name": "🔘 Grayscale Only"
+          "name": "ðŸ”˜ Grayscale Only"
         }
       ],
       "template_matching_algorithms": [
@@ -324,16 +324,16 @@
             "grayscale": true
           },
           "id": "grayscale",
-          "name": "🔘 Grayscale Only"
+          "name": "ðŸ”˜ Grayscale Only"
         }
       ],
       "ocr_algorithms": []
     },
     {
-      "name": "Nhấn esc lần nữa",
+      "name": "Nháº¥n esc láº§n ná»¯a",
       "purpose": "",
-      "action_type": "Ấn Phím",
-      "mode": "Chủ động",
+      "action_type": "áº¤n PhÃ­m",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "esc",
       "image_path": null,
       "click_x": null,
@@ -399,10 +399,10 @@
       "ocr_algorithms": []
     },
     {
-      "name": "Mở Daily Events dialog",
+      "name": "Má»Ÿ Daily Events dialog",
       "purpose": "",
-      "action_type": "Ấn Phím",
-      "mode": "Chủ động",
+      "action_type": "áº¤n PhÃ­m",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "s",
       "image_path": null,
       "click_x": null,
@@ -468,12 +468,12 @@
       "ocr_algorithms": []
     },
     {
-      "name": "Mở Event dialog",
+      "name": "Má»Ÿ Event dialog",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
-      "image_path": "images/bf0db305-73aa-4fc0-9e75-1d9ca3426778/capture_1768378362.png",
+      "image_path": "images/teaching/bf0db305-73aa-4fc0-9e75-1d9ca3426778/capture_1768378362.png",
       "click_x": 89,
       "click_y": 51,
       "alt_click": false,
@@ -537,12 +537,12 @@
       "ocr_algorithms": []
     },
     {
-      "name": "Đi đến sự kiện rồng đỏ",
+      "name": "Äi Ä‘áº¿n sá»± kiá»‡n rá»“ng Ä‘á»",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
-      "image_path": "images/bf0db305-73aa-4fc0-9e75-1d9ca3426778/capture_1768411030.png",
+      "image_path": "images/teaching/bf0db305-73aa-4fc0-9e75-1d9ca3426778/capture_1768411030.png",
       "click_x": 437,
       "click_y": 15,
       "alt_click": false,
@@ -619,12 +619,12 @@
       "ocr_algorithms": []
     },
     {
-      "name": "Xác nhận move map",
+      "name": "XÃ¡c nháº­n move map",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
-      "image_path": "images/bf0db305-73aa-4fc0-9e75-1d9ca3426778/capture_1768379301.png",
+      "image_path": "images/teaching/bf0db305-73aa-4fc0-9e75-1d9ca3426778/capture_1768379301.png",
       "click_x": 140,
       "click_y": 103,
       "alt_click": false,
@@ -688,10 +688,10 @@
       "ocr_algorithms": []
     },
     {
-      "name": "Tham gia sự kiện",
+      "name": "Tham gia sá»± kiá»‡n",
       "purpose": "",
-      "action_type": "Chờ",
-      "mode": "Chủ động",
+      "action_type": "Chá»",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": null,
       "click_x": null,
@@ -757,10 +757,10 @@
       "ocr_algorithms": []
     },
     {
-      "name": "Mở danh sách bản đồ - Phím M",
+      "name": "Má»Ÿ danh sÃ¡ch báº£n Ä‘á»“ - PhÃ­m M",
       "purpose": "",
-      "action_type": "Ấn Phím",
-      "mode": "Chủ động",
+      "action_type": "áº¤n PhÃ­m",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "m",
       "image_path": null,
       "click_x": null,
@@ -826,10 +826,10 @@
       "ocr_algorithms": []
     },
     {
-      "name": "Click vào bản đồ Nixies",
+      "name": "Click vÃ o báº£n Ä‘á»“ Nixies",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Test5\\images\\bf0db305-73aa-4fc0-9e75-1d9ca3426778\\capture_1773026664.png",
       "click_x": 42,
@@ -895,10 +895,10 @@
       "ocr_algorithms": []
     },
     {
-      "name": "Mở bản đồ ",
+      "name": "Má»Ÿ báº£n Ä‘á»“ ",
       "purpose": "",
-      "action_type": "Ấn Phím",
-      "mode": "Chủ động",
+      "action_type": "áº¤n PhÃ­m",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "tab",
       "image_path": null,
       "click_x": null,
@@ -964,10 +964,10 @@
       "ocr_algorithms": []
     },
     {
-      "name": "Đi tới giữa map nixie",
+      "name": "Äi tá»›i giá»¯a map nixie",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Test5\\images\\bf0db305-73aa-4fc0-9e75-1d9ca3426778\\capture_1773027083.png",
       "click_x": 88,
@@ -1033,10 +1033,10 @@
       "ocr_algorithms": []
     },
     {
-      "name": "Đi tới cửa hang",
+      "name": "Äi tá»›i cá»­a hang",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Test5\\images\\bf0db305-73aa-4fc0-9e75-1d9ca3426778\\capture_1773026812.png",
       "click_x": 110,
@@ -1102,10 +1102,10 @@
       "ocr_algorithms": []
     },
     {
-      "name": "Đi tới bãi train",
+      "name": "Äi tá»›i bÃ£i train",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Test5\\images\\bf0db305-73aa-4fc0-9e75-1d9ca3426778\\capture_1773026908.png",
       "click_x": 119,
@@ -1178,10 +1178,10 @@
       "ocr_algorithms": []
     },
     {
-      "name": "Đóng bản đồ ",
+      "name": "ÄÃ³ng báº£n Ä‘á»“ ",
       "purpose": "",
-      "action_type": "Ấn Phím",
-      "mode": "Chủ động",
+      "action_type": "áº¤n PhÃ­m",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "tab",
       "image_path": null,
       "click_x": null,

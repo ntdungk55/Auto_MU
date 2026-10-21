@@ -319,7 +319,7 @@ class ToolEditorWindow(QMainWindow):
     def _default_capture_dir(self):
         import os
         tool_folder = self.tool_id or "temp"
-        return os.path.abspath(os.path.join("images", tool_folder, "window_captures"))
+        return os.path.abspath(os.path.join("images", "teaching", tool_folder, "window_captures"))
 
     def _selected_capture_dir(self):
         import os

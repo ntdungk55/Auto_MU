@@ -1004,7 +1004,7 @@ class ImageCaptureDialog(QDialog):
             img_rect = QRectF(0, 0, original_image_width, original_image_height)
             selection_rect = selection_rect.intersected(img_rect)
         
-        # Save teaching images under images/<tool_name>/ if tool_name provided
+        # Save teaching images under images/teaching/<tool_id>/ if tool_id is provided
         # If loaded from existing and no new capture, return existing path
         if self._loaded_from_existing and self._existing_image_path:
             print(f"[DEBUG] Reusing existing image path: {self._existing_image_path}")
@@ -1013,7 +1013,7 @@ class ImageCaptureDialog(QDialog):
             cropped_height = self.captured_image.height()
         else:
             # Save new file
-            base_dir = "images"
+            base_dir = os.path.join("images", "teaching")
             # Use tool_id as folder name (UUID)
             images_dir = os.path.join(base_dir, self.tool_id) if self.tool_id else base_dir
             # Make absolute path to ensure consistency

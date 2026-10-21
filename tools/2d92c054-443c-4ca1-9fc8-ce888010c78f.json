@@ -1,4 +1,4 @@
-{
+﻿{
   "id": "2d92c054-443c-4ca1-9fc8-ce888010c78f",
   "name": "Test Tool",
   "settings": {
@@ -20,8 +20,8 @@
     {
       "name": "Test Mask",
       "purpose": "Test",
-      "action_type": "Bắt Hình Ảnh",
-      "mode": "Chủ động",
+      "action_type": "Báº¯t HÃ¬nh áº¢nh",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": "test.png",
       "click_x": null,

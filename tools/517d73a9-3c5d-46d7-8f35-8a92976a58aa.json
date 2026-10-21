@@ -20,10 +20,10 @@
   },
   "actions": [
     {
-      "name": "Bật bản đồ trước khi đi đến NPC",
+      "name": "Báº­t báº£n Ä‘á»“ trÆ°á»›c khi Ä‘i Ä‘áº¿n NPC",
       "purpose": "",
-      "action_type": "Ấn Phím",
-      "mode": "Chủ động",
+      "action_type": "áº¤n PhÃ­m",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "tab",
       "image_path": null,
       "enable_post_key_image_check": false,
@@ -158,10 +158,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Đi tới gần NPC",
+      "name": "Äi tá»›i gáº§n NPC",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Auto_MU\\images\\517d73a9-3c5d-46d7-8f35-8a92976a58aa\\capture_1785026962.png",
       "enable_post_key_image_check": false,
@@ -303,10 +303,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Đóng bản đồ sau khi click vào NPC",
+      "name": "ÄÃ³ng báº£n Ä‘á»“ sau khi click vÃ o NPC",
       "purpose": "",
-      "action_type": "Ấn Phím",
-      "mode": "Chủ động",
+      "action_type": "áº¤n PhÃ­m",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "tab",
       "image_path": null,
       "enable_post_key_image_check": false,
@@ -441,12 +441,12 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Click vào NPC",
+      "name": "Click vÃ o NPC",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
-      "image_path": "images/517d73a9-3c5d-46d7-8f35-8a92976a58aa/capture_1768033196.png",
+      "image_path": "images/teaching/517d73a9-3c5d-46d7-8f35-8a92976a58aa/capture_1768033196.png",
       "enable_post_key_image_check": false,
       "post_key_check_delay": 1.0,
       "post_key_retry_count": 0,
@@ -582,10 +582,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Chọn tầng ",
+      "name": "Chá»n táº§ng ",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Auto_MU\\images\\517d73a9-3c5d-46d7-8f35-8a92976a58aa\\capture_1785078102.png",
       "enable_post_key_image_check": false,
@@ -720,10 +720,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Click vào button xác nhận bắt đầu vòng đấu mới ",
+      "name": "Click vÃ o button xÃ¡c nháº­n báº¯t Ä‘áº§u vÃ²ng Ä‘áº¥u má»›i ",
       "purpose": "",
-      "action_type": "Click Chuột",
-      "mode": "Chủ động",
+      "action_type": "Click Chuá»™t",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Auto_MU\\images\\517d73a9-3c5d-46d7-8f35-8a92976a58aa\\capture_1785078138.png",
       "enable_post_key_image_check": false,
@@ -858,10 +858,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Bật Auto",
+      "name": "Báº­t Auto",
       "purpose": "",
-      "action_type": "Ấn Phím",
-      "mode": "Chủ động",
+      "action_type": "áº¤n PhÃ­m",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "home",
       "image_path": null,
       "enable_post_key_image_check": false,
@@ -998,8 +998,8 @@
     {
       "name": "Detect completion dialog",
       "purpose": "",
-      "action_type": "Đọc thụ động",
-      "mode": "Chủ động",
+      "action_type": "Äá»c thá»¥ Ä‘á»™ng",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": "D:\\Project\\Auto\\Test Auto\\Auto_MU\\images\\517d73a9-3c5d-46d7-8f35-8a92976a58aa\\capture_1785078222.png",
       "enable_post_key_image_check": false,
@@ -1134,10 +1134,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Đóng dialog thông báo của Event",
+      "name": "ÄÃ³ng dialog thÃ´ng bÃ¡o cá»§a Event",
       "purpose": "",
-      "action_type": "Ấn Phím",
-      "mode": "Chủ động",
+      "action_type": "áº¤n PhÃ­m",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "esc",
       "image_path": null,
       "enable_post_key_image_check": false,
@@ -1272,10 +1272,10 @@
       "monster_invasion_white_wizard_red_dragon_enabled": false
     },
     {
-      "name": "Chờ nhặt đồ sau khi hoàn thành",
+      "name": "Chá» nháº·t Ä‘á»“ sau khi hoÃ n thÃ nh",
       "purpose": "",
-      "action_type": "Chờ",
-      "mode": "Chủ động",
+      "action_type": "Chá»",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": null,
       "enable_post_key_image_check": false,

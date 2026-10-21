@@ -16,14 +16,14 @@
     "block_input_enabled": false,
     "block_input_duration": 3.0,
     "target_window_title": "",
-    "window_capture_dir": "D:\\Project\\Auto\\Auto_MU\\images\\1b45e999-7ebc-4a05-8391-cc056d7cd768\\window_captures"
+    "window_capture_dir": "images/algorithm_testing/1b45e999-7ebc-4a05-8391-cc056d7cd768/window_captures"
   },
   "actions": [
     {
       "name": "dfdsf",
       "purpose": "",
-      "action_type": "Bắt Hình Ảnh",
-      "mode": "Chủ động",
+      "action_type": "Báº¯t HÃ¬nh áº¢nh",
+      "mode": "Chá»§ Ä‘á»™ng",
       "value": "",
       "image_path": null,
       "enable_post_key_image_check": false,

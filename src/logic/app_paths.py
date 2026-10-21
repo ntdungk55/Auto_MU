@@ -24,3 +24,18 @@ def get_app_state_path() -> str:
     runtime_root = get_runtime_root()
     os.makedirs(runtime_root, exist_ok=True)
     return os.path.join(runtime_root, "app_state.json")
+
+
+def get_images_root() -> str:
+    """Return the application image root without changing the process cwd."""
+    return os.path.join(get_runtime_root(), "images")
+
+
+def get_teaching_root() -> str:
+    """Return the managed root for tool teaching assets."""
+    return os.path.join(get_images_root(), "teaching")
+
+
+def get_tool_teaching_dir(tool_id: str | None) -> str:
+    """Return a stable per-tool teaching directory."""
+    return os.path.join(get_teaching_root(), str(tool_id or "default"))
