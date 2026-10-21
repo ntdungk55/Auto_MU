@@ -26,6 +26,11 @@ def get_app_state_path() -> str:
     return os.path.join(runtime_root, "app_state.json")
 
 
+def get_tools_root() -> str:
+    """Return the mutable runtime directory for saved tool definitions."""
+    return os.path.join(get_runtime_root(), "tools")
+
+
 def get_images_root() -> str:
     """Return the application image root without changing the process cwd."""
     return os.path.join(get_runtime_root(), "images")

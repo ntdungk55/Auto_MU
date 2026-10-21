@@ -4,6 +4,7 @@ import uuid
 from typing import List, Optional, Tuple
 from dataclasses import asdict
 from .action_type import AutoAction
+from .app_paths import get_tools_root
 
 MONSTER_INVASION_DEFAULTS = {
     "monster_invasion_enabled": False,
@@ -468,11 +469,11 @@ class Tool:
         )
 
 class ToolManager:
-    def __init__(self, tools_dir: str = "tools", images_dir: str = "assets/teaching"):
-        self.tools_dir = tools_dir
+    def __init__(self, tools_dir: str | None = None, images_dir: str = "assets/teaching"):
+        self.tools_dir = tools_dir or get_tools_root()
         # Keep callers that pass the old root compatible with the new layout.
         self.images_dir = os.path.join(images_dir, "teaching") if images_dir == "images" else images_dir
-        os.makedirs(tools_dir, exist_ok=True)
+        os.makedirs(self.tools_dir, exist_ok=True)
     
     def save_tool(self, tool: Tool):
         """Save tool to JSON file by UUID.
