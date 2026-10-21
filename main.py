@@ -3296,6 +3296,10 @@ if __name__ == "__main__":
     # Setup logging to file
     log_dir = "logs"
     os.makedirs(log_dir, exist_ok=True)
+    from src.logic.log_manager import LogManager
+    removed_logs = LogManager(log_dir=log_dir, retention_days=7).cleanup_old_logs()
+    if removed_logs:
+        print(f"[LogManager] Startup cleanup: deleted {removed_logs} log files older than 7 days")
     log_file = os.path.join(log_dir, f"app_errors_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
     
     logging.basicConfig(

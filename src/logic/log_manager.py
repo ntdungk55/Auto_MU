@@ -7,17 +7,24 @@ from typing import Optional
 
 
 class LogManager:
-    """Manage logs with periodic cleanup."""
+    """Manage logs with periodic cleanup and age-based retention."""
     
-    def __init__(self, log_dir: str = "logs", cleanup_interval_hours: float = 1.0):
+    def __init__(
+        self,
+        log_dir: str = "logs",
+        cleanup_interval_hours: float = 1.0,
+        retention_days: int = 7,
+    ):
         """Initialize log manager.
         
         Args:
             log_dir: Directory to store logs
             cleanup_interval_hours: Hours between cleanups (default 1 hour)
+            retention_days: Keep logs newer than this many days (default 7)
         """
         self.log_dir = log_dir
         self.cleanup_interval_seconds = cleanup_interval_hours * 3600
+        self.retention_seconds = max(1, int(retention_days)) * 24 * 3600
         self.last_cleanup_time = time.time()
         
         # Create log directory if it doesn't exist
@@ -67,7 +74,11 @@ class LogManager:
         return (current_time - self.last_cleanup_time) >= self.cleanup_interval_seconds
     
     def cleanup_old_logs(self) -> int:
-        """Delete all log files.
+        """Delete log files older than the configured retention period.
+
+        The scan is recursive so dated log folders are covered as well. Empty
+        folders left behind after cleanup are removed, but the log root itself
+        is preserved for the application.
         
         Returns:
             Number of files deleted
@@ -78,14 +89,23 @@ class LogManager:
             if not os.path.exists(self.log_dir):
                 return 0
             
-            for filename in os.listdir(self.log_dir):
-                if filename.endswith(".log"):
-                    file_path = os.path.join(self.log_dir, filename)
+            cutoff = time.time() - self.retention_seconds
+            for root, _, filenames in os.walk(self.log_dir, topdown=False):
+                for filename in filenames:
+                    file_path = os.path.join(root, filename)
                     try:
-                        os.remove(file_path)
-                        deleted_count += 1
-                    except Exception as e:
-                        print(f"[LogManager] Error deleting {filename}: {e}")
+                        if os.path.getmtime(file_path) < cutoff:
+                            os.remove(file_path)
+                            deleted_count += 1
+                    except (FileNotFoundError, PermissionError, OSError) as e:
+                        print(f"[LogManager] Error deleting {file_path}: {e}")
+
+                if os.path.abspath(root) != os.path.abspath(self.log_dir):
+                    try:
+                        if not os.listdir(root):
+                            os.rmdir(root)
+                    except (FileNotFoundError, PermissionError, OSError):
+                        pass
             
             self.last_cleanup_time = time.time()
             return deleted_count
