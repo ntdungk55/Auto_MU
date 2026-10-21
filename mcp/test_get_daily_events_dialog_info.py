@@ -22,6 +22,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.ai_control.mcp_client_manager import MCPClientManager
 from src.ai_control.scenario_tool_client import ScenarioToolClient
 from src.ai_control.servers.process import select_game_process
+from src.logic.app_paths import get_scenario_engine_root
 
 
 def _find_window(title_fragment: str) -> dict[str, Any]:
@@ -94,7 +95,7 @@ def run(title_fragment: str, timeout_seconds: float, *, direct: bool = False) ->
     client = MCPClientManager(startup_timeout_seconds=20.0, tool_timeout_seconds=timeout_seconds)
     tool_client = ScenarioToolClient(
         mcp_client=client,
-        scenario_directory=PROJECT_ROOT / "scenario_engine" / "scenarios",
+        scenario_directory=Path(get_scenario_engine_root()) / "scenarios",
     )
     client.start()
     try:

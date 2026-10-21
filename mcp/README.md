@@ -38,7 +38,7 @@ Các script manual dùng chung logic với MCP:
 
 `src/ai_control/companion_switcher.py` và `companion_summoner.py` giữ logic dùng chung;
 MCP không chạy lại script CLI bằng subprocess. Các scenario tương ứng nằm trong
-`scenario_engine/scenarios`. Sau khi cập nhật code, khởi động lại phiên MCP để nạp tool mới.
+`assets/scenario_engine/scenarios`. Sau khi cập nhật code, khởi động lại phiên MCP để nạp tool mới.
 
 ```powershell
 & ".venv\Scripts\mcp.exe" run "mcp\keyboard\server.py:mcp" --transport stdio

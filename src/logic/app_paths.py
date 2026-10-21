@@ -55,6 +55,11 @@ def get_algorithm_testing_root() -> str:
     return os.path.join(get_images_root(), "algorithm_testing")
 
 
+def get_scenario_engine_root() -> str:
+    """Return the bundled scenario-engine resource directory."""
+    return os.path.join(get_assets_root(), "scenario_engine")
+
+
 def get_tool_teaching_dir(tool_id: str | None) -> str:
     """Return a stable per-tool teaching directory."""
     return os.path.join(get_teaching_root(), str(tool_id or "default"))

@@ -7,6 +7,8 @@ import hashlib
 from pathlib import Path
 import sys
 
+from src.logic.app_paths import get_scenario_engine_root
+
 
 SYSTEM_PROMPT_RELATIVE_PATH = Path("prompt") / "system_prompt" / "scenario_engine_system_prompt.md"
 MAX_SYSTEM_PROMPT_BYTES = 1_000_000
@@ -27,9 +29,7 @@ class SystemPromptLoader:
 
     @staticmethod
     def default_scenario_engine_root() -> Path:
-        if getattr(sys, "frozen", False):
-            return Path(sys.executable).resolve().parent / "scenario_engine"
-        return Path(__file__).resolve().parents[3] / "scenario_engine"
+        return Path(get_scenario_engine_root())
 
     @property
     def prompt_path(self) -> Path:

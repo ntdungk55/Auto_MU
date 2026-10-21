@@ -35,10 +35,10 @@ hiddenimports += collect_submodules('src.application')
 hiddenimports += collect_submodules('src.domain')
 hiddenimports += collect_submodules('src.infrastructure')
 
-# Build datas list - only include folders that exist
+# Build datas list - only include bundled static resources that exist
 datas = []
-if os.path.exists('tools'):
-    datas.append(('tools', 'tools'))
+if os.path.exists(os.path.join('assets', 'scenario_engine')):
+    datas.append((os.path.join('assets', 'scenario_engine'), os.path.join('assets', 'scenario_engine')))
 
 a = Analysis(
     ['main.py'],

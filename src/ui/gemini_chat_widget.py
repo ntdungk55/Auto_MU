@@ -1206,7 +1206,8 @@ class GeminiChatWidget(QWidget):
         self._dispose_scenario_tools()
         from src.ai_control.mcp_client_manager import MCPClientManager
 
-        root = Path(__file__).resolve().parents[2]
+        from src.logic.app_paths import get_scenario_engine_root
+        root = Path(get_scenario_engine_root())
         tool_client = ScenarioToolClient(
             mcp_client=MCPClientManager(),
             scenario_directory=root / "scenario_engine" / "scenarios",
@@ -1232,7 +1233,8 @@ class GeminiChatWidget(QWidget):
 
     def _scenario_system_prompt(self, scenario_snapshot: dict[str, object]) -> str:
         """Attach the scenario catalog to the immutable prompt for this chat session."""
-        root = Path(__file__).resolve().parents[2]
+        from src.logic.app_paths import get_scenario_engine_root
+        root = Path(get_scenario_engine_root())
         prompt_path = root / "scenario_engine" / "prompt" / "system_prompt" / "scenario_engine_system_prompt.md"
         base_prompt = prompt_path.read_text(encoding="utf-8-sig").strip()
         scenario_json = json.dumps(
