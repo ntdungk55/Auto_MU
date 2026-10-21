@@ -1,5 +1,7 @@
-from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, 
-                             QLabel, QGraphicsView, QGraphicsScene, QMessageBox,
+from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
+                             QLabel, QLineEdit, QComboBox, QInputDialog,
+                             QDialogButtonBox,
+                             QGraphicsView, QGraphicsScene, QMessageBox,
                              QGraphicsRectItem, QGraphicsEllipseItem, QGraphicsLineItem)
 from PyQt6.QtCore import QLineF
 from PyQt6.QtCore import Qt, QRect, QRectF, QPoint, QPointF
@@ -13,6 +15,7 @@ import numpy as np
 import cv2
 import os
 from ..logic.window_detector import WindowDetector
+from ..logic.app_paths import get_runtime_root
 from ..logic.teaching_matching import (
     expand_coordinate_bounds,
     normalize_coordinate_match_offset,
@@ -55,6 +58,137 @@ def _ensure_dpi_awareness():
 
 # Set DPI awareness at module load
 _ensure_dpi_awareness()
+
+
+class CropSaveDialog(QDialog):
+    """Choose a managed learning folder and confirm a cropped PNG save."""
+
+    def __init__(self, crop: QPixmap, learning_root: str, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Lưu ảnh teaching")
+        self.resize(620, 500)
+        self.learning_root = os.path.abspath(learning_root)
+        self.selected_path = ""
+        os.makedirs(self.learning_root, exist_ok=True)
+
+        layout = QVBoxLayout(self)
+        preview = QLabel()
+        preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        preview.setMinimumSize(400, 300)
+        preview.setPixmap(crop.scaled(
+            560,
+            340,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        ))
+        layout.addWidget(preview, 1)
+
+        folder_row = QHBoxLayout()
+        folder_row.addWidget(QLabel("Loại learning:"))
+        self.folder_combo = QComboBox()
+        folder_row.addWidget(self.folder_combo, 1)
+        new_btn = QPushButton("Thêm")
+        new_btn.clicked.connect(self._create_folder)
+        rename_btn = QPushButton("Đổi tên")
+        rename_btn.clicked.connect(self._rename_folder)
+        delete_btn = QPushButton("Xóa")
+        delete_btn.clicked.connect(self._delete_folder)
+        folder_row.addWidget(new_btn)
+        folder_row.addWidget(rename_btn)
+        folder_row.addWidget(delete_btn)
+        layout.addLayout(folder_row)
+
+        self.filename_edit = QLineEdit()
+        self.filename_edit.setPlaceholderText("Tên file, không cần nhập .png")
+        layout.addWidget(QLabel("Tên file:"))
+        layout.addWidget(self.filename_edit)
+        self._refresh_folders()
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self._accept_path)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def _refresh_folders(self, select_name: str | None = None) -> None:
+        current = select_name or self.folder_combo.currentText()
+        folders = sorted(
+            name for name in os.listdir(self.learning_root)
+            if os.path.isdir(os.path.join(self.learning_root, name))
+        )
+        self.folder_combo.blockSignals(True)
+        self.folder_combo.clear()
+        self.folder_combo.addItems(folders)
+        if current in folders:
+            self.folder_combo.setCurrentText(current)
+        self.folder_combo.blockSignals(False)
+
+    def _folder_name(self, title: str, label: str, initial: str = "") -> str:
+        name, accepted = QInputDialog.getText(self, title, label, text=initial)
+        return name.strip() if accepted else ""
+
+    def _valid_folder_name(self, name: str) -> bool:
+        return bool(name) and name not in {".", ".."} and os.path.basename(name) == name
+
+    def _create_folder(self) -> None:
+        name = self._folder_name("Thêm loại learning", "Tên thư mục:")
+        if not self._valid_folder_name(name):
+            return
+        path = os.path.join(self.learning_root, name)
+        if os.path.exists(path):
+            QMessageBox.warning(self, "Trùng tên", "Thư mục này đã tồn tại.")
+            return
+        os.makedirs(path)
+        self._refresh_folders(name)
+
+    def _rename_folder(self) -> None:
+        old_name = self.folder_combo.currentText().strip()
+        if not old_name:
+            return
+        new_name = self._folder_name("Đổi tên loại learning", "Tên mới:", old_name)
+        if not self._valid_folder_name(new_name) or new_name == old_name:
+            return
+        new_path = os.path.join(self.learning_root, new_name)
+        if os.path.exists(new_path):
+            QMessageBox.warning(self, "Trùng tên", "Thư mục này đã tồn tại.")
+            return
+        os.rename(os.path.join(self.learning_root, old_name), new_path)
+        self._refresh_folders(new_name)
+
+    def _delete_folder(self) -> None:
+        name = self.folder_combo.currentText().strip()
+        if not name:
+            return
+        folder = os.path.join(self.learning_root, name)
+        answer = QMessageBox.question(
+            self,
+            "Xác nhận xóa",
+            f"Xóa thư mục learning '{name}' và toàn bộ ảnh bên trong?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        import shutil
+        shutil.rmtree(folder)
+        self._refresh_folders()
+
+    def _accept_path(self) -> None:
+        folder = self.folder_combo.currentText().strip()
+        filename = self.filename_edit.text().strip()
+        if not folder:
+            QMessageBox.warning(self, "Thiếu loại learning", "Hãy tạo hoặc chọn một thư mục learning.")
+            return
+        if not filename:
+            QMessageBox.warning(self, "Thiếu tên file", "Vui lòng nhập tên file.")
+            return
+        if os.path.basename(filename) != filename or filename in {".", ".."}:
+            QMessageBox.warning(self, "Tên file không hợp lệ", "Chỉ được nhập tên file, không nhập đường dẫn.")
+            return
+        if not filename.lower().endswith(".png"):
+            filename += ".png"
+        self.selected_path = os.path.join(self.learning_root, folder, filename)
+        self.accept()
 
 class ImageGraphicsView(QGraphicsView):
     def __init__(self, parent=None):
@@ -396,6 +530,7 @@ class ImageCaptureDialog(QDialog):
         initial_click_y: int = None,
         initial_mask_regions: list = None,
         coordinate_match_offset: int = 0,
+        manual_save: bool = False,
     ):
         super().__init__(parent)
         self.target_window_hwnd = target_window_hwnd
@@ -413,6 +548,7 @@ class ImageCaptureDialog(QDialog):
             if coordinate_match_offset
             else 0
         )
+        self.manual_save = manual_save
         self._loaded_from_existing = False  # Track if loaded from existing file
         self._existing_image_path = initial_image_path  # Store original path
         
@@ -554,6 +690,10 @@ class ImageCaptureDialog(QDialog):
         btn_layout.addWidget(self.draw_mask_btn)
         btn_layout.addWidget(self.clear_masks_btn)
         btn_layout.addWidget(self.clear_btn)
+        if self.manual_save:
+            self.save_crop_btn = QPushButton("Lưu ảnh")
+            self.save_crop_btn.clicked.connect(self._save_cropped_image_as)
+            btn_layout.addWidget(self.save_crop_btn)
         
         # Zoom buttons
         self.zoom_100_btn = QPushButton("100%")
@@ -596,6 +736,34 @@ class ImageCaptureDialog(QDialog):
         self.draw_mask_btn.setEnabled(False)
         self.clear_masks_btn.setEnabled(False)
         self.clear_btn.setEnabled(False)
+
+    def _current_crop_pixmap(self) -> QPixmap | None:
+        if self.captured_image is None or self.captured_image.isNull():
+            return None
+        selection_rect = self.graphics_view.selection_rect
+        if selection_rect is None or selection_rect.isEmpty():
+            return self.captured_image
+        image_rect = QRectF(0, 0, self.captured_image.width(), self.captured_image.height())
+        crop_rect = selection_rect.intersected(image_rect).toRect()
+        if crop_rect.isEmpty():
+            return None
+        return self.captured_image.copy(crop_rect)
+
+    def _save_cropped_image_as(self) -> None:
+        crop = self._current_crop_pixmap()
+        if crop is None:
+            QMessageBox.warning(self, "Chưa có ảnh", "Hãy chụp ảnh và chọn vùng crop trước.")
+            return
+        learning_root = os.path.join(get_runtime_root(), "images", "learning")
+        dialog = CropSaveDialog(crop, learning_root, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        path = dialog.selected_path
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        if not crop.save(path, "PNG"):
+            QMessageBox.critical(self, "Lỗi lưu ảnh", f"Không thể lưu ảnh:\n{path}")
+            return
+        QMessageBox.information(self, "Đã lưu ảnh", f"Đã lưu ảnh teaching:\n{path}")
     
     def capture_screenshot(self):
         """Chụp screenshot của window"""
