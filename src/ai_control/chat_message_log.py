@@ -9,6 +9,8 @@ import re
 import threading
 from typing import Any
 
+from src.logic.app_paths import get_runtime_root
+
 
 class ChatMessageLog:
     """Store chat turns on disk and return bounded pages for the UI."""
@@ -17,7 +19,7 @@ class ChatMessageLog:
     PAGE_TURNS = 5
 
     def __init__(self, root: Path | None = None) -> None:
-        self.root = root or Path(__file__).resolve().parents[2] / "chat_message_log"
+        self.root = root or Path(get_runtime_root()) / "chat_message_log"
         self._lock = threading.RLock()
 
     @staticmethod
