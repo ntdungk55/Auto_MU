@@ -385,13 +385,13 @@
         "y2": 400
       },
       "layout": {
-        "referenceImagePath": "assets/companion_management_ntd3006.png",
+        "referenceImagePath": "assets/teaching/companion_management/companion_management_ntd3006.png",
         "Anchor": {
           "description": "Tiêu đề dialog Manage Sub-Characters",
           "recognitionType": "image",
           "clickable": false,
           "text": "Manage Sub-Characters",
-          "titleImagePath": "assets/companion_management_title.png",
+          "titleImagePath": "assets/teaching/companion_management/companion_management_title.png",
           "templateThreshold": 0.8,
           "detectedRoi": {
             "x1": 501,
@@ -512,7 +512,7 @@
               "x2": 320,
               "y2": 235
             },
-            "templateImagePath": "assets/companion_management_enter_character.png"
+            "templateImagePath": "assets/teaching/companion_management/companion_management_enter_character.png"
           },
           "goToCharacter": {
             "description": "Button Go to Character",
