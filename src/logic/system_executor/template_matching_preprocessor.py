@@ -4,6 +4,57 @@ import cv2
 import numpy as np
 
 
+def apply_rgb_range_filter_to_bgr(img: np.ndarray, config: dict) -> np.ndarray:
+    """Filter the configured RGB range in HSV while preserving BGR output."""
+    if img is None or img.size == 0:
+        return img
+
+    channel_ranges = (
+        sorted((max(0, min(255, int(config.get("blue_min", 0)))),
+                max(0, min(255, int(config.get("blue_max", 255)))))),
+        sorted((max(0, min(255, int(config.get("green_min", 0)))),
+                max(0, min(255, int(config.get("green_max", 255)))))),
+        sorted((max(0, min(255, int(config.get("red_min", 0)))),
+                max(0, min(255, int(config.get("red_max", 255)))))),
+    )
+    corners_bgr = np.array(
+        [
+            (blue, green, red)
+            for blue in channel_ranges[0]
+            for green in channel_ranges[1]
+            for red in channel_ranges[2]
+        ],
+        dtype=np.uint8,
+    ).reshape(-1, 1, 3)
+    corners_hsv = cv2.cvtColor(corners_bgr, cv2.COLOR_BGR2HSV).reshape(-1, 3)
+    saturation_min = int(corners_hsv[:, 1].min())
+    value_min = int(corners_hsv[:, 2].min())
+
+    hue_ranges: list[tuple[int, int]]
+    if saturation_min == 0:
+        hue_ranges = [(0, 179)]
+    else:
+        hues = np.unique(corners_hsv[:, 0].astype(np.int16))
+        circular_gaps = np.diff(np.r_[hues, hues[0] + 180])
+        gap_index = int(np.argmax(circular_gaps))
+        hue_start = int(hues[(gap_index + 1) % len(hues)])
+        hue_end = int(hues[gap_index])
+        hue_ranges = (
+            [(hue_start, hue_end)]
+            if hue_start <= hue_end
+            else [(0, hue_end), (hue_start, 179)]
+        )
+
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    mask = np.zeros(img.shape[:2], dtype=np.uint8)
+    for hue_min, hue_max in hue_ranges:
+        lower = np.array([hue_min, saturation_min, value_min], dtype=np.uint8)
+        upper = np.array([hue_max, 255, 255], dtype=np.uint8)
+        mask = cv2.bitwise_or(mask, cv2.inRange(hsv, lower, upper))
+
+    return cv2.bitwise_and(img, img, mask=mask)
+
+
 class TemplateMatchingPreprocessor:
     """Builder pattern cho Template Matching preprocessing - cải thiện chất lượng ảnh trước template matching."""
     

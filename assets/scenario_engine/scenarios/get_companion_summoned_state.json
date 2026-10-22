@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "id": "get_companion_summoned_state",
+  "name": "Đọc thông tin nhân vật phụ",
+  "description": "Yêu cầu chỉ đọc/xem/kiểm tra thông tin nhân vật phụ. Khi có nhân vật phụ ở slot 1, mở Manage Sub-Characters nếu chưa mở, verify ảnh tiêu đề rồi đọc tên, Server, Map, Level, Reset và Status theo teaching. Sau khi đọc, click nút X và xác minh dialog đã đóng. Scenario này không yêu cầu Level 400 và không đổi nhân vật.",
+  "selection_rule": "Chọn scenario này cho mọi yêu cầu chỉ lấy hoặc xem thông tin nhân vật phụ. Không chọn scenario đổi nhân vật có điều kiện nếu người dùng không yêu cầu đổi/chuyển nhân vật.",
+  "status": "ready",
+  "preconditions": ["Gemini Chat đã chọn đúng window MU."],
+  "inputs": {},
+  "limits": { "timeout_seconds": 30, "max_steps": 1, "max_tool_calls": 1 },
+  "steps": [
+    {
+      "id": "get_companion_summoned_state",
+      "type": "mcp",
+      "tool": "get_companion_summoned_state",
+      "arguments": {},
+      "save_result_as": "state_result",
+      "assert": ["${state_result.success} == true"],
+      "on_success": "complete",
+      "on_failure": "failed"
+    }
+  ],
+  "result": {
+    "success_message": "Nhân vật phụ hiện tại là ${state_result.character.name}, đang ở máy chủ ${state_result.character.server}, bản đồ ${state_result.character.map}. Cấp độ ${state_result.character.level}, đã reset ${state_result.character.reset}, trạng thái ${state_result.character.status}.",
+    "empty_message": "Slot nhân vật phụ hiện đang trống.",
+    "failure_message": "Tôi chưa đọc chắc chắn được đầy đủ thông tin nhân vật phụ. Hãy nói ngắn gọn trường nào chưa đọc được từ ${state_result.missing_fields} hoặc nguyên nhân trong ${state_result.error}.",
+    "response_rule": "Trả lời bằng câu tiếng Việt tự nhiên dành cho người dùng. Không in key=value, boolean, tên biến, JSON, raw OCR, companion_summoned, missing_fields hoặc dialog_close. Chỉ nêu dữ liệu character khi success=true; nếu thất bại, diễn đạt trường thiếu hoặc lỗi bằng ngôn ngữ thông thường."
+  }
+}

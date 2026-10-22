@@ -1,0 +1,19 @@
+{
+  "settings_version": "0.0.8",
+  "datasets_dir": "D:\\Project\\Auto\\datasets",
+  "weights_dir": "D:\\Project\\Auto\\Auto_MU\\weights",
+  "runs_dir": "D:\\Project\\Auto\\Auto_MU\\runs",
+  "uuid": "c5bc0e45aac91e9e70f18c9b9ad8e4bd99c4927cfdbd97f823a4862d560bc91a",
+  "sync": true,
+  "api_key": "",
+  "openai_api_key": "",
+  "clearml": true,
+  "comet": true,
+  "dvc": true,
+  "mlflow": true,
+  "raytune": true,
+  "tensorboard": false,
+  "wandb": false,
+  "vscode_msg": true,
+  "openvino_msg": true
+}

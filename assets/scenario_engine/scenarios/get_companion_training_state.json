@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "get_companion_training_state",
+  "name": "Kiểm tra nhân vật phụ đang train",
+  "description": "Đọc icon góc dưới phải của companion slot 1: tam giác là đang train, hai vạch là không train.",
+  "selection_rule": "Chọn khi người dùng hỏi nhân vật phụ có đang train hay không.",
+  "status": "ready",
+  "preconditions": ["Gemini Chat đã chọn đúng window MU."],
+  "inputs": {},
+  "limits": {"timeout_seconds": 10, "max_steps": 1, "max_tool_calls": 1},
+  "steps": [{"id": "get_training_state", "type": "mcp", "tool": "get_companion_training_state", "arguments": {}, "save_result_as": "training", "assert": ["${training.success} == true"], "on_success": "complete", "on_failure": "failed"}],
+  "result": {"success_message": "Trạng thái train của nhân vật phụ: ${training.state}.", "failure_message": "Chưa đọc được icon train của nhân vật phụ: ${training.error}."}
+}

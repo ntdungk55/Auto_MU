@@ -54,9 +54,10 @@ class WindowCapture:
 
     _dpi_aware_set = False
 
-    def __init__(self, target_window_hwnd=None, ui_log_func=None):
+    def __init__(self, target_window_hwnd=None, ui_log_func=None, debug_output: bool = True):
         self.target_window_hwnd = target_window_hwnd
         self.ui_log = ui_log_func or (lambda x: None)
+        self.debug_output = bool(debug_output)
 
         if not WindowCapture._dpi_aware_set:
             _set_dpi_awareness()
@@ -68,10 +69,11 @@ class WindowCapture:
 
     def _log_debug(self, message: str) -> None:
         """Emit lightweight capture diagnostics."""
-        try:
-            print(f"[WindowCapture] {message}")
-        except Exception:
-            pass
+        if self.debug_output:
+            try:
+                print(f"[WindowCapture] {message}")
+            except Exception:
+                pass
         try:
             self.ui_log(f"<span style='color:gray;'>[WindowCapture]</span> {message}")
         except Exception:
@@ -139,7 +141,10 @@ class WindowCapture:
                 screen_dc = win32gui.GetWindowDC(0)
                 screen_mfc = win32ui.CreateDCFromHandle(screen_dc)
                 bitblt_started = time.perf_counter()
-                result = saveDC.BitBlt((0, 0), (width, height), screen_mfc, client_pos, win32con.SRCCOPY)
+                # pywin32 returns None on a successful BitBlt call and raises
+                # an exception on failure. Treat a completed call as success.
+                saveDC.BitBlt((0, 0), (width, height), screen_mfc, client_pos, win32con.SRCCOPY)
+                result = True
                 self._log_debug(
                     f"BitBlt result={bool(result)} elapsed_ms={(time.perf_counter() - bitblt_started) * 1000:.2f}"
                 )

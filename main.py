@@ -56,8 +56,8 @@ from src.logic.window_detector import WindowDetector
 from src.logic.tool_manager import ToolManager, Tool
 from src.ui.tool_editor_window import ToolEditorWindow
 from src.ui.tool_settings_dialog import ToolSettingsDialog
-from src.ui.gemini_chat_widget import GeminiChatWidget
-from src.ui.image_preprocessing_widget import ImagePreprocessingWidget
+from src.ui.gemini_chat_widget import AIChatWorkspace
+from src.ui.teaching_algorithm_lab_widget import TeachingAlgorithmLabWidget
 from src.logic.dpapi import protect_to_b64, unprotect_from_b64
 
 try:
@@ -1257,22 +1257,24 @@ class MainWindow(QMainWindow):
         self.stacked_widget.addWidget(self.hotkey_widget)
         self.gemini_widget = self.create_gemini_widget()
         self.stacked_widget.addWidget(self.gemini_widget)
-        self.preprocessing_widget = ImagePreprocessingWidget()
-        self.stacked_widget.addWidget(self.preprocessing_widget)
+        self.teaching_lab_widget = TeachingAlgorithmLabWidget()
+        self.stacked_widget.addWidget(self.teaching_lab_widget)
         self.setCentralWidget(self.stacked_widget)
         self.stacked_widget.setCurrentIndex(0)  # Default to Home
 
-        # Make Gemini key/model available to runtime (actions) even if Gemini tab is never opened.
+        # Make the selected AI provider credentials available to runtime actions.
         try:
-            k = self._get_saved_gemini_key()
-            if k and not os.environ.get("GEMINI_API_KEY"):
-                os.environ["GEMINI_API_KEY"] = k
+            provider = self._get_saved_ai_provider()
+            k = self._get_saved_ai_key(provider)
+            if k:
+                os.environ[f"{provider.upper()}_API_KEY"] = k
+            os.environ["AI_PROVIDER"] = provider
         except Exception:
             pass
         try:
-            m = self._get_saved_gemini_model()
-            if m and not os.environ.get("GEMINI_MODEL_NAME"):
-                os.environ["GEMINI_MODEL_NAME"] = m
+            m = self._get_saved_ai_model(provider)
+            if m:
+                os.environ["AI_MODEL_NAME"] = m
         except Exception:
             pass
 
@@ -1433,24 +1435,24 @@ class MainWindow(QMainWindow):
         self.hotkey_action.triggered.connect(lambda: self.on_toolbar_action_clicked(1))
         toolbar.addAction(self.hotkey_action)
 
-        # Gemini Chat action
-        self.gemini_action = QAction("Gemini Chat", self)
-        self.gemini_action.setToolTip("Chat với Gemini (kéo & thả ảnh để phân tích)")
+        # AI Chat action
+        self.gemini_action = QAction("AI Chat", self)
+        self.gemini_action.setToolTip("Chat với AI (kéo & thả ảnh để phân tích)")
         self.gemini_action.setCheckable(True)
         self.gemini_action.triggered.connect(lambda: self.on_toolbar_action_clicked(2))
         toolbar.addAction(self.gemini_action)
 
         # Image Preprocessing Lab action
-        self.preprocessing_action = QAction("Hiệu chỉnh", self)
-        self.preprocessing_action.setToolTip("Lab xử lý ảnh: test thuật toán preprocessing cho OCR")
-        self.preprocessing_action.setCheckable(True)
-        self.preprocessing_action.triggered.connect(lambda: self.on_toolbar_action_clicked(3))
-        toolbar.addAction(self.preprocessing_action)
+        self.teaching_lab_action = QAction("Hiệu chỉnh", self)
+        self.teaching_lab_action.setToolTip("Tạo teaching image và test thuật toán trên window game")
+        self.teaching_lab_action.setCheckable(True)
+        self.teaching_lab_action.triggered.connect(lambda: self.on_toolbar_action_clicked(3))
+        toolbar.addAction(self.teaching_lab_action)
         
         # Settings menu button (dropdown)
         settings_menu_btn = QToolButton()
         settings_menu_btn.setText("Settings")
-        settings_menu_btn.setToolTip("Cài đặt Telegram & Gemini")
+        settings_menu_btn.setToolTip("Cài đặt Telegram & AI")
         settings_menu_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         
         # Create menu for settings
@@ -1460,7 +1462,7 @@ class MainWindow(QMainWindow):
         telegram_action.triggered.connect(self._open_telegram_settings_dialog)
         settings_menu.addAction(telegram_action)
         
-        gemini_settings_action = QAction("Gemini API Settings", self)
+        gemini_settings_action = QAction("AI Provider Settings", self)
         gemini_settings_action.triggered.connect(self._open_gemini_settings_dialog)
         settings_menu.addAction(gemini_settings_action)
         
@@ -1473,14 +1475,14 @@ class MainWindow(QMainWindow):
                 self.home_action.setChecked(action is self.home_action)
                 self.hotkey_action.setChecked(action is self.hotkey_action)
                 self.gemini_action.setChecked(action is self.gemini_action)
-                self.preprocessing_action.setChecked(action is self.preprocessing_action)
+                self.teaching_lab_action.setChecked(action is self.teaching_lab_action)
             except Exception:
                 pass
 
         self.home_action.triggered.connect(lambda: _set_checked_only(self.home_action))
         self.hotkey_action.triggered.connect(lambda: _set_checked_only(self.hotkey_action))
         self.gemini_action.triggered.connect(lambda: _set_checked_only(self.gemini_action))
-        self.preprocessing_action.triggered.connect(lambda: _set_checked_only(self.preprocessing_action))
+        self.teaching_lab_action.triggered.connect(lambda: _set_checked_only(self.teaching_lab_action))
     
     def on_toolbar_action_clicked(self, index):
         """Xử lý khi click vào toolbar action"""
@@ -1491,9 +1493,9 @@ class MainWindow(QMainWindow):
         elif index == 2:
             self.gemini_action.setChecked(True)
         elif index == 3:
-            self.preprocessing_action.setChecked(True)
+            self.teaching_lab_action.setChecked(True)
         
-        # Chuyển màn hình (chỉ có 4 tabs: Home, Game HotKey, Gemini Chat, Hiệu chỉnh)
+        # Chuyển màn hình chính.
         self.stacked_widget.setCurrentIndex(index)
 
         # Nếu về Home thì đóng tất cả các dialog/cửa sổ phụ để tránh lạc UI
@@ -1501,14 +1503,51 @@ class MainWindow(QMainWindow):
             self.close_all_child_windows()
 
     def create_gemini_widget(self):
-        """Tạo widget cho màn hình Gemini Chat."""
-        return GeminiChatWidget(
-            load_saved_key=self._get_saved_gemini_key,
-            save_key=self._save_gemini_key,
-            clear_saved_key=self._clear_saved_gemini_key,
-            load_saved_model=self._get_saved_gemini_model,
-            save_model=self._save_gemini_model,
+        """Tạo widget cho màn hình AI Chat."""
+        return AIChatWorkspace(
+            load_saved_key=self._get_saved_ai_key,
+            save_key=self._save_ai_key,
+            clear_saved_key=self._clear_saved_ai_key,
+            load_saved_model=self._get_saved_ai_model,
+            save_model=self._save_ai_model,
+            load_saved_provider=self._get_saved_ai_provider,
+            save_provider=self._save_ai_provider,
+            load_auto_messages_for_target=self._load_ai_auto_messages_for_target,
+            save_auto_messages_for_target=self._save_ai_auto_messages_for_target,
+            load_event_registrations_for_target=self._load_ai_event_registrations_for_target,
+            save_event_registrations_for_target=self._save_ai_event_registrations_for_target,
+            load_ai_settings_for_target=self._load_ai_settings_for_target,
+            save_ai_settings_for_target=self._save_ai_settings_for_target,
+            create_ai_process_controller=self._create_ai_process_controller,
         )
+
+    def _create_ai_process_controller(self, provider: str, api_key: str, model_name: str):
+        """Create the event-AI controller with all configured providers."""
+        from samples.ai_game_controller.main import create_ai_process_controller
+
+        if provider == "ollama":
+            provider_configs = {
+                "ollama": {
+                    "model_name": model_name or "gemma4:e2b",
+                    "base_url": os.environ.get("OLLAMA_BASE_URL", "https://myllm.mcp88.uk/v1"),
+                    "cf_access_client_id": os.environ.get("CF_ACCESS_CLIENT_ID", ""),
+                    "cf_access_client_secret": os.environ.get("CF_ACCESS_CLIENT_SECRET", ""),
+                }
+            }
+        else:
+            provider_configs = {
+                provider: {
+                    "api_key": api_key,
+                    "model_name": model_name,
+                }
+            }
+        controller, _ = create_ai_process_controller(
+            provider=provider,
+            api_key=api_key,
+            model_name=model_name,
+            provider_configs=provider_configs,
+        )
+        return controller
     
     def _open_telegram_settings_dialog(self):
         """Mở dialog cài đặt Telegram."""
@@ -1517,16 +1556,213 @@ class MainWindow(QMainWindow):
         dialog.exec()
     
     def _open_gemini_settings_dialog(self):
-        """Mở dialog cài đặt Gemini."""
-        from src.ui.gemini_settings_dialog import GeminiSettingsDialog
-        dialog = GeminiSettingsDialog(
-            load_saved_key=self._get_saved_gemini_key,
-            save_key=self._save_gemini_key,
-            load_saved_model=self._get_saved_gemini_model,
-            save_model=self._save_gemini_model,
-            parent=self
-        )
-        dialog.exec()
+        """Mở dialog cài đặt AI dùng chung với tab chat."""
+        self.gemini_widget._open_settings()
+
+    def _get_saved_ai_provider(self) -> str:
+        return str(self._load_app_state().get("ai_provider", "openrouter") or "openrouter").strip().casefold()
+
+    def _save_ai_provider(self, provider: str) -> None:
+        provider = str(provider or "openrouter").strip().casefold()
+        if provider not in {"openrouter", "gemini", "ollama"}:
+            raise ValueError(f"AI provider không hỗ trợ: {provider}")
+        state = self._load_app_state()
+        state["ai_provider"] = provider
+        self._save_app_state(state)
+        os.environ["AI_PROVIDER"] = provider
+
+    def _save_ai_auto_messages(self, messages: list[dict]) -> None:
+        state = self._load_app_state()
+        state["ai_auto_messages"] = messages
+        self._save_app_state(state)
+
+    def _load_ai_event_registrations_for_target(self, target: object) -> list[dict]:
+        """Load shared event definitions with enablement isolated per target."""
+        if target is None:
+            return []
+        state = self._load_app_state()
+        definitions = state.get("ai_event_registrations", [])
+        if not isinstance(definitions, list) or not definitions:
+            legacy = state.get("ai_event_registrations_by_process", {})
+            if isinstance(legacy, dict):
+                merged: dict[str, dict] = {}
+                for candidate in legacy.values():
+                    if isinstance(candidate, list):
+                        for item in candidate:
+                            if isinstance(item, dict) and item.get("event_id"):
+                                merged.setdefault(str(item["event_id"]), dict(item))
+                definitions = list(merged.values())
+        definitions = [dict(item) for item in definitions if isinstance(item, dict) and item.get("event_id")]
+        enabled_by_process = state.get("ai_event_enabled_by_process", {})
+        key = self._ai_process_key(target)
+        enabled = enabled_by_process.get(key, {}) if isinstance(enabled_by_process, dict) else {}
+        result = []
+        for item in definitions:
+            event_id = str(item["event_id"])
+            value = dict(item)
+            value["enabled"] = bool(enabled.get(event_id, False)) if isinstance(enabled, dict) else False
+            result.append(value)
+        return result
+
+    def _save_ai_event_registrations_for_target(self, target: object, events: list[dict]) -> None:
+        """Persist shared definitions and only this target's enabled flags."""
+        state = self._load_app_state()
+        old_definitions = state.get("ai_event_registrations", [])
+        old_by_id = {
+            str(item.get("event_id")): item for item in old_definitions
+            if isinstance(item, dict) and item.get("event_id")
+        } if isinstance(old_definitions, list) else {}
+        definitions = []
+        enabled = {}
+        for item in events:
+            if not item.get("event_id"):
+                continue
+            event_id = str(item["event_id"])
+            definition = dict(item)
+            if event_id in old_by_id:
+                definition["enabled"] = bool(old_by_id[event_id].get("enabled", True))
+            else:
+                definition["enabled"] = bool(item.get("enabled", True))
+            definitions.append(definition)
+            enabled[event_id] = bool(item.get("enabled", True))
+        state["ai_event_registrations"] = definitions
+        enabled_by_process = state.setdefault("ai_event_enabled_by_process", {})
+        if isinstance(enabled_by_process, dict):
+            enabled_by_process[self._ai_process_key(target)] = enabled
+        self._save_app_state(state)
+
+    @staticmethod
+    def _ai_process_key(target: object) -> str:
+        return str(int(getattr(target, "hwnd", 0) or 0))
+
+    def _load_ai_auto_messages_for_target(self, target: object) -> list[dict]:
+        state = self._load_app_state()
+        definitions = state.get("ai_auto_messages", [])
+        schedules = state.get("ai_auto_schedules_by_process", {}).get(self._ai_process_key(target), {})
+        legacy_rules = state.get("ai_auto_messages_by_process", {}).get(self._ai_process_key(target), [])
+        if not isinstance(definitions, list):
+            definitions = []
+        if not isinstance(schedules, dict):
+            schedules = {}
+        if not definitions and isinstance(legacy_rules, list):
+            definitions = legacy_rules
+            schedules = {str(rule.get("id")): dict(rule) for rule in legacy_rules if isinstance(rule, dict) and rule.get("id")}
+        rules = []
+        for definition in definitions:
+            if not isinstance(definition, dict) or not definition.get("id") or not definition.get("text"):
+                continue
+            rule_id = str(definition["id"])
+            rules.append({"id": rule_id, "text": str(definition["text"]), **dict(schedules.get(rule_id, {}))})
+        return rules
+
+    def _save_ai_auto_messages_for_target(self, target: object, messages: list[dict]) -> None:
+        state = self._load_app_state()
+        state["ai_auto_messages"] = [
+            {"id": str(rule.get("id") or ""), "text": str(rule.get("text") or "")}
+            for rule in messages if rule.get("id") and rule.get("text")
+        ]
+        by_process = state.setdefault("ai_auto_schedules_by_process", {})
+        by_process[self._ai_process_key(target)] = {
+            str(rule["id"]): {
+                "enabled": bool(rule.get("enabled", False)),
+                "kind": str(rule.get("kind", "interval")),
+                "interval_seconds": int(rule.get("interval_seconds", 300)),
+                "time": str(rule.get("time", "00:00")),
+            }
+            for rule in messages if rule.get("id")
+        }
+        self._save_app_state(state)
+
+    def _load_ai_settings_for_target(self, target: object) -> dict[str, object]:
+        state = self._load_app_state()
+        settings = state.get("ai_chat_settings_by_process", {}).get(self._ai_process_key(target), {})
+        if not isinstance(settings, dict):
+            settings = {}
+        provider = str(settings.get("provider", self._get_saved_ai_provider()) or "openrouter").strip().casefold()
+        model = str(settings.get("model", "") or "").strip()
+        if not model:
+            model = self._get_saved_ai_model(provider)
+        enabled_states = settings.get("window_state_enabled")
+        return {
+            "provider": provider,
+            "model": model,
+            "window_state_enabled": (
+                list(enabled_states) if isinstance(enabled_states, list) else None
+            ),
+        }
+
+    def _save_ai_settings_for_target(
+        self,
+        target: object,
+        provider: str,
+        model: str,
+        window_state_enabled: list[str] | None = None,
+    ) -> None:
+        clean_provider = str(provider or "").strip().casefold()
+        clean_model = str(model or "").strip()
+        if clean_provider not in {"openrouter", "gemini", "ollama"}:
+            raise ValueError("Provider của tab AI Chat không hợp lệ")
+        state = self._load_app_state()
+        by_process = state.setdefault("ai_chat_settings_by_process", {})
+        process_key = self._ai_process_key(target)
+        settings = dict(by_process.get(process_key, {}) or {})
+        settings.update({
+            "provider": clean_provider,
+            "model": clean_model,
+        })
+        if window_state_enabled is not None:
+            settings["window_state_enabled"] = [
+                str(name) for name in window_state_enabled
+            ]
+        by_process[process_key] = settings
+        self._save_app_state(state)
+
+    def _get_saved_ai_key(self, provider: str) -> str:
+        provider = str(provider or "openrouter").strip().casefold()
+        state = self._load_app_state()
+        b64 = str(state.get(f"{provider}_api_key_dpapi_b64", "") or "")
+        if not b64:
+            return ""
+        try:
+            return unprotect_from_b64(b64)
+        except Exception:
+            return ""
+
+    def _save_ai_key(self, provider: str, plaintext_key: str) -> None:
+        provider = str(provider or "openrouter").strip().casefold()
+        key = str(plaintext_key or "").strip()
+        if not key:
+            return
+        state = self._load_app_state()
+        state[f"{provider}_api_key_dpapi_b64"] = protect_to_b64(key)
+        self._save_app_state(state)
+        os.environ[f"{provider.upper()}_API_KEY"] = key
+
+    def _clear_saved_ai_key(self, provider: str) -> None:
+        state = self._load_app_state()
+        state.pop(f"{str(provider or '').strip().casefold()}_api_key_dpapi_b64", None)
+        self._save_app_state(state)
+
+    def _get_saved_ai_model(self, provider: str) -> str:
+        provider = str(provider or "openrouter").strip().casefold()
+        state = self._load_app_state()
+        return str(state.get(f"{provider}_model_name", state.get("ai_model_name", "")) or "")
+
+    def _save_ai_model(self, provider: str, model_name: str) -> None:
+        provider = str(provider or "openrouter").strip().casefold()
+        model_name = str(model_name or "").strip()
+        state = self._load_app_state()
+        state_key = f"{provider}_model_name"
+        if model_name:
+            state[state_key] = model_name
+        else:
+            state[state_key] = ""
+        self._save_app_state(state)
+        if provider == self._get_saved_ai_provider():
+            if model_name:
+                os.environ["AI_MODEL_NAME"] = model_name
+            else:
+                os.environ.pop("AI_MODEL_NAME", None)
 
     def _get_saved_gemini_key(self) -> str:
         """Load Gemini API key from app_state.json (DPAPI-protected)."""
@@ -3049,6 +3285,10 @@ J) GHI CHÚ QUAN TRỌNG (ĐỠ BỊ “SAI PHÍM”)
                     type_item.setForeground(QBrush(QColor("#888888")))
 
 if __name__ == "__main__":
+    if "--mcp-notifications-server" in sys.argv:
+        from src.ai_control.servers.notifications import run_notifications_mcp_server
+        run_notifications_mcp_server()
+        raise SystemExit(0)
     import traceback
     import logging
     from datetime import datetime
@@ -3056,6 +3296,10 @@ if __name__ == "__main__":
     # Setup logging to file
     log_dir = "logs"
     os.makedirs(log_dir, exist_ok=True)
+    from src.logic.log_manager import LogManager
+    removed_logs = LogManager(log_dir=log_dir, retention_days=7).cleanup_old_logs()
+    if removed_logs:
+        print(f"[LogManager] Startup cleanup: deleted {removed_logs} log files older than 7 days")
     log_file = os.path.join(log_dir, f"app_errors_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
     
     logging.basicConfig(

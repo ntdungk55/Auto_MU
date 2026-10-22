@@ -3,9 +3,47 @@ Telegram Bot notification service
 """
 import requests
 import logging
+import json
+import os
+from pathlib import Path
 from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+
+def _configured_state_path() -> Path:
+    """Return the legacy app-state path used by Telegram Settings."""
+    return Path(__file__).resolve().parents[2] / "app_state.json"
+
+
+def load_configured_credentials() -> tuple[str, str]:
+    """Load Telegram credentials from the existing settings or environment."""
+    bot_token = ""
+    chat_id = ""
+    try:
+        state = json.loads(_configured_state_path().read_text(encoding="utf-8"))
+        token_b64 = str(state.get("telegram_bot_token_dpapi_b64", "") or "")
+        if token_b64:
+            try:
+                from src.logic.dpapi import unprotect_from_b64
+                bot_token = str(unprotect_from_b64(token_b64) or "")
+            except Exception:
+                bot_token = ""
+        if not bot_token:
+            bot_token = str(state.get("telegram_bot_token", "") or "")
+        chat_id = str(state.get("telegram_chat_id", "") or "")
+    except Exception:
+        pass
+    return (
+        bot_token.strip() or os.environ.get("TELEGRAM_BOT_TOKEN", "").strip(),
+        chat_id.strip() or os.environ.get("TELEGRAM_CHAT_ID", "").strip(),
+    )
+
+
+def send_configured_message(text: str) -> Tuple[bool, str]:
+    """Send configured AI text without interpreting user content as HTML."""
+    bot_token, chat_id = load_configured_credentials()
+    return TelegramNotifier.send_message(bot_token, chat_id, text, parse_mode=None)
 
 
 class TelegramNotifier:
@@ -14,7 +52,12 @@ class TelegramNotifier:
     BASE_URL = "https://api.telegram.org/bot{token}/{method}"
     
     @staticmethod
-    def send_message(bot_token: str, chat_id: str, text: str, parse_mode: str = "HTML") -> Tuple[bool, str]:
+    def send_message(
+        bot_token: str,
+        chat_id: str,
+        text: str,
+        parse_mode: Optional[str] = "HTML",
+    ) -> Tuple[bool, str]:
         """
         Send text message to Telegram chat
         
@@ -40,8 +83,16 @@ class TelegramNotifier:
         
         try:
             response = requests.post(url, json=payload, timeout=10)
-            response.raise_for_status()
-            data = response.json()
+            try:
+                data = response.json()
+            except ValueError:
+                data = {}
+
+            if response.status_code >= 400:
+                description = str(data.get("description") or response.reason or "Unknown error")
+                error_msg = f"Telegram API {response.status_code}: {description}"
+                logger.error(f"Telegram send failed: {error_msg}")
+                return False, error_msg
             
             if data.get("ok"):
                 logger.info(f"Telegram message sent to {chat_id}")

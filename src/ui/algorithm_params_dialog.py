@@ -18,7 +18,7 @@ class AlgorithmParamsDialog(QDialog):
             current_params: Current parameter values
             algo_params_def: Parameter definitions from ALGORITHMS
             original_image: Original image for preview
-            parent_widget: Reference to ImagePreprocessingWidget
+            parent_widget: Reference to the teaching algorithm lab widget
             pipeline_index: Index of this algorithm in pipeline
         """
         super().__init__(parent_widget)
@@ -39,8 +39,9 @@ class AlgorithmParamsDialog(QDialog):
     
     def _get_algo_name(self) -> str:
         """Get algorithm display name."""
-        from .image_preprocessing_widget import ImagePreprocessingWidget
-        return ImagePreprocessingWidget.ALGORITHMS.get(self.algo_id, {}).get("name", self.algo_id)
+        from .multi_image_algorithm_testing_dialog import DEFAULT_ALGORITHMS
+        algorithm = next((item for item in DEFAULT_ALGORITHMS if item.get("id") == self.algo_id), None)
+        return str((algorithm or {}).get("name", self.algo_id))
     
     def _init_ui(self):
         """Initialize the UI."""

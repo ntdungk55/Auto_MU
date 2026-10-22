@@ -30,7 +30,13 @@ class AutoAction:
     action_type: ActionType
     mode: ActionMode
     value: str = ""
+    text_input_enabled: bool = False
     image_path: Optional[str] = None
+    yolo_enabled: bool = False
+    yolo_model_path: str = ""
+    yolo_confidence: float = 0.25
+    yolo_iou: float = 0.45
+    yolo_class_ids: list[int] = field(default_factory=list)
     enable_post_key_image_check: bool = False
     post_key_check_delay: float = 1.0
     post_key_retry_count: int = 0

@@ -1,0 +1,616 @@
+{
+  "profile": "mu_gamethuvn_season_21",
+  "window_title_prefix": "MU GamethuVN - Season 21",
+  "client_area": {
+    "width": 800,
+    "height": 600
+  },
+  "coordinate_system": {
+    "origin": "client_top_left",
+    "x_min": 0,
+    "x_max": 799,
+    "y_min": 0,
+    "y_max": 599
+  },
+  "outer_window_reference": {
+    "width": 816,
+    "height": 639,
+    "reference_only": true
+  },
+  "capture": {
+    "area": "client",
+    "require_exact_client_size_before_recognition": true
+  },
+  "mainInfo": {
+    "channel": {
+      "description": "Kênh",
+      "recognitionType": "text",
+      "valuePattern": "CH /xxx",
+      "clickable": true,
+      "roi": {
+        "x1": 8,
+        "y1": 0,
+        "x2": 50,
+        "y2": 20
+      }
+    },
+    "map": {
+      "description": "Bản đồ",
+      "recognitionType": "text",
+      "valuePattern": "/text",
+      "clickable": false,
+      "roi": {
+        "x1": 55,
+        "y1": 0,
+        "x2": 116,
+        "y2": 20
+      }
+    },
+    "position": {
+      "description": "Tọa độ nhân vật",
+      "recognitionType": "text",
+      "valuePattern": "/xxx,/yyy",
+      "clickable": false,
+      "roi": {
+        "x1": 115,
+        "y1": 0,
+        "x2": 162,
+        "y2": 20
+      }
+    },
+    "level": {
+      "description": "Cấp độ",
+      "recognitionType": "text",
+      "valuePattern": "/xxx.lv",
+      "clickable": false,
+      "roi": {
+        "x1": 25,
+        "y1": 21,
+        "x2": 63,
+        "y2": 40
+      }
+    },
+    "masterLevel": {
+      "description": "Master level",
+      "recognitionType": "text",
+      "valuePattern": "/xxx.mt",
+      "clickable": false,
+      "roi": {
+        "x1": 62,
+        "y1": 21,
+        "x2": 91,
+        "y2": 40
+      }
+    },
+    "resetCount": {
+      "description": "Số lần reset",
+      "recognitionType": "text",
+      "valuePattern": "/xxx.rs",
+      "clickable": false,
+      "roi": {
+        "x1": 90,
+        "y1": 21,
+        "x2": 130,
+        "y2": 40
+      }
+    },
+    "pkStatus": {
+      "description": "Trạng thái PK của nhân vật",
+      "recognitionType": "text",
+      "valuePattern": "/text",
+      "clickable": true,
+      "roi": {
+        "x1": 175,
+        "y1": 10,
+        "x2": 236,
+        "y2": 31
+      }
+    },
+    "autoPlayManagement": {
+      "description": "Button AutoPlayManagement. A crown means stopped; two vertical bars mean running.",
+      "recognitionType": "image",
+      "clickable": true,
+      "iconRoiRelative": {"x1": 8, "y1": 8, "x2": 23, "y2": 23},
+      "edgeMatching": true,
+      "edgeThreshold": 0.5,
+      "stateTemplates": {
+        "stopped": {
+          "path": "assets/autoplay_management_stopped.png",
+          "threshold": 0.7
+        },
+        "running": {
+          "path": "assets/autoplay_management_running.png",
+          "threshold": 0.7
+        }
+      },
+      "roi": {
+        "x1": 143,
+        "y1": 18,
+        "x2": 174,
+        "y2": 48
+      }
+    },
+    "resetScreenRoom": {
+      "description": "Button reset screen room",
+      "recognitionType": "image",
+      "clickable": true,
+      "roi": {
+        "x1": 291,
+        "y1": 7,
+        "x2": 326,
+        "y2": 36
+      }
+    },
+    "time": {
+      "description": "Thời gian",
+      "recognitionType": "text",
+      "valuePattern": "HH:mm:ss",
+      "clickable": false,
+      "roi": {
+        "x1": 5,
+        "y1": 579,
+        "x2": 55,
+        "y2": 599
+      }
+    },
+    "healthBar": {
+      "description": "Thanh máu (máu hiện tại / máu cố định)",
+      "recognitionType": "text",
+      "valuePattern": "/xxx\n/yyy",
+      "clickable": false,
+      "roi": {
+        "x1": 179,
+        "y1": 541,
+        "x2": 220,
+        "y2": 573
+      }
+    },
+    "chatBox": {
+      "description": "Button ChatBox",
+      "recognitionType": "image",
+      "clickable": true,
+      "roi": {
+        "x1": 348,
+        "y1": 516,
+        "x2": 381,
+        "y2": 550
+      }
+    },
+    "autoSetting": {
+      "description": "Button AutoSetting",
+      "recognitionType": "image",
+      "clickable": true,
+      "roi": {
+        "x1": 383,
+        "y1": 516,
+        "x2": 418,
+        "y2": 550
+      }
+    },
+    "autoState": {
+      "description": "Button AutoState. A right-pointing triangle means stopped; two vertical bars mean running.",
+      "recognitionType": "image",
+      "clickable": true,
+      "iconRoiRelative": {"x1": 4, "y1": 4, "x2": 29, "y2": 30},
+      "edgeMatching": true,
+      "edgeThreshold": 0.5,
+      "stateTemplates": {
+        "stopped": {
+          "path": "assets/auto_state_stopped.png",
+          "threshold": 0.7
+        },
+        "running": {
+          "path": "assets/auto_state_running.png",
+          "threshold": 0.7
+        }
+      },
+      "roi": {
+        "x1": 418,
+        "y1": 516,
+        "x2": 451,
+        "y2": 550
+      }
+    },
+    "companionManagement1": {
+      "description": "Button mở dialog quản lý nhân vật phụ số 1",
+      "recognitionType": "image",
+      "clickable": true,
+      "notSummonedTemplate": "assets/companion_management1_not_summoned.png",
+      "notSummonedThreshold": 0.7,
+      "templateSearchMargin": 6,
+      "stateSampleCount": 3,
+      "stateSampleIntervalMs": 50,
+      "summonedRequiredSamples": 2,
+      "brightnessRoiRelative": {
+        "x1": 4,
+        "y1": 4,
+        "x2": 28,
+        "y2": 29
+      },
+      "brightnessPercentile": 75,
+      "summonedBrightnessThreshold": 75,
+      "lowPowerBrightnessThreshold": 55,
+      "lowPowerIndicatorThreshold": 0.92,
+      "summonedIndicatorTemplates": [
+        {
+          "path": "assets/companion_not_training_state_icon.png",
+          "threshold": 0.7
+        },
+        {
+          "path": "assets/companion_summoned_play_indicator.png",
+          "threshold": 0.7
+        }
+      ],
+      "trainingTeachingSessionId": "20261013_095036_301369",
+      "roi": {
+        "x1": 640,
+        "y1": 529,
+        "x2": 672,
+        "y2": 562
+      }
+    }
+  },
+  "dialogs": {
+    "dialog.advanced.opened": {
+      "text": "Daily Events",
+      "roi": {
+        "x1": 200,
+        "y1": 0,
+        "x2": 600,
+        "y2": 300
+      },
+      "layout": {
+        "referenceImagePath": "assets/daily_events_ntd3006.png",
+        "Anchor": {
+          "description": "Tiêu đề dialog Daily Events",
+          "recognitionType": "image",
+          "clickable": false,
+          "text": "Daily Events",
+          "titleImagePath": "assets/daily_events_title.png",
+          "templateThreshold": 0.7,
+          "detectedRoi": {
+            "x1": 499,
+            "y1": 163,
+            "x2": 573,
+            "y2": 182
+          }
+        },
+        "openKey": "s",
+        "textRecognition": {
+          "engine": "easyocr",
+          "scale": 4,
+          "padding": 8,
+          "minimumConfidence": 0.4
+        },
+        "textRegions": {
+            "boss": {
+              "description": "Boss remaining entries. The only required value is one integer; `Remaining` and the suffix are positional anchors and may contain OCR noise.",
+              "recognitionType": "text",
+              "valuePattern": "\\D*(?<!-)(\\d+)\\D*",
+            "roiRelativeToTitle": {
+              "x1": -161,
+              "y1": 64,
+              "x2": -63,
+              "y2": 78
+            }
+          },
+          "jewel": {
+            "description": "Jewel mining remaining entries",
+            "recognitionType": "text",
+              "valuePattern": "\\D*(?<!-)(\\d+)\\D*",
+            "roiRelativeToTitle": {
+              "x1": -161,
+              "y1": 96,
+              "x2": -63,
+              "y2": 110
+            }
+          },
+          "bc": {
+            "description": "Blood Castle remaining entries",
+            "recognitionType": "text",
+              "valuePattern": "\\D*(?<!-)(\\d+)\\D*",
+            "roiRelativeToTitle": {
+              "x1": -74,
+              "y1": 208,
+              "x2": 26,
+              "y2": 223
+            }
+          },
+          "devil": {
+            "description": "Demon Square remaining entries",
+            "recognitionType": "text",
+              "valuePattern": "\\D*(?<!-)(\\d+)\\D*",
+            "roiRelativeToTitle": {
+              "x1": -74,
+              "y1": 224,
+              "x2": 26,
+              "y2": 240
+            }
+          },
+          "ig": {
+            "description": "Imperial Guardian (IG) remaining entries",
+            "recognitionType": "text",
+              "valuePattern": "\\D*(?<!-)(\\d+)\\D*",
+            "roiRelativeToTitle": {
+              "x1": -74,
+              "y1": 241,
+              "x2": 26,
+              "y2": 257
+            }
+          }
+        },
+        "buttons": {
+          "close": {
+            "description": "Close Daily Events with the top-right X",
+            "clickable": true,
+            "roiRelativeToTitle": {
+              "x1": 241,
+              "y1": -3,
+              "x2": 263,
+              "y2": 19
+            }
+          }
+        }
+      }
+    },
+    "dialog.autoplay_management.opened": {
+      "text": "Autoplay Management",
+      "layout": {
+        "Anchor": {
+          "description": "Autoplay Management dialog title",
+          "titleImagePath": "assets/autoplay_management_title.png",
+          "templateThreshold": 0.7
+        },
+        "buttons": {
+          "saveAndStart": {
+            "description": "Save and Start button",
+            "templateImagePath": "assets/autoplay_management_save_and_start.png",
+            "templateThreshold": 0.7,
+            "roiRelativeToTitle": {
+              "x1": -8,
+              "y1": 312,
+              "x2": 142,
+              "y2": 372
+            }
+          }
+        }
+      }
+    },
+    "dialog.companion_management.opened": {
+      "text": "Manage Sub-Characters",
+      "roi": {
+        "x1": 150,
+        "y1": 0,
+        "x2": 650,
+        "y2": 400
+      },
+      "layout": {
+        "referenceImagePath": "assets/companion_management_ntd3006.png",
+        "Anchor": {
+          "description": "Tiêu đề dialog Manage Sub-Characters",
+          "recognitionType": "image",
+          "clickable": false,
+          "text": "Manage Sub-Characters",
+          "titleImagePath": "assets/companion_management_title.png",
+          "templateThreshold": 0.8,
+          "detectedRoi": {
+            "x1": 501,
+            "y1": 105,
+            "x2": 638,
+            "y2": 132
+          },
+          "dialogOriginOffset": {
+            "x": -158,
+            "y": -10
+          }
+        },
+        "textRegions": {
+          "characterName": {
+            "description": "Character value",
+            "recognitionType": "text",
+            "valuePattern": "/text",
+            "roiRelativeToTitle": {
+              "x1": 151,
+              "y1": 52,
+              "x2": 278,
+              "y2": 66
+            }
+          },
+          "server": {
+            "description": "Server value",
+            "recognitionType": "text",
+            "valuePattern": "/text",
+            "scale": 4,
+            "allowlist": "0123456789",
+            "roiRelativeToTitle": {
+              "x1": 151,
+              "y1": 66,
+              "x2": 278,
+              "y2": 78
+            }
+          },
+          "map": {
+            "description": "Map value",
+            "recognitionType": "text",
+            "valuePattern": "/text",
+            "roiRelativeToTitle": {
+              "x1": 151,
+              "y1": 78,
+              "x2": 278,
+              "y2": 90
+            }
+          },
+          "level": {
+            "description": "Level value. The canonical value is xxx.lv or xxx.mt; ignore the percentage or any other text in parentheses.",
+            "recognitionType": "text",
+            "valuePattern": "/xxx.(lv|mt)",
+            "normalization": {
+              "discardParenthesizedText": true,
+              "acceptedSuffixes": ["lv", "mt"],
+              "suffixCorrections": {
+                "1v": "lv",
+                "iv": "lv"
+              }
+            },
+            "scale": 4,
+            "fallbackVerticalOffsets": [13, -13],
+            "roiRelativeToTitle": {
+              "x1": 151,
+              "y1": 90,
+              "x2": 278,
+              "y2": 103
+            }
+          },
+          "reset": {
+            "description": "Reset value",
+            "recognitionType": "text",
+            "valuePattern": "/text",
+            "roiRelativeToTitle": {
+              "x1": 151,
+              "y1": 103,
+              "x2": 278,
+              "y2": 115
+            }
+          },
+          "status": {
+            "description": "Status value",
+            "recognitionType": "text",
+            "valuePattern": "/text",
+            "roiRelativeToTitle": {
+              "x1": 151,
+              "y1": 115,
+              "x2": 278,
+              "y2": 129
+            }
+          }
+        },
+        "buttons": {
+          "autoAttack": {
+            "description": "Button Auto Attack",
+            "recognitionType": "image",
+            "roi": {
+              "x1": 220,
+              "y1": 182,
+              "x2": 320,
+              "y2": 207
+            }
+          },
+          "callCharacterTo": {
+            "description": "Button Call character to",
+            "roi": {
+              "x1": 326,
+              "y1": 182,
+              "x2": 426,
+              "y2": 207
+            }
+          },
+          "enterCharacter": {
+            "description": "Button Enter Character",
+            "roi": {
+              "x1": 220,
+              "y1": 210,
+              "x2": 320,
+              "y2": 235
+            },
+            "templateImagePath": "assets/companion_management_enter_character.png"
+          },
+          "goToCharacter": {
+            "description": "Button Go to Character",
+            "roi": {
+              "x1": 326,
+              "y1": 210,
+              "x2": 426,
+              "y2": 235
+            }
+          },
+          "exitCharacter": {
+            "description": "Button Exit Character",
+            "roi": {
+              "x1": 220,
+              "y1": 238,
+              "x2": 320,
+              "y2": 263
+            }
+          },
+          "close": {
+            "description": "Button đóng dialog Manage Sub-Characters",
+            "roi": {
+              "x1": 404,
+              "y1": 7,
+              "x2": 432,
+              "y2": 31
+            }
+          }
+        },
+        "textRecognition": {
+          "engine": "winrt",
+          "fallbackEngine": "easyocr",
+          "scale": 2,
+          "padding": 8,
+          "minimumConfidence": 0.3
+        }
+      }
+    },
+    "dialog.character_list.opened": {
+      "text": "Character List",
+      "roi": {
+        "x1": 200,
+        "y1": 0,
+        "x2": 400,
+        "y2": 250
+      },
+      "layout": {
+        "referenceImagePath": "assets/character_list_dialog.png",
+        "Anchor": {
+          "description": "Tiêu đề dialog Character List",
+          "clickable": false,
+          "text": "Character List",
+          "titleImagePath": "assets/character_list_title.png",
+          "templateThreshold": 0.7,
+          "detectedRoi": {
+            "x1": 233,
+            "y1": 205,
+            "x2": 316,
+            "y2": 224
+          }
+        },
+        "textRegions": {
+          "characterList": {
+            "description": "Danh sách nhân vật có thể triệu hồi; ROI tính tương đối từ góc trên-trái tiêu đề Character List, bắt đầu dưới Summon Fee và kết thúc trước Automatically summon the main...",
+            "valuePattern": "/text",
+            "roi": {
+              "x1": 67,
+              "y1": 75,
+              "x2": 292,
+              "y2": 280
+            }
+          }
+        },
+        "buttons": {
+          "close": {
+            "description": "Button đóng dialog Character List; ROI tính tương đối từ góc trên-trái tiêu đề Character List",
+            "roi": {
+              "x1": 266,
+              "y1": -2,
+              "x2": 289,
+              "y2": 20
+            }
+          }
+        }
+      }
+    }
+  },
+  "notes": [
+    "Use client-area coordinates for screenshot capture, OCR, and image recognition.",
+    "Do not persist HWND, PID, or window position because they change between game sessions.",
+    "Calculate the outer window size from the current window style instead of relying on the reference size.",
+    "In valuePattern, /xxx, /yyy, and /zzz represent variable numeric values in their appearance order.",
+    "In valuePattern, /text represents variable text.",
+    "Any content in valuePattern that is not a slash placeholder is fixed text used to validate and normalize OCR output.",
+    "The HH:mm:ss valuePattern represents a 24-hour time value.",
+    "For healthBar, the first numeric line is current health and the second numeric line is fixed or maximum health.",
+    "A mainInfo item with recognitionType set to text is detected by OCR and must define valuePattern.",
+    "A mainInfo item with recognitionType set to image is detected by image matching and does not require valuePattern.",
+    "dialogs contain dialog teaching data, including text checks, reference images, title templates, and layouts; they are used only for requested dialog actions and verification, not normal state polling."
+  ]
+}

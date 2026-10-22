@@ -15,12 +15,22 @@ from datetime import datetime
 # Import modular components
 from .ocr_engine import OCRFactory
 from .ocr_preprocessor import OCRPreprocessor
-from .template_matching_preprocessor import TemplateMatchingPreprocessor
+from .template_matching_preprocessor import (
+    TemplateMatchingPreprocessor,
+    apply_rgb_range_filter_to_bgr,
+)
 from .window_capture import WindowCapture
 from .mouse_controller import MouseController
 from .gemini_processor import GeminiProcessor
 from .telegram_notifier import TelegramNotifier
 from .text_filter import TextFilter
+
+try:
+    from ..vision.yolo import YoloDetector
+    from ..vision.yolo.exceptions import YoloError
+except ImportError:
+    from logic.vision.yolo import YoloDetector
+    from logic.vision.yolo.exceptions import YoloError
 
 # Import from parent logic module
 try:
@@ -694,6 +704,9 @@ class SystemExecutor:
                 config = algo.get("config", {})
                 if not config:
                     continue
+
+                if config.get("rgb_range_filter"):
+                    preprocessor.img = apply_rgb_range_filter_to_bgr(preprocessor.img, config)
                 
                 # Apply binary threshold first if specified
                 if config.get("binary_threshold"):
@@ -3197,6 +3210,39 @@ class SystemExecutor:
                 return False
 
         elif action.action_type == ActionType.IMAGE_DETECT:
+            if bool(getattr(action, "yolo_enabled", False)):
+                self._ui_log("<b>[YOLO]</b> Đang nhận diện bằng model ONNX CPU...")
+                screenshot = self.capture_window_screenshot()
+                if screenshot is None:
+                    self._ui_log("<b style='color:red;'>[YOLO]</b> Không thể chụp target window")
+                    return False
+                try:
+                    detector = YoloDetector(
+                        model_path=getattr(action, "yolo_model_path", "") or None,
+                    )
+                    detections = detector.detect(
+                        screenshot,
+                        confidence=float(getattr(action, "yolo_confidence", 0.25) or 0.25),
+                        iou=float(getattr(action, "yolo_iou", 0.45) or 0.45),
+                        class_ids=getattr(action, "yolo_class_ids", None),
+                    )
+                except YoloError as exc:
+                    self._ui_log(f"<b style='color:red;'>[YOLO]</b> {self._escape_html(str(exc))}")
+                    return False
+                except Exception as exc:
+                    self._ui_log(f"<b style='color:red;'>[YOLO]</b> Lỗi không xác định: {self._escape_html(str(exc))}")
+                    return False
+
+                if not detections:
+                    self._ui_log("<b style='color:red;'>[YOLO]</b> Không phát hiện đối tượng phù hợp")
+                    return False
+                summary = ", ".join(
+                    f"{item.class_name or item.class_id}:{item.confidence:.3f}"
+                    for item in detections
+                )
+                self._ui_log(f"<b style='color:green;'>[YOLO]</b> Phát hiện {len(detections)} đối tượng: {summary}")
+                return True
+
             if not action.image_path or not os.path.exists(action.image_path):
                 self._ui_log("<b style='color:red;'>[Detect]</b> Thất bại: chưa cấu hình ảnh template")
                 return False

@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "id": "get_daily_events_dialog_info",
+  "name": "Đọc lượt Daily Events",
+  "description": "Mở Daily Events nếu cần, verify ảnh tiêu đề rồi đọc lượt Boss, đào ngọc, BC, Devil và IG theo teaching. Đọc xong click X và xác minh dialog đã đóng, kể cả khi OCR lỗi.",
+  "status": "ready",
+  "preconditions": [
+    "Gemini Chat đã chọn window MU GameThuVN; app đồng bộ PID/HWND bằng hàm nội bộ.",
+    "Teaching có ảnh tiêu đề Daily Events và năm textRegions cho các lượt còn lại."
+  ],
+  "inputs": {},
+  "limits": {
+    "timeout_seconds": 30,
+    "max_steps": 1,
+    "max_tool_calls": 1
+  },
+  "steps": [
+    {
+      "id": "get_daily_events_dialog_info",
+      "type": "mcp",
+      "tool": "get_daily_events_dialog_info",
+      "arguments": {},
+      "save_result_as": "daily_events_result",
+      "assert": [
+        "${daily_events_result.success} == true",
+        "${daily_events_result.verification.success} == true",
+        "${daily_events_result.dialog_close.closed} == true"
+      ],
+      "on_success": "complete",
+      "on_failure": "failed"
+    }
+  ],
+  "expected": {
+    "success": {
+      "remaining": "Five integer counters in boss, jewel, bc, devil and ig; zero is valid",
+      "verification": "Daily Events title matched before reading the same captured frame"
+    },
+    "failure": {
+      "error": "success=false with an error; unread fields are null and listed in missing_fields"
+    }
+  },
+  "result": {
+    "success_message": "Đã đọc năm lượt còn lại trong remaining: boss, jewel, bc, devil và ig.",
+    "failure_message": "Không mở, không đọc đủ lượt hoặc không đóng được dialog; xem error, fields, missing_fields và dialog_close."
+  }
+}

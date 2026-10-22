@@ -1,7 +1,10 @@
-from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, 
-                             QLabel, QGraphicsView, QGraphicsScene, QMessageBox,
+from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
+                             QLabel, QLineEdit, QComboBox, QInputDialog,
+                             QDialogButtonBox,
+                             QGraphicsView, QGraphicsScene, QMessageBox,
                              QGraphicsRectItem, QGraphicsEllipseItem, QGraphicsLineItem)
-from PyQt6.QtCore import QLineF
+from PyQt6.QtWidgets import QFileDialog
+from PyQt6.QtCore import QLineF, QTimer
 from PyQt6.QtCore import Qt, QRect, QRectF, QPoint, QPointF
 from PyQt6.QtGui import QPixmap, QPainter, QPen, QColor, QImage, QMouseEvent, QCursor
 import win32gui
@@ -12,7 +15,19 @@ from ctypes import wintypes
 import numpy as np
 import cv2
 import os
+import json
+from datetime import datetime
 from ..logic.window_detector import WindowDetector
+from ..logic.app_paths import (
+    get_app_state_path,
+    get_learning_root,
+    get_runtime_root,
+    get_teaching_root,
+)
+from ..logic.teaching_matching import (
+    expand_coordinate_bounds,
+    normalize_coordinate_match_offset,
+)
 try:
     from PIL import Image
     import io
@@ -27,6 +42,30 @@ PW_RENDERFULLCONTENT = 0x00000002
 user32 = ctypes.windll.user32
 user32.PrintWindow.argtypes = [wintypes.HWND, wintypes.HDC, ctypes.c_uint]
 user32.PrintWindow.restype = wintypes.BOOL
+
+
+def _load_last_learning_folder() -> str:
+    try:
+        with open(get_app_state_path(), "r", encoding="utf-8") as handle:
+            state = json.load(handle) or {}
+        return str(state.get("teaching_last_learning_folder") or "").strip()
+    except (OSError, TypeError, ValueError):
+        return ""
+
+
+def _save_last_learning_folder(folder_name: str) -> None:
+    try:
+        path = get_app_state_path()
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                state = json.load(handle) or {}
+        except (OSError, TypeError, ValueError):
+            state = {}
+        state["teaching_last_learning_folder"] = str(folder_name or "").strip()
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(state, handle, ensure_ascii=False, indent=2)
+    except (OSError, TypeError, ValueError):
+        pass
 
 # DPI Awareness constants
 DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4
@@ -52,6 +91,139 @@ def _ensure_dpi_awareness():
 # Set DPI awareness at module load
 _ensure_dpi_awareness()
 
+
+class CropSaveDialog(QDialog):
+    """Choose a managed learning folder and confirm a cropped PNG save."""
+
+    def __init__(self, crop: QPixmap, learning_root: str, capture_timestamp: datetime | None = None, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Lưu ảnh teaching")
+        self.resize(620, 500)
+        self.learning_root = os.path.abspath(learning_root)
+        self.selected_path = ""
+        self.capture_timestamp = capture_timestamp or datetime.now()
+        self.generated_filename = f"capture_{self.capture_timestamp.strftime('%Y%m%d_%H%M%S')}.png"
+        os.makedirs(self.learning_root, exist_ok=True)
+
+        layout = QVBoxLayout(self)
+        preview = QLabel()
+        preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        preview.setMinimumSize(400, 300)
+        preview.setPixmap(crop.scaled(
+            560,
+            340,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        ))
+        layout.addWidget(preview, 1)
+
+        folder_row = QHBoxLayout()
+        folder_row.addWidget(QLabel("Loại learning:"))
+        self.folder_combo = QComboBox()
+        folder_row.addWidget(self.folder_combo, 1)
+        new_btn = QPushButton("Thêm")
+        new_btn.clicked.connect(self._create_folder)
+        rename_btn = QPushButton("Đổi tên")
+        rename_btn.clicked.connect(self._rename_folder)
+        delete_btn = QPushButton("Xóa")
+        delete_btn.clicked.connect(self._delete_folder)
+        folder_row.addWidget(new_btn)
+        folder_row.addWidget(rename_btn)
+        folder_row.addWidget(delete_btn)
+        layout.addLayout(folder_row)
+
+        self.filename_edit = QLineEdit()
+        self.filename_edit.setText(self.generated_filename)
+        self.filename_edit.setReadOnly(True)
+        layout.addWidget(QLabel("Tên file:"))
+        layout.addWidget(self.filename_edit)
+        self._refresh_folders(_load_last_learning_folder())
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self._accept_path)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def _refresh_folders(self, select_name: str | None = None) -> None:
+        current = select_name or self.folder_combo.currentText()
+        folders = sorted(
+            name for name in os.listdir(self.learning_root)
+            if os.path.isdir(os.path.join(self.learning_root, name))
+        )
+        self.folder_combo.blockSignals(True)
+        self.folder_combo.clear()
+        self.folder_combo.addItems(folders)
+        if current in folders:
+            self.folder_combo.setCurrentText(current)
+        self.folder_combo.blockSignals(False)
+
+    def _folder_name(self, title: str, label: str, initial: str = "") -> str:
+        name, accepted = QInputDialog.getText(self, title, label, text=initial)
+        return name.strip() if accepted else ""
+
+    def _valid_folder_name(self, name: str) -> bool:
+        return bool(name) and name not in {".", ".."} and os.path.basename(name) == name
+
+    def _create_folder(self) -> None:
+        name = self._folder_name("Thêm loại learning", "Tên thư mục:")
+        if not self._valid_folder_name(name):
+            return
+        path = os.path.join(self.learning_root, name)
+        if os.path.exists(path):
+            QMessageBox.warning(self, "Trùng tên", "Thư mục này đã tồn tại.")
+            return
+        os.makedirs(path)
+        self._refresh_folders(name)
+
+    def _rename_folder(self) -> None:
+        old_name = self.folder_combo.currentText().strip()
+        if not old_name:
+            return
+        new_name = self._folder_name("Đổi tên loại learning", "Tên mới:", old_name)
+        if not self._valid_folder_name(new_name) or new_name == old_name:
+            return
+        new_path = os.path.join(self.learning_root, new_name)
+        if os.path.exists(new_path):
+            QMessageBox.warning(self, "Trùng tên", "Thư mục này đã tồn tại.")
+            return
+        os.rename(os.path.join(self.learning_root, old_name), new_path)
+        self._refresh_folders(new_name)
+
+    def _delete_folder(self) -> None:
+        name = self.folder_combo.currentText().strip()
+        if not name:
+            return
+        folder = os.path.join(self.learning_root, name)
+        answer = QMessageBox.question(
+            self,
+            "Xác nhận xóa",
+            f"Xóa thư mục learning '{name}' và toàn bộ ảnh bên trong?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        import shutil
+        shutil.rmtree(folder)
+        self._refresh_folders()
+
+    def _accept_path(self) -> None:
+        folder = self.folder_combo.currentText().strip()
+        filename = self.generated_filename
+        if not folder:
+            QMessageBox.warning(self, "Thiếu loại learning", "Hãy tạo hoặc chọn một thư mục learning.")
+            return
+        candidate = os.path.join(self.learning_root, folder, filename)
+        suffix = 1
+        while os.path.exists(candidate):
+            stem, extension = os.path.splitext(filename)
+            candidate = os.path.join(self.learning_root, folder, f"{stem}_{suffix:02d}{extension}")
+            suffix += 1
+        self.selected_path = candidate
+        _save_last_learning_folder(folder)
+        self.accept()
+
 class ImageGraphicsView(QGraphicsView):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -62,6 +234,7 @@ class ImageGraphicsView(QGraphicsView):
         self.start_pos = None
         # Graphics items để vẽ selection và click point
         self.selection_item = None
+        self.coordinate_offset_item = None
         self.click_item = None  # Có thể là list nếu có nhiều items
         self._parent_dialog = None  # Reference to parent dialog for updating title
         self._temp_mask_item = None  # Temporary mask visual during drawing
@@ -105,6 +278,11 @@ class ImageGraphicsView(QGraphicsView):
             # Check if in mask drawing mode
             if self._parent_dialog and self._parent_dialog.drawing_mask:
                 self.start_pos = event.pos()
+                return
+
+            if self._parent_dialog and getattr(self._parent_dialog, "yolo_delete_mode", False):
+                scene_pos = self.mapToScene(event.pos())
+                self._parent_dialog.delete_mask_at_pos(scene_pos)
                 return
             
             if self.drawing_selection:
@@ -229,7 +407,8 @@ class ImageGraphicsView(QGraphicsView):
         # Create new temp mask item
         if rect and not rect.isEmpty() and rect.width() > 0 and rect.height() > 0:
             self._temp_mask_item = QGraphicsRectItem(rect)
-            pen = QPen(QColor(255, 165, 0), 2)  # Orange, 2px (different from red mask)
+            pen = QPen(QColor(255, 165, 0), 1)
+            pen.setCosmetic(True)
             pen.setStyle(Qt.PenStyle.DashLine)
             self._temp_mask_item.setPen(pen)
             self._temp_mask_item.setBrush(QColor(255, 165, 0, 50))  # Orange semi-transparent
@@ -261,6 +440,9 @@ class ImageGraphicsView(QGraphicsView):
         if self.selection_item:
             scene.removeItem(self.selection_item)
             self.selection_item = None
+        if self.coordinate_offset_item:
+            scene.removeItem(self.coordinate_offset_item)
+            self.coordinate_offset_item = None
         
         # Tạo item mới nếu có selection_rect và không rỗng
         if self.selection_rect and not self.selection_rect.isEmpty():
@@ -268,12 +450,37 @@ class ImageGraphicsView(QGraphicsView):
             if self.selection_rect.width() > 0 and self.selection_rect.height() > 0:
                 self.selection_item = QGraphicsRectItem(self.selection_rect)
                 # Vẽ viền đỏ đậm và nền trong suốt
-                pen = QPen(QColor(255, 0, 0), 3)  # Viền đỏ, dày 3px
+                pen = QPen(QColor(255, 0, 0), 1)
+                pen.setCosmetic(True)
                 pen.setStyle(Qt.PenStyle.DashLine)  # Đường nét đứt
                 self.selection_item.setPen(pen)
                 self.selection_item.setBrush(QColor(255, 0, 0, 50))  # Nền đỏ trong suốt
                 self.selection_item.setZValue(1000)  # Đảm bảo vẽ trên cùng
                 scene.addItem(self.selection_item)
+
+                parent_dialog = self._parent_dialog
+                offset = getattr(parent_dialog, "coordinate_match_offset", 0)
+                captured_image = getattr(parent_dialog, "captured_image", None)
+                if offset > 0 and captured_image is not None:
+                    bounds = expand_coordinate_bounds(
+                        self.selection_rect.left(),
+                        self.selection_rect.top(),
+                        self.selection_rect.right(),
+                        self.selection_rect.bottom(),
+                        offset,
+                        captured_image.width(),
+                        captured_image.height(),
+                    )
+                    if bounds:
+                        left, top, right, bottom = bounds
+                        offset_rect = QRectF(left, top, right - left, bottom - top)
+                        self.coordinate_offset_item = QGraphicsRectItem(offset_rect)
+                        offset_pen = QPen(QColor(255, 214, 10), 1)
+                        offset_pen.setCosmetic(True)
+                        offset_pen.setStyle(Qt.PenStyle.DashLine)
+                        self.coordinate_offset_item.setPen(offset_pen)
+                        self.coordinate_offset_item.setZValue(1001)
+                        scene.addItem(self.coordinate_offset_item)
     
     def update_click_point(self):
         """Cập nhật graphics item cho click point"""
@@ -328,7 +535,8 @@ class ImageGraphicsView(QGraphicsView):
             ellipse = QGraphicsEllipseItem(rect)
             
             # Style cho tất cả items
-            pen = QPen(QColor(0, 255, 0), 3)  # Màu xanh lá, dày 3px
+            pen = QPen(QColor(0, 255, 0), 1)
+            pen.setCosmetic(True)
             brush = QColor(0, 255, 0, 100)  # Màu xanh trong suốt
             
             line1.setPen(pen)
@@ -360,18 +568,27 @@ class ImageCaptureDialog(QDialog):
         initial_click_x: int = None,
         initial_click_y: int = None,
         initial_mask_regions: list = None,
+        coordinate_match_offset: int = 0,
+        manual_save: bool = False,
     ):
         super().__init__(parent)
         self.target_window_hwnd = target_window_hwnd
         self.tool_id = tool_id  # UUID instead of name
         self.captured_image = None
         self._captured_bgr = None  # BGR array để save (giống runtime capture)
+        self._capture_timestamp: datetime | None = None
         self.selection_rect = None
         self.click_point = None
         self.drawing_selection = False
         self.selecting_click_point = False
         self.hide_click_selection = hide_click_selection  # Ẩn nút chọn điểm click nếu True
         self.hide_region_selection = hide_region_selection  # Ẩn nút chọn vùng nếu True
+        self.coordinate_match_offset = (
+            normalize_coordinate_match_offset(coordinate_match_offset)
+            if coordinate_match_offset
+            else 0
+        )
+        self.manual_save = manual_save
         self._loaded_from_existing = False  # Track if loaded from existing file
         self._existing_image_path = initial_image_path  # Store original path
         
@@ -466,7 +683,7 @@ class ImageCaptureDialog(QDialog):
 
     @staticmethod
     def _sanitize_tool_folder_name(name: str) -> str:
-        """Windows-safe folder name for storing teaching images under images/<tool_name>/."""
+        """Windows-safe folder name for storing teaching images under assets/teaching/<tool_name>/."""
         try:
             s = str(name or "").strip()
         except Exception:
@@ -513,6 +730,10 @@ class ImageCaptureDialog(QDialog):
         btn_layout.addWidget(self.draw_mask_btn)
         btn_layout.addWidget(self.clear_masks_btn)
         btn_layout.addWidget(self.clear_btn)
+        if self.manual_save:
+            self.save_crop_btn = QPushButton("Lưu ảnh")
+            self.save_crop_btn.clicked.connect(self._save_cropped_image_as)
+            btn_layout.addWidget(self.save_crop_btn)
         
         # Zoom buttons
         self.zoom_100_btn = QPushButton("100%")
@@ -555,6 +776,46 @@ class ImageCaptureDialog(QDialog):
         self.draw_mask_btn.setEnabled(False)
         self.clear_masks_btn.setEnabled(False)
         self.clear_btn.setEnabled(False)
+
+    def _current_crop_pixmap(self) -> QPixmap | None:
+        if self.captured_image is None or self.captured_image.isNull():
+            return None
+        selection_rect = self.graphics_view.selection_rect
+        if selection_rect is None or selection_rect.isEmpty():
+            return self.captured_image
+        image_rect = QRectF(0, 0, self.captured_image.width(), self.captured_image.height())
+        crop_rect = selection_rect.intersected(image_rect).toRect()
+        if crop_rect.isEmpty():
+            return None
+        return self.captured_image.copy(crop_rect)
+
+    def _save_cropped_image_as(self) -> None:
+        crop = self._current_crop_pixmap()
+        if crop is None:
+            QMessageBox.warning(self, "Chưa có ảnh", "Hãy chụp ảnh và chọn vùng crop trước.")
+            return
+        learning_root = os.path.join(get_runtime_root(), "images", "learning")
+        dialog = CropSaveDialog(crop, learning_root, self._capture_timestamp, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        path = dialog.selected_path
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        if not crop.save(path, "PNG"):
+            QMessageBox.critical(self, "Lỗi lưu ảnh", f"Không thể lưu ảnh:\n{path}")
+            return
+        self._show_save_toast("Đã chụp và lưu ảnh teaching")
+
+    def _show_save_toast(self, message: str) -> None:
+        toast = QLabel(message, self)
+        toast.setStyleSheet(
+            "background-color: #263238; color: white; padding: 8px 14px; "
+            "border-radius: 4px;"
+        )
+        toast.adjustSize()
+        toast.move(max(10, (self.width() - toast.width()) // 2), 12)
+        toast.raise_()
+        toast.show()
+        QTimer.singleShot(1000, toast.deleteLater)
     
     def capture_screenshot(self):
         """Chụp screenshot của window"""
@@ -628,6 +889,7 @@ class ImageCaptureDialog(QDialog):
                 img._arr = arr_rgb  # Giữ reference để tránh garbage collection
                 
                 self.captured_image = QPixmap.fromImage(img)
+                self._capture_timestamp = datetime.now()
             else:
                 raise Exception("Không thể copy window content")
             
@@ -694,6 +956,7 @@ class ImageCaptureDialog(QDialog):
         self.graphics_view.click_point = None
         self.graphics_view.start_pos = None
         self.graphics_view.selection_item = None
+        self.graphics_view.coordinate_offset_item = None
         self.graphics_view.click_item = None
         self.selection_rect = None
         self.click_point = None
@@ -794,7 +1057,7 @@ class ImageCaptureDialog(QDialog):
             img_rect = QRectF(0, 0, original_image_width, original_image_height)
             selection_rect = selection_rect.intersected(img_rect)
         
-        # Save teaching images under images/<tool_name>/ if tool_name provided
+        # Save teaching images under assets/teaching/<tool_id>/ if tool_id is provided
         # If loaded from existing and no new capture, return existing path
         if self._loaded_from_existing and self._existing_image_path:
             print(f"[DEBUG] Reusing existing image path: {self._existing_image_path}")
@@ -803,7 +1066,7 @@ class ImageCaptureDialog(QDialog):
             cropped_height = self.captured_image.height()
         else:
             # Save new file
-            base_dir = "images"
+            base_dir = get_teaching_root()
             # Use tool_id as folder name (UUID)
             images_dir = os.path.join(base_dir, self.tool_id) if self.tool_id else base_dir
             # Make absolute path to ensure consistency
@@ -980,7 +1243,8 @@ class ImageCaptureDialog(QDialog):
         
         # Create mask rect item
         mask_item = QGraphicsRectItem(rect)
-        pen = QPen(QColor(255, 0, 0), 2)  # Red, 2px
+        pen = QPen(QColor(255, 0, 0), 1)
+        pen.setCosmetic(True)
         mask_item.setPen(pen)
         mask_item.setBrush(QColor(255, 0, 0, 76))  # Red semi-transparent (alpha=0.3*255)
         mask_item.setZValue(999)  # Below selection but above image
@@ -995,17 +1259,23 @@ class ImageCaptureDialog(QDialog):
                 # Deselect previous
                 if self.selected_mask_index is not None and self.selected_mask_index < len(self.mask_rect_items):
                     old_item = self.mask_rect_items[self.selected_mask_index]
-                    old_item.setPen(QPen(QColor(255, 0, 0), 2))
+                    old_pen = QPen(QColor(255, 0, 0), 1)
+                    old_pen.setCosmetic(True)
+                    old_item.setPen(old_pen)
                 
                 # Select new
                 self.selected_mask_index = i
-                item.setPen(QPen(QColor(255, 0, 0), 3))  # Thicker pen
+                selected_pen = QPen(QColor(255, 165, 0), 1)
+                selected_pen.setCosmetic(True)
+                item.setPen(selected_pen)
                 return True
         
         # Clicked outside all masks - deselect
         if self.selected_mask_index is not None and self.selected_mask_index < len(self.mask_rect_items):
             old_item = self.mask_rect_items[self.selected_mask_index]
-            old_item.setPen(QPen(QColor(255, 0, 0), 2))
+            old_pen = QPen(QColor(255, 0, 0), 1)
+            old_pen.setCosmetic(True)
+            old_item.setPen(old_pen)
         self.selected_mask_index = None
         return False
     
@@ -1016,6 +1286,17 @@ class ImageCaptureDialog(QDialog):
             self.scene.removeItem(item)
             del self.mask_rect_items[self.selected_mask_index]
             self.selected_mask_index = None
+
+    def delete_mask_at_pos(self, scene_pos: QPointF) -> bool:
+        """Delete the mask region under the given image coordinate."""
+        for index in range(len(self.mask_rect_items) - 1, -1, -1):
+            item = self.mask_rect_items[index]
+            if item.scene() is not None and item.rect().contains(scene_pos):
+                self.scene.removeItem(item)
+                del self.mask_rect_items[index]
+                self.selected_mask_index = None
+                return True
+        return False
     
     def get_mask_regions(self) -> list:
         """Get mask regions as list of dicts with coordinates relative to cropped image.
@@ -1121,3 +1402,139 @@ class ImageCaptureDialog(QDialog):
         if not self.validate_mask_regions():
             return
         super().accept()
+
+
+class YoloAnnotationDialog(ImageCaptureDialog):
+    """Capture/load a full image and save multiple YOLO bounding boxes."""
+
+    def __init__(self, target_window_hwnd: int | None = None, parent=None) -> None:
+        super().__init__(
+            target_window_hwnd=target_window_hwnd,
+            parent=parent,
+            hide_click_selection=True,
+            hide_region_selection=True,
+            manual_save=True,
+        )
+        self.yolo_delete_mode = False
+        self.setWindowTitle("YOLO Teaching - Nameplate")
+        self.draw_mask_btn.setText("Vẽ vùng nameplate")
+        self.clear_masks_btn.setText("Xóa vùng")
+        self.clear_masks_btn.clicked.disconnect()
+        self.clear_masks_btn.clicked.connect(self._toggle_yolo_delete_mode)
+        self.save_crop_btn.setText("Lưu dataset YOLO")
+        self.save_crop_btn.clicked.disconnect()
+        self.save_crop_btn.clicked.connect(self._save_yolo_dataset)
+        self.draw_mask_btn.clicked.disconnect()
+        self.draw_mask_btn.clicked.connect(self._start_yolo_drawing)
+        self.ok_btn.setText("Đóng")
+
+        choose_image_btn = QPushButton("Chọn ảnh")
+        choose_image_btn.clicked.connect(self._choose_image)
+        self.layout().insertWidget(1, choose_image_btn)
+
+    def _start_yolo_drawing(self) -> None:
+        if self.captured_image is None or self.captured_image.isNull():
+            return
+        self._set_yolo_delete_mode(False)
+        self.drawing_mask = True
+        self.draw_mask_btn.setText("Đang vẽ vùng nameplate")
+        self.draw_mask_btn.setStyleSheet("background-color: #4CAF50; color: white;")
+        self.graphics_view.setCursor(QCursor(Qt.CursorShape.CrossCursor))
+
+    def _set_yolo_delete_mode(self, enabled: bool) -> None:
+        self.yolo_delete_mode = bool(enabled)
+        if self.yolo_delete_mode:
+            self.drawing_mask = False
+            self.clear_masks_btn.setText("Đang xóa vùng")
+            self.clear_masks_btn.setStyleSheet("background-color: #b91c1c; color: white;")
+            self.graphics_view.setCursor(QCursor(Qt.CursorShape.CrossCursor))
+        else:
+            self.clear_masks_btn.setText("Xóa vùng")
+            self.clear_masks_btn.setStyleSheet("")
+            if not self.drawing_mask:
+                self.graphics_view.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
+
+    def _toggle_yolo_delete_mode(self) -> None:
+        self._set_yolo_delete_mode(not self.yolo_delete_mode)
+
+    def validate_mask_regions(self) -> bool:
+        """YOLO annotations may contain any number of regions."""
+        return True
+
+    def _choose_image(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Chọn ảnh game đầy đủ",
+            os.path.join(get_runtime_root(), "images"),
+            "Images (*.png *.jpg *.jpeg *.bmp *.webp)",
+        )
+        if not path:
+            return
+        pixmap = QPixmap(path)
+        if pixmap.isNull():
+            QMessageBox.warning(self, "Ảnh không hợp lệ", "Không thể đọc ảnh đã chọn.")
+            return
+        try:
+            with open(path, "rb") as handle:
+                data = np.frombuffer(handle.read(), dtype=np.uint8)
+            bgr = cv2.imdecode(data, cv2.IMREAD_COLOR)
+        except OSError:
+            bgr = None
+        if bgr is None:
+            QMessageBox.warning(self, "Ảnh không hợp lệ", "Không thể giải mã ảnh đã chọn.")
+            return
+        self.captured_image = pixmap
+        self._captured_bgr = bgr
+        self._loaded_from_existing = True
+        self._existing_image_path = path
+        self._capture_timestamp = datetime.now()
+        self.display_image(pixmap)
+        self.select_region_btn.setEnabled(False)
+        self.select_click_btn.setEnabled(False)
+        self.draw_mask_btn.setEnabled(True)
+        self.clear_masks_btn.setEnabled(True)
+        self.clear_btn.setEnabled(True)
+        self.ok_btn.setEnabled(True)
+
+    def _save_yolo_dataset(self) -> None:
+        if self.captured_image is None or self.captured_image.isNull():
+            QMessageBox.warning(self, "Chưa có ảnh", "Hãy chụp hoặc chọn ảnh trước.")
+            return
+        regions = self.get_mask_regions()
+        if not regions:
+            QMessageBox.warning(self, "Chưa có vùng", "Hãy dùng 'Vẽ vùng nameplate' để khoanh ít nhất một vùng.")
+            return
+
+        save_dialog = CropSaveDialog(
+            self.captured_image,
+            get_learning_root(),
+            self._capture_timestamp,
+            self,
+        )
+        if save_dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        image_path = save_dialog.selected_path
+        label_path = os.path.splitext(image_path)[0] + ".txt"
+
+        if not self.captured_image.save(image_path, "PNG"):
+            QMessageBox.critical(self, "Lỗi lưu ảnh", f"Không thể lưu ảnh:\n{image_path}")
+            return
+        image_width = max(1, self.captured_image.width())
+        image_height = max(1, self.captured_image.height())
+        lines = []
+        for region in regions:
+            x = max(0, min(image_width, int(region["x"])))
+            y = max(0, min(image_height, int(region["y"])))
+            w = max(1, min(image_width - x, int(region["w"])))
+            h = max(1, min(image_height - y, int(region["h"])))
+            lines.append(
+                "0 %.6f %.6f %.6f %.6f" % (
+                    (x + w / 2) / image_width,
+                    (y + h / 2) / image_height,
+                    w / image_width,
+                    h / image_height,
+                )
+            )
+        with open(label_path, "w", encoding="utf-8") as handle:
+            handle.write("\n".join(lines) + "\n")
+        self._show_save_toast(f"Đã lưu {len(lines)} vùng YOLO")

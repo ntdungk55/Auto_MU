@@ -3,11 +3,12 @@ echo ========================================
 echo Building TestAuto.exe...
 echo ========================================
 
-REM Activate virtual environment
-call .venv\Scripts\activate.bat
-
 REM Build exe
-pyinstaller build_exe.spec --noconfirm
+call .venv\Scripts\python.exe -m PyInstaller build_exe.spec --noconfirm
+if errorlevel 1 (
+    echo Build failed.
+    exit /b 1
+)
 
 echo.
 echo ========================================
