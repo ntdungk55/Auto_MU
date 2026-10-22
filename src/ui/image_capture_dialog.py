@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
                              QDialogButtonBox,
                              QGraphicsView, QGraphicsScene, QMessageBox,
                              QGraphicsRectItem, QGraphicsEllipseItem, QGraphicsLineItem)
+from PyQt6.QtWidgets import QFileDialog
 from PyQt6.QtCore import QLineF, QTimer
 from PyQt6.QtCore import Qt, QRect, QRectF, QPoint, QPointF
 from PyQt6.QtGui import QPixmap, QPainter, QPen, QColor, QImage, QMouseEvent, QCursor
@@ -17,7 +18,12 @@ import os
 import json
 from datetime import datetime
 from ..logic.window_detector import WindowDetector
-from ..logic.app_paths import get_app_state_path, get_runtime_root, get_teaching_root
+from ..logic.app_paths import (
+    get_app_state_path,
+    get_learning_root,
+    get_runtime_root,
+    get_teaching_root,
+)
 from ..logic.teaching_matching import (
     expand_coordinate_bounds,
     normalize_coordinate_match_offset,
@@ -272,6 +278,11 @@ class ImageGraphicsView(QGraphicsView):
             # Check if in mask drawing mode
             if self._parent_dialog and self._parent_dialog.drawing_mask:
                 self.start_pos = event.pos()
+                return
+
+            if self._parent_dialog and getattr(self._parent_dialog, "yolo_delete_mode", False):
+                scene_pos = self.mapToScene(event.pos())
+                self._parent_dialog.delete_mask_at_pos(scene_pos)
                 return
             
             if self.drawing_selection:
@@ -1275,6 +1286,17 @@ class ImageCaptureDialog(QDialog):
             self.scene.removeItem(item)
             del self.mask_rect_items[self.selected_mask_index]
             self.selected_mask_index = None
+
+    def delete_mask_at_pos(self, scene_pos: QPointF) -> bool:
+        """Delete the mask region under the given image coordinate."""
+        for index in range(len(self.mask_rect_items) - 1, -1, -1):
+            item = self.mask_rect_items[index]
+            if item.scene() is not None and item.rect().contains(scene_pos):
+                self.scene.removeItem(item)
+                del self.mask_rect_items[index]
+                self.selected_mask_index = None
+                return True
+        return False
     
     def get_mask_regions(self) -> list:
         """Get mask regions as list of dicts with coordinates relative to cropped image.
@@ -1380,3 +1402,139 @@ class ImageCaptureDialog(QDialog):
         if not self.validate_mask_regions():
             return
         super().accept()
+
+
+class YoloAnnotationDialog(ImageCaptureDialog):
+    """Capture/load a full image and save multiple YOLO bounding boxes."""
+
+    def __init__(self, target_window_hwnd: int | None = None, parent=None) -> None:
+        super().__init__(
+            target_window_hwnd=target_window_hwnd,
+            parent=parent,
+            hide_click_selection=True,
+            hide_region_selection=True,
+            manual_save=True,
+        )
+        self.yolo_delete_mode = False
+        self.setWindowTitle("YOLO Teaching - Nameplate")
+        self.draw_mask_btn.setText("Vẽ vùng nameplate")
+        self.clear_masks_btn.setText("Xóa vùng")
+        self.clear_masks_btn.clicked.disconnect()
+        self.clear_masks_btn.clicked.connect(self._toggle_yolo_delete_mode)
+        self.save_crop_btn.setText("Lưu dataset YOLO")
+        self.save_crop_btn.clicked.disconnect()
+        self.save_crop_btn.clicked.connect(self._save_yolo_dataset)
+        self.draw_mask_btn.clicked.disconnect()
+        self.draw_mask_btn.clicked.connect(self._start_yolo_drawing)
+        self.ok_btn.setText("Đóng")
+
+        choose_image_btn = QPushButton("Chọn ảnh")
+        choose_image_btn.clicked.connect(self._choose_image)
+        self.layout().insertWidget(1, choose_image_btn)
+
+    def _start_yolo_drawing(self) -> None:
+        if self.captured_image is None or self.captured_image.isNull():
+            return
+        self._set_yolo_delete_mode(False)
+        self.drawing_mask = True
+        self.draw_mask_btn.setText("Đang vẽ vùng nameplate")
+        self.draw_mask_btn.setStyleSheet("background-color: #4CAF50; color: white;")
+        self.graphics_view.setCursor(QCursor(Qt.CursorShape.CrossCursor))
+
+    def _set_yolo_delete_mode(self, enabled: bool) -> None:
+        self.yolo_delete_mode = bool(enabled)
+        if self.yolo_delete_mode:
+            self.drawing_mask = False
+            self.clear_masks_btn.setText("Đang xóa vùng")
+            self.clear_masks_btn.setStyleSheet("background-color: #b91c1c; color: white;")
+            self.graphics_view.setCursor(QCursor(Qt.CursorShape.CrossCursor))
+        else:
+            self.clear_masks_btn.setText("Xóa vùng")
+            self.clear_masks_btn.setStyleSheet("")
+            if not self.drawing_mask:
+                self.graphics_view.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
+
+    def _toggle_yolo_delete_mode(self) -> None:
+        self._set_yolo_delete_mode(not self.yolo_delete_mode)
+
+    def validate_mask_regions(self) -> bool:
+        """YOLO annotations may contain any number of regions."""
+        return True
+
+    def _choose_image(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Chọn ảnh game đầy đủ",
+            os.path.join(get_runtime_root(), "images"),
+            "Images (*.png *.jpg *.jpeg *.bmp *.webp)",
+        )
+        if not path:
+            return
+        pixmap = QPixmap(path)
+        if pixmap.isNull():
+            QMessageBox.warning(self, "Ảnh không hợp lệ", "Không thể đọc ảnh đã chọn.")
+            return
+        try:
+            with open(path, "rb") as handle:
+                data = np.frombuffer(handle.read(), dtype=np.uint8)
+            bgr = cv2.imdecode(data, cv2.IMREAD_COLOR)
+        except OSError:
+            bgr = None
+        if bgr is None:
+            QMessageBox.warning(self, "Ảnh không hợp lệ", "Không thể giải mã ảnh đã chọn.")
+            return
+        self.captured_image = pixmap
+        self._captured_bgr = bgr
+        self._loaded_from_existing = True
+        self._existing_image_path = path
+        self._capture_timestamp = datetime.now()
+        self.display_image(pixmap)
+        self.select_region_btn.setEnabled(False)
+        self.select_click_btn.setEnabled(False)
+        self.draw_mask_btn.setEnabled(True)
+        self.clear_masks_btn.setEnabled(True)
+        self.clear_btn.setEnabled(True)
+        self.ok_btn.setEnabled(True)
+
+    def _save_yolo_dataset(self) -> None:
+        if self.captured_image is None or self.captured_image.isNull():
+            QMessageBox.warning(self, "Chưa có ảnh", "Hãy chụp hoặc chọn ảnh trước.")
+            return
+        regions = self.get_mask_regions()
+        if not regions:
+            QMessageBox.warning(self, "Chưa có vùng", "Hãy dùng 'Vẽ vùng nameplate' để khoanh ít nhất một vùng.")
+            return
+
+        save_dialog = CropSaveDialog(
+            self.captured_image,
+            get_learning_root(),
+            self._capture_timestamp,
+            self,
+        )
+        if save_dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        image_path = save_dialog.selected_path
+        label_path = os.path.splitext(image_path)[0] + ".txt"
+
+        if not self.captured_image.save(image_path, "PNG"):
+            QMessageBox.critical(self, "Lỗi lưu ảnh", f"Không thể lưu ảnh:\n{image_path}")
+            return
+        image_width = max(1, self.captured_image.width())
+        image_height = max(1, self.captured_image.height())
+        lines = []
+        for region in regions:
+            x = max(0, min(image_width, int(region["x"])))
+            y = max(0, min(image_height, int(region["y"])))
+            w = max(1, min(image_width - x, int(region["w"])))
+            h = max(1, min(image_height - y, int(region["h"])))
+            lines.append(
+                "0 %.6f %.6f %.6f %.6f" % (
+                    (x + w / 2) / image_width,
+                    (y + h / 2) / image_height,
+                    w / image_width,
+                    h / image_height,
+                )
+            )
+        with open(label_path, "w", encoding="utf-8") as handle:
+            handle.write("\n".join(lines) + "\n")
+        self._show_save_toast(f"Đã lưu {len(lines)} vùng YOLO")

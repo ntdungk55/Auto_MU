@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import os
-import shutil
 import sys
 import importlib
 from pathlib import Path
 from typing import Any
 
-from ...app_paths import get_assets_root, get_yolo_models_root
+from ...app_paths import get_yolo_models_root
 from .exceptions import YoloDependencyError, YoloModelNotFoundError
 
 
@@ -31,17 +30,12 @@ class YoloModelManager:
         if self.model_path:
             path = Path(os.path.abspath(self.model_path))
         else:
-            models = self.list_models()
-            if models:
-                path = Path(models[0])
-            else:
-                bundled = Path(get_assets_root()) / "models" / "yolo" / "yolo11n.onnx"
-                path = Path(get_yolo_models_root()) / "yolo11n.onnx"
-                if bundled.is_file() and not path.is_file():
-                    path.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(bundled, path)
+            path = Path(get_yolo_models_root()) / "nameplate.onnx"
         if not path.is_file():
-            raise YoloModelNotFoundError(f"YOLO model does not exist: {path}")
+            raise YoloModelNotFoundError(
+                f"Nameplate model does not exist: {path}. "
+                "Train/export nameplate.onnx before enabling YOLO."
+            )
         return str(path)
 
     def get_session(self) -> Any:

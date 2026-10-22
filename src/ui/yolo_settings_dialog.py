@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
+from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -19,8 +21,28 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
-from ..logic.app_paths import get_learning_root
+from ..logic.app_paths import get_learning_root, get_yolo_models_root
 from ..logic.vision.yolo.model_manager import YoloModelManager
+from ..logic.vision.yolo.training import prepare_nameplate_dataset, train_nameplate_model
+
+
+class _YoloTrainingWorker(QThread):
+    progress = pyqtSignal(str)
+    completed = pyqtSignal(str)
+    failed = pyqtSignal(str)
+
+    def __init__(self, source_root: str, parent=None) -> None:
+        super().__init__(parent)
+        self.source_root = source_root
+
+    def run(self) -> None:
+        try:
+            dataset_root = str(Path(get_yolo_models_root()).parent.parent / "datasets" / "nameplate")
+            prepare_nameplate_dataset(self.source_root, dataset_root, self.progress.emit)
+            model_path = train_nameplate_model(dataset_root, progress=self.progress.emit)
+            self.completed.emit(model_path)
+        except Exception as exc:
+            self.failed.emit(str(exc))
 
 
 class YoloSettingsDialog(QDialog):
@@ -44,7 +66,7 @@ class YoloSettingsDialog(QDialog):
         form.addRow("Teaching source:", source_row)
 
         self.model_combo = QComboBox()
-        self.model_combo.addItem("Mặc định (YOLO11n)", "")
+        self.model_combo.addItem("Mặc định (Nameplate)", "")
         selected_model = str(settings.get("model_path") or "")
         for model_path in self._available_models():
             if os.path.abspath(model_path) == os.path.abspath(selected_model):
@@ -73,21 +95,50 @@ class YoloSettingsDialog(QDialog):
         form.addRow("IoU:", self.iou_spin)
 
         layout.addLayout(form)
-        layout.addWidget(QLabel("Không chọn model = tự dùng model mặc định YOLO11n."))
+        layout.addWidget(QLabel("Không chọn model = tự dùng model nameplate.onnx."))
+        self.training_status = QLabel("Chưa train model nameplate.")
+        self.train_button = QPushButton("Chuẩn bị dataset và train nameplate")
+        self.train_button.clicked.connect(self._start_training)
+        layout.addWidget(self.training_status)
+        layout.addWidget(self.train_button)
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
         buttons.accepted.connect(self._validate_and_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+        self._training_worker: _YoloTrainingWorker | None = None
+
+    def _start_training(self) -> None:
+        if self._training_worker is not None and self._training_worker.isRunning():
+            return
+        source = os.path.abspath(self.source_input.text().strip() or get_learning_root())
+        self.train_button.setEnabled(False)
+        self.training_status.setText("Đang chuẩn bị dataset...")
+        self._training_worker = _YoloTrainingWorker(source, self)
+        self._training_worker.progress.connect(self.training_status.setText)
+        self._training_worker.completed.connect(self._training_completed)
+        self._training_worker.failed.connect(self._training_failed)
+        self._training_worker.start()
+
+    def _training_completed(self, model_path: str) -> None:
+        self.train_button.setEnabled(True)
+        self.training_status.setText(f"Đã tạo model: {model_path}")
+        self.model_combo.setCurrentIndex(0)
+        QMessageBox.information(self, "Train hoàn tất", f"Đã tạo model nameplate:\n{model_path}")
+
+    def _training_failed(self, message: str) -> None:
+        self.train_button.setEnabled(True)
+        self.training_status.setText("Train thất bại.")
+        QMessageBox.critical(self, "Train thất bại", message)
 
     @staticmethod
     def _available_models() -> list[str]:
-        # The bundled YOLO11n is represented by the explicit "Mặc định" item.
+        # The default nameplate model is represented by the explicit default item.
         # Only show additional runtime models in the selectable list.
         return sorted(
             path for path in YoloModelManager.list_models()
-            if os.path.basename(path).lower() != "yolo11n.onnx"
+            if os.path.basename(path).lower() not in {"yolo11n.onnx", "nameplate.onnx"}
         )
 
     def _select_source_folder(self) -> None:

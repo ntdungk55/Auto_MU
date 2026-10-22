@@ -30,11 +30,16 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from .image_capture_dialog import ImageCaptureDialog
+from .image_capture_dialog import ImageCaptureDialog, YoloAnnotationDialog
 from .yolo_settings_dialog import YoloSettingsDialog
 from ..logic.app_paths import get_app_state_path, get_learning_root, get_runtime_root
 from ..logic.vision.yolo import YoloDetector
 from ..logic.vision.yolo.exceptions import YoloError
+from ..logic.vision.yolo.training import (
+    nameplate_model_needs_training,
+    prepare_nameplate_dataset,
+    train_nameplate_model,
+)
 
 
 STATE_NAMES = (
@@ -125,6 +130,10 @@ class WindowStateMonitorWorker(QThread):
         self._yolo_confidence = 0.25
         self._yolo_iou = 0.45
         self._yolo_detector: YoloDetector | None = None
+        self._yolo_cached_source_key = ""
+        self._yolo_cached_detections = []
+        self._yolo_cached_debug = {}
+        self._yolo_training_attempted_key = ""
 
     def set_enabled_states(self, enabled_states: set[str]) -> None:
         with self._lock:
@@ -154,6 +163,10 @@ class WindowStateMonitorWorker(QThread):
             self._yolo_iou = float(iou)
             if changed:
                 self._yolo_detector = None
+                self._yolo_cached_source_key = ""
+                self._yolo_cached_detections = []
+                self._yolo_cached_debug = {}
+                self._yolo_training_attempted_key = ""
                 self._log(
                     "config changed: enabled=%s source=%s model=%s confidence=%.2f iou=%.2f"
                     % (
@@ -181,6 +194,7 @@ class WindowStateMonitorWorker(QThread):
                         {"enabled_states": [name for name in STATE_NAMES if name in enabled_states]},
                         timeout_seconds=4.0,
                     )
+                self._ensure_nameplate_model()
                 if self._stop_event.is_set():
                     break
                 payload = self._tool_client.call_tool(
@@ -193,6 +207,35 @@ class WindowStateMonitorWorker(QThread):
             except Exception as error:
                 self.request_failed.emit(str(error))
             self._stop_event.wait(0.75)
+
+    def _ensure_nameplate_model(self) -> None:
+        with self._lock:
+            enabled = self._yolo_enabled
+            source_folder = self._yolo_source_folder
+            model_path = self._yolo_model_path
+        if not enabled or model_path:
+            return
+        source_root = source_folder or get_learning_root()
+        if not nameplate_model_needs_training(source_root):
+            return
+        try:
+            newest = max(
+                (path.stat().st_mtime_ns for path in Path(source_root).rglob("*") if path.is_file()),
+                default=0,
+            )
+            attempt_key = f"{source_root}|{newest}"
+            if attempt_key == self._yolo_training_attempted_key:
+                return
+            self._yolo_training_attempted_key = attempt_key
+            self._log("training started: nameplate model missing or outdated")
+            dataset_root = os.path.join(get_runtime_root(), "datasets", "nameplate")
+            prepare_nameplate_dataset(source_root, dataset_root, self._log)
+            model_path = train_nameplate_model(dataset_root, progress=self._log)
+            with self._lock:
+                self._yolo_detector = None
+            self._log(f"training completed: model={model_path}")
+        except Exception as error:
+            self._log(f"training error: {type(error).__name__}: {error}")
 
     def _run_yolo(self, payload: object) -> object:
         with self._lock:
@@ -219,14 +262,25 @@ class WindowStateMonitorWorker(QThread):
             if source_result is None:
                 source_image = preview_image
                 source_image_path = "window-state snapshot"
+                source_key = "window-state"
             else:
                 source_image, source_image_path = source_result
+                source_key = source_image_path
             if detector is None:
                 detector = YoloDetector(model_path=model_path or None)
                 with self._lock:
                     self._yolo_detector = detector
-            detections = detector.detect(source_image, confidence=confidence, iou=iou)
-            debug = detector.last_debug
+            source_key = self._source_image_key(source_image_path, source_key)
+            cache_hit = source_key != "window-state" and source_key == self._yolo_cached_source_key
+            if cache_hit:
+                detections = self._yolo_cached_detections
+                debug = self._yolo_cached_debug
+            else:
+                detections = detector.detect(source_image, confidence=confidence, iou=iou)
+                debug = dict(detector.last_debug)
+                self._yolo_cached_source_key = source_key
+                self._yolo_cached_detections = detections
+                self._yolo_cached_debug = debug
             source_h, source_w = source_image.shape[:2]
             preview_h, preview_w = preview_image.shape[:2]
             scale_x = preview_w / max(1, source_w)
@@ -244,34 +298,35 @@ class WindowStateMonitorWorker(QThread):
                 for item in detections
             ]
             payload["yolo_error"] = ""
-            self._log(
-                "inference ok: source_folder=%s source_image=%s model=%s "
-                "raw_candidates=%d max_confidence=%.3f threshold=%.3f "
-                "candidates_after_threshold=%d detections=%d"
-                % (
-                    source_folder or "window-state",
-                    source_image_path,
-                    model_path or "default",
-                    int(debug.get("raw_candidates", 0)),
-                    float(debug.get("max_confidence", 0.0)),
-                    float(debug.get("threshold", confidence)),
-                    int(debug.get("candidates_after_threshold", 0)),
-                    len(detections),
-                )
-            )
-            for item in detections:
+            if not cache_hit:
                 self._log(
-                    "detection class_id=%d class=%s confidence=%.3f box=(%d,%d,%d,%d)"
+                    "inference ok: source_folder=%s source_image=%s model=%s "
+                    "raw_candidates=%d max_confidence=%.3f threshold=%.3f "
+                    "candidates_after_threshold=%d detections=%d"
                     % (
-                        item.class_id,
-                        item.class_name or "unknown",
-                        item.confidence,
-                        item.x1,
-                        item.y1,
-                        item.x2,
-                        item.y2,
+                        source_folder or "window-state",
+                        source_image_path,
+                        model_path or "nameplate-default",
+                        int(debug.get("raw_candidates", 0)),
+                        float(debug.get("max_confidence", 0.0)),
+                        float(debug.get("threshold", confidence)),
+                        int(debug.get("candidates_after_threshold", 0)),
+                        len(detections),
                     )
                 )
+                for item in detections:
+                    self._log(
+                        "detection class_id=%d class=%s confidence=%.3f box=(%d,%d,%d,%d)"
+                        % (
+                            item.class_id,
+                            item.class_name or "unknown",
+                            item.confidence,
+                            item.x1,
+                            item.y1,
+                            item.x2,
+                            item.y2,
+                        )
+                    )
         except YoloError as error:
             payload["yolo_detections"] = []
             payload["yolo_error"] = str(error)
@@ -308,6 +363,16 @@ class WindowStateMonitorWorker(QThread):
         data = np.fromfile(str(latest), dtype=np.uint8)
         image = cv2.imdecode(data, cv2.IMREAD_COLOR)
         return (image, str(latest)) if image is not None else None
+
+    @staticmethod
+    def _source_image_key(path: str, fallback: str) -> str:
+        if fallback == "window-state":
+            return fallback
+        try:
+            stat = os.stat(path)
+            return f"{path}|{stat.st_mtime_ns}|{stat.st_size}"
+        except OSError:
+            return path
 
 
 class WindowStateCanvas(QWidget):
@@ -520,10 +585,16 @@ class WindowStateMonitorDialog(QDialog):
 
         control_panel = QGroupBox("Control panel")
         control_layout = QVBoxLayout(control_panel)
+        self._yolo_status_label = QLabel("YOLO: chưa khởi động")
+        self._yolo_status_label.setWordWrap(True)
+        control_layout.addWidget(self._yolo_status_label)
         capture_btn = QPushButton("Chụp teaching")
         capture_btn.clicked.connect(self._open_teaching_capture)
+        yolo_capture_btn = QPushButton("YOLO Teaching")
+        yolo_capture_btn.clicked.connect(self._open_yolo_annotation)
         capture_row = QHBoxLayout()
         capture_row.addWidget(capture_btn)
+        capture_row.addWidget(yolo_capture_btn)
         capture_row.addStretch(1)
         control_layout.addLayout(capture_row)
 
@@ -576,6 +647,13 @@ class WindowStateMonitorDialog(QDialog):
             parent=self,
             hide_click_selection=True,
             manual_save=True,
+        )
+        dialog.exec()
+
+    def _open_yolo_annotation(self) -> None:
+        dialog = YoloAnnotationDialog(
+            target_window_hwnd=self._target_window_hwnd,
+            parent=self,
         )
         dialog.exec()
 
@@ -632,6 +710,7 @@ class WindowStateMonitorDialog(QDialog):
             self.canvas.set_snapshot(payload)
 
     def _on_yolo_log(self, message: str) -> None:
+        self._yolo_status_label.setText(message)
         if "error" in message.lower():
             self._state_buttons["yolo"].setToolTip(message)
 
