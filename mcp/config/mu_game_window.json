@@ -215,7 +215,7 @@
       "description": "Button mở dialog quản lý nhân vật phụ số 1",
       "recognitionType": "image",
       "clickable": true,
-      "notSummonedTemplate": "assets/companion_management1_not_summoned.png",
+      "notSummonedTemplate": "assets/teaching/companion_management/companion_management1_not_summoned.png",
       "notSummonedThreshold": 0.7,
       "templateSearchMargin": 6,
       "stateSampleCount": 3,
