@@ -229,7 +229,9 @@ Start chỉ được enable khi có ít nhất một game window được chọn
 
 ## 4. PHÁC THẢO UI
 
-**Khung tóm tắt trong mỗi AI Chat:**
+**Khung tóm tắt dùng chung ở trên cùng AI Chat workspace:**
+
+Chỉ có một khung Remote Server. Khung nằm bên ngoài và phía trên toàn bộ dãy tab cùng mọi thành phần bên trong các tab AI Chat; không lặp lại khung trong từng tab.
 
 ```text
 ┌──────────────────────────────────────────┐
@@ -300,8 +302,8 @@ UI cụ thể và vị trí tích hợp sẽ được mô tả trong design; req
 - [ ] Chọn window không tự động start server và bỏ chọn window cuối cùng không tự động stop server.
 - [ ] Start bị disable khi chưa có game window được chọn.
 - [ ] Start/Stop thủ công điều khiển duy nhất một shared server.
-- [ ] Mọi AI Chat hiển thị cùng lifecycle state và danh sách thiết bị đang kết nối.
-- [ ] Khung tóm tắt có trạng thái, danh sách thiết bị, nút mở `Remote Server Status` và nút Start/Stop thể hiện stable state hiện tại.
+- [ ] AI Chat workspace có đúng một khung Remote Server dùng chung nằm trên cùng, bên ngoài và phía trên toàn bộ dãy tab cùng mọi thành phần chat.
+- [ ] Khung tóm tắt dùng chung có trạng thái, danh sách thiết bị, nút mở `Remote Server Status` và nút Start/Stop thể hiện stable state hiện tại.
 - [ ] Dialog `Remote Server Status` hiển thị endpoint, username/password, session và action Start/Stop phù hợp.
 - [ ] `starting` hoặc `stopping` khóa toàn bộ UI của tất cả AI Chat; chỉ dialog lifecycle và Cancel hoạt động.
 - [ ] Cancel Start trả về `stopped`; Cancel Stop trả về `running`.

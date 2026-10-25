@@ -771,9 +771,6 @@ class GeminiChatWidget(QWidget):
         managed_process_tab: bool = False,
         on_managed_process_change: Callable[[object, object], None] | None = None,
         on_managed_process_title_changed: Callable[[object, str], None] | None = None,
-        remote_manager: RemoteServerLifecycleManager | None = None,
-        on_open_remote_status: Callable[[], None] | None = None,
-        on_toggle_remote_server: Callable[[], None] | None = None,
     ):
         super().__init__(parent)
         self._signals = _Signals()
@@ -809,9 +806,6 @@ class GeminiChatWidget(QWidget):
         self._managed_process_tab = managed_process_tab
         self._on_managed_process_change = on_managed_process_change
         self._on_managed_process_title_changed = on_managed_process_title_changed
-        self._remote_manager = remote_manager
-        self._on_open_remote_status = on_open_remote_status
-        self._on_toggle_remote_server = on_toggle_remote_server
         self._ai_process_controller = None
         self._selected_game_target = None
         self._scenario_tool_client: ScenarioToolClient | None = None
@@ -868,15 +862,6 @@ class GeminiChatWidget(QWidget):
         layout = QVBoxLayout()
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
-
-        self.remote_panel = None
-        if self._remote_manager is not None:
-            self.remote_panel = RemoteServerPanel(self._remote_manager, self)
-            if self._on_open_remote_status is not None:
-                self.remote_panel.open_requested.connect(self._on_open_remote_status)
-            if self._on_toggle_remote_server is not None:
-                self.remote_panel.toggle_requested.connect(self._on_toggle_remote_server)
-            layout.addWidget(self.remote_panel)
 
         self.process_row = QWidget()
         process_row = QHBoxLayout(self.process_row)
@@ -2749,6 +2734,10 @@ class AIChatWorkspace(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        self.remote_panel = RemoteServerPanel(self._remote_manager, self)
+        self.remote_panel.open_requested.connect(self._open_remote_status)
+        self.remote_panel.toggle_requested.connect(self._toggle_remote_server)
+        layout.addWidget(self.remote_panel)
         self.tabs = QTabWidget()
         self.tabs.setTabsClosable(True)
         self.tabs.tabCloseRequested.connect(self._close_process_tab)
@@ -2775,9 +2764,6 @@ class AIChatWorkspace(QWidget):
             create_ai_process_controller=self._create_ai_process_controller, managed_process_tab=True,
             on_managed_process_change=self._change_tab_process,
             on_managed_process_title_changed=self._refresh_process_tab_title,
-            remote_manager=self._remote_manager,
-            on_open_remote_status=self._open_remote_status,
-            on_toggle_remote_server=self._toggle_remote_server,
         )
         chat.refresh_process_btn.hide()
         chat.process_label.hide()
@@ -2932,9 +2918,6 @@ class AIChatWorkspace(QWidget):
             create_ai_process_controller=self._create_ai_process_controller, managed_process_tab=True,
             on_managed_process_change=self._change_tab_process,
             on_managed_process_title_changed=self._refresh_process_tab_title,
-            remote_manager=self._remote_manager,
-            on_open_remote_status=self._open_remote_status,
-            on_toggle_remote_server=self._toggle_remote_server,
         )
         chat.refresh_process_btn.hide()
         chat.process_label.hide()
