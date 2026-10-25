@@ -8,7 +8,7 @@ Auto_MU hiện có AI Chat, process selection và các MCP server nhưng chưa c
 
 **Mục tiêu:**
 
-- Thêm khung thông tin Remote Server trong mỗi AI Chat và đồng bộ trạng thái giữa các tab.
+- Thêm một khung thông tin Remote Server dùng chung ở đầu AI Chat workspace, nằm bên ngoài và phía trên toàn bộ dãy tab cùng mọi thành phần chat.
 - Chỉ cho phép user start shared Remote Server khi có ít nhất một game window được chọn.
 - Start/Stop hoàn toàn thủ công; chọn hoặc bỏ chọn window không tự động start/stop server.
 - Hiển thị dialog có Cancel trong khi server đang khởi động hoặc dừng và khóa toàn bộ AI Chat.
@@ -97,11 +97,11 @@ Username và password không persistence. Mỗi lần server start, server tạo
 
 Khi không còn game window nào được chọn trong lúc server đang chạy, các session binding vào target không còn hợp lệ bị đóng nhưng server tiếp tục chạy cho tới khi user nhấn Stop.
 
-**Bước 2: Khung Remote Server trong AI Chat**
+**Bước 2: Khung Remote Server dùng chung ở đầu AI Chat workspace**
 
 - Input: Shared server state và session/device snapshot.
-- Process: Mỗi AI Chat hiển thị trạng thái/lỗi, danh sách thiết bị đang kết nối, nút mở `Remote Server Status` và action button Start/Stop.
-- Output: Mọi tab phản ánh cùng trạng thái và cùng danh sách thiết bị.
+- Process: Một khung duy nhất nằm phía trên toàn bộ dãy tab, hiển thị trạng thái/lỗi, danh sách thiết bị đang kết nối, nút mở `Remote Server Status` và action button Start/Stop.
+- Output: Trạng thái shared server luôn hiển thị ở cấp workspace, không lặp lại trong từng tab.
 
 **Bước 3: Start/Stop thủ công**
 
@@ -196,7 +196,9 @@ Khi không còn game window nào được chọn trong lúc server đang chạy,
 
 ## 4. PHÁC THẢO UI
 
-**Khung tóm tắt trong AI Chat:**
+**Khung tóm tắt dùng chung ở trên cùng AI Chat workspace:**
+
+Khung này nằm ngoài `QTabWidget` và được thêm vào layout trước dãy tab, vì vậy nó luôn ở trên tất cả thành phần của mọi tab AI Chat.
 
 ```text
 ┌──────────────────────────────────────────┐
@@ -246,7 +248,7 @@ Khi không còn game window nào được chọn trong lúc server đang chạy,
 
 - [ ] Chọn/bỏ chọn target không tự động start/stop server.
 - [ ] Start chỉ enable khi có ít nhất một target hợp lệ.
-- [ ] Khung Remote Server xuất hiện trong mỗi AI Chat và đồng bộ shared state/device list.
+- [ ] Chỉ có một khung Remote Server ở đầu AI Chat workspace, phía trên dãy tab và mọi thành phần chat.
 - [ ] Khung có nút mở `Remote Server Status` và action button thể hiện `Running` hoặc `Stopped`.
 - [ ] Start/Stop mở lifecycle dialog không block PyQt event loop.
 - [ ] `starting`/`stopping` khóa toàn bộ UI của tất cả AI Chat ngoại trừ Cancel.
