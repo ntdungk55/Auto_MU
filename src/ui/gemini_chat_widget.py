@@ -869,6 +869,15 @@ class GeminiChatWidget(QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
 
+        self.remote_panel = None
+        if self._remote_manager is not None:
+            self.remote_panel = RemoteServerPanel(self._remote_manager, self)
+            if self._on_open_remote_status is not None:
+                self.remote_panel.open_requested.connect(self._on_open_remote_status)
+            if self._on_toggle_remote_server is not None:
+                self.remote_panel.toggle_requested.connect(self._on_toggle_remote_server)
+            layout.addWidget(self.remote_panel)
+
         self.process_row = QWidget()
         process_row = QHBoxLayout(self.process_row)
         process_row.setContentsMargins(0, 0, 0, 0)
@@ -886,15 +895,6 @@ class GeminiChatWidget(QWidget):
         self.refresh_process_btn.clicked.connect(self._refresh_processes)
         process_row.addWidget(self.refresh_process_btn, 0)
         layout.addWidget(self.process_row)
-
-        self.remote_panel = None
-        if self._remote_manager is not None:
-            self.remote_panel = RemoteServerPanel(self._remote_manager, self)
-            if self._on_open_remote_status is not None:
-                self.remote_panel.open_requested.connect(self._on_open_remote_status)
-            if self._on_toggle_remote_server is not None:
-                self.remote_panel.toggle_requested.connect(self._on_toggle_remote_server)
-            layout.addWidget(self.remote_panel)
 
         # Header (minimal)
         header_row = QHBoxLayout()
