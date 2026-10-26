@@ -167,7 +167,13 @@ Khi review `requirements.md`, kiểm tra:
 - File đúng path `.kiro/specs/[feature-name]/requirements.md`
 - Có `## 1. SPEC (Đặc tả)`
 - Có `Vấn đề`, `Mục tiêu`
-- Có bảng Input/Output căn cột
+- Có bảng Input/Output căn cột, viết bằng ngôn ngữ nghiệp vụ, có cột Tác nhân và Chi tiết kỹ thuật
+- Ranh giới thành phần rõ ràng; tác nhân là người dùng/hệ thống bên ngoài ranh giới được chọn
+- Bảng Input/Output phủ đủ: đối chiếu chéo với sơ đồ, luồng chính, Edge Cases và Error Handling; mọi thứ nhận
+  vào/trả ra (kể cả lỗi) của từng tác nhân đều có dòng riêng
+- Mỗi dòng Input/Output liên kết được tới technical requirements/design, hoặc được đánh dấu `TBD`; nhiều message
+  nội bộ có thể ánh xạ tới một I/O nghiệp vụ, nhưng message/error có ý nghĩa nghiệp vụ không được thiếu liên kết
+- `TBD` thuộc phạm vi implementation phải được giải quyết trước khi bắt đầu implementation
 - Có bảng Parameters căn cột
 - Có `## 2. SƠ ĐỒ HOẠT ĐỘNG`
 - Có `## 3. MÔ TẢ HOẠT ĐỘNG`

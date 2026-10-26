@@ -134,6 +134,9 @@ LLM phải mô tả ngắn:
 - [Behavior 1]
 - [Behavior 2]
 
+**I/O affected:**
+- [add/modify/remove] [Tác nhân]: [Input/Output nghiệp vụ, kể cả lỗi] (hoặc `None`)
+
 **Out of scope:**
 - [Item 1]
 - [Item 2]
@@ -178,8 +181,8 @@ LLM phải kiểm tra:
 [None / Mô tả cụ thể]
 
 **Spec update needed:**
-- Requirements: [yes/no]
-- Design: [yes/no]
+- Requirements: [yes/no] (bắt buộc `yes` nếu I/O affected khác `None`)
+- Design/technical requirements: [yes/no] - [mục kỹ thuật tương ứng với I/O thay đổi]
 - Tasks: [yes/no]
 
 **Workflow decision:**
@@ -260,6 +263,8 @@ LLM phải tuân thủ:
 - Không đổi contract ngoài scope đã chốt ở Bước 2
 - Nếu change đụng spec/design thì update đúng file tương ứng
 - Nếu change là remove, phải xóa sạch trace không còn hợp lệ trong spec/design/tests/docs liên quan
+- Nếu I/O affected khác `None`, cập nhật bảng Input/Output trong `requirements.md` theo quy tắc của
+  `feature-development-workflow.md` và cập nhật cột Chi tiết kỹ thuật; khi remove phải xóa cả dòng I/O và phần kỹ thuật
 
 ### Checklist implementation
 
@@ -286,6 +291,8 @@ LLM phải verify theo đúng scope:
 - Regression tests pass
 - Persistence/manual check pass nếu có
 - Spec/design sync nếu contract đổi
+- Bảng Input/Output trong `requirements.md` khớp với behavior sau change
+- Không còn `TBD` thuộc phần sẽ implementation trong change hiện tại
 - Chỉ commit khi workflow/rule hiện hành cho phép
 
 **Output Format:**
@@ -397,6 +404,7 @@ Reviewer phải ưu tiên kiểm tra:
 - Impact analysis có đủ rõ không
 - Có regression coverage phù hợp không
 - Có update spec/design đúng mức cần thiết không
+- I/O affected có được phản ánh đủ trong bảng Input/Output và phần kỹ thuật tương ứng không
 - Có persistence risk không
 - Có làm ảnh hưởng feature cũ không
 - Có mở rộng scope quá mức không

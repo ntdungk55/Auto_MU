@@ -43,10 +43,10 @@ inclusion: auto
 
 **Input/Output:**
 
-| Loại | Mô tả | Ví dụ |
-|------|-------|-------|
-| Input | [Mô tả input] | [Ví dụ cụ thể] |
-| Output | [Mô tả output] | [Ví dụ cụ thể] |
+| Loại   | Tác nhân     | Nội dung nghiệp vụ               | Chi tiết kỹ thuật        |
+|--------|--------------|---------------------------------|--------------------------|
+| Input  | [Ai gửi vào] | [Thành phần nhận được gì]      | [Message/field, mục ref] |
+| Output | [Gửi tới ai] | [Thành phần trả ra gì, kể cả lỗi] | [Message/error, mục ref] |
 
 **Parameters (Tham số):**
 
@@ -148,12 +148,33 @@ Ví dụ:
 
 **Output:** Mô tả yêu cầu đã được làm rõ theo format trên, chờ user xác nhận.
 
+**Quy tắc viết Input/Output:**
+- Trước khi lập bảng, phải xác định rõ ranh giới của thành phần đang đặc tả. Tác nhân là người dùng hoặc hệ thống
+  nằm ngoài ranh giới đó; module nội bộ chỉ được coi là tác nhân khi spec chủ động chọn module đó làm ranh giới.
+- Input là mọi thứ thành phần nhận từ từng tác nhân bên ngoài; Output là mọi thứ thành phần trả lại, gồm cả kết quả
+  thành công và lỗi.
+- Viết bằng ngôn ngữ nghiệp vụ, ví dụ: "Server báo tôi online kèm username", "Client yêu cầu kết nối tới máy có
+  username X". Message, field, schema và mã lỗi mô tả ở technical requirements hoặc `design.md`.
+- Phải quét đủ: đi qua từng tác nhân × từng bước trong luồng chính, Edge Cases và Error Handling.
+- Mỗi dòng một ý; không gộp nhiều loại input/output vào một dòng.
+- Cột "Chi tiết kỹ thuật" trỏ tới mục tương ứng trong technical requirements/design; để `TBD` nếu chưa có.
+- Nhiều message nội bộ có thể cùng ánh xạ tới một dòng I/O nghiệp vụ nếu chúng phục vụ cùng một hành vi. Mỗi
+  message/error có ý nghĩa nghiệp vụ phải truy ngược được tới ít nhất một dòng I/O; transport housekeeping thuần
+  nội bộ không bắt buộc có dòng riêng nếu đã nằm trong một tương tác nghiệp vụ bao quát.
+- `TBD` được phép trong giai đoạn Requirements nhưng mọi `TBD` thuộc phạm vi implementation phải được giải quyết
+  trong technical requirements hoặc `design.md` trước khi bắt đầu implementation.
+- Sau khi viết xong mục 2 và 3, phải quay lại đối chiếu và bổ sung bảng Input/Output.
+
 **Lưu vào:** `.kiro/specs/[feature-name]/requirements.md`
 
 **Checklist kiểm tra format requirements.md:**
 - [ ] File có đúng path `.kiro/specs/[feature-name]/requirements.md`?
 - [ ] Có section "SPEC (Đặc tả)" với Vấn đề, Mục tiêu?
-- [ ] Có bảng Input/Output với ví dụ cụ thể?
+- [ ] Bảng Input/Output viết bằng ngôn ngữ nghiệp vụ, có cột Tác nhân và Chi tiết kỹ thuật?
+- [ ] Ranh giới thành phần và cách xác định tác nhân đã rõ ràng?
+- [ ] Bảng Input/Output phủ đủ mọi tác nhân, mọi bước, Edge Cases và Error Handling (gồm cả output lỗi)?
+- [ ] Mỗi dòng Input/Output chỉ có một ý?
+- [ ] Mọi `TBD` thuộc phạm vi implementation có kế hoạch giải quyết trước khi code?
 - [ ] Có bảng Parameters với kiểu dữ liệu và giá trị mặc định?
 - [ ] Có sơ đồ hoạt động (flowchart)?
 - [ ] Có mô tả hoạt động chi tiết cho từng bước?
