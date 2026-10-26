@@ -63,6 +63,18 @@ remote/
 | `tool_timeout_seconds`    | float  | Timeout cho một tool call                 | `45.0`                    |
 | `max_mutating_sessions`   | int    | Số session mutate đồng thời trên một target| `1`                       |
 
+## 1.1. Hợp đồng transport realtime
+
+- Bootstrap dùng HTTP: `GET /status`, `POST /handshake`, `POST /sessions/{session_id}/target`.
+- Sau khi bind target, client mở WebSocket tại `/sessions/{session_id}/stream` trên cùng port.
+- WebSocket bắt buộc gửi `Authorization: Bearer {session_id}`.
+- Server gửi binary JPEG frame tối đa 2 frame/giây; trước mỗi binary frame gửi JSON `frame` gồm `sequence`, `timestamp`, `mime`, `size`.
+- Server gửi JSON `game_state` tối đa 1 lần/giây, gồm `sequence`, `timestamp`, `target_hwnd` và `data`.
+- Server gửi JSON `targets_changed` khi allowlist window thay đổi và `session_revoked` khi session không còn target hợp lệ.
+- Client phải bỏ frame cũ khi frame mới đã đến; server không giữ queue frame quá một frame cho mỗi client.
+- Client phải xử lý `permission_denied`, `target_unavailable`, `session_revoked`, timeout và WebSocket close.
+- Các API session ngoài handshake đều yêu cầu `Authorization` tương ứng với `session_id`.
+
 ## 2. SƠ ĐỒ HOẠT ĐỘNG
 
 ```text

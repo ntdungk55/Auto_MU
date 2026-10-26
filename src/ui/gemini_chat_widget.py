@@ -2500,6 +2500,49 @@ class GeminiChatWidget(QWidget):
         self._refresh_queue_bubble()
         self._start_next_queued_turn()
 
+    def send_remote_message(self, text: str) -> bool:
+        """Queue a phone message through the same chat and history as local prompts."""
+        prompt = str(text or "").strip()
+        if not prompt or not self._chat_ready or self._selected_game_target is None:
+            return False
+        turn_id = uuid.uuid4().hex
+        self._append_bubble(prompt, side="right", turn_id=turn_id)
+        self._message_queue.enqueue_manual(prompt, turn_id=turn_id)
+        self._refresh_queue_bubble()
+        self._start_next_queued_turn()
+        return True
+
+    def remote_chat_history(
+        self,
+        offset: int = 0,
+        limit: int = 10,
+    ) -> tuple[list[dict[str, str]], bool]:
+        if not self._chat_log_key:
+            return [], False
+        records, has_more = self._chat_log.load_message_page(
+            self._chat_log_key,
+            offset=offset,
+            limit=limit,
+        )
+        messages = []
+        for record in records:
+            text = str(record.get("text", "") or "")
+            if not text:
+                continue
+            turn_id = str(record.get("turn_id", "") or "")
+            side = str(record.get("side", "") or "")
+            timestamp = str(record.get("timestamp", "") or "")
+            messages.append(
+                {
+                    "id": f"{turn_id}:{side}",
+                    "turn_id": turn_id,
+                    "side": side,
+                    "text": text,
+                    "timestamp": timestamp,
+                }
+            )
+        return messages, has_more
+
     def _dispatch_turn(self, queued: QueuedChatMessage):
         if not self._chat_ready:
             QMessageBox.warning(
@@ -2698,6 +2741,8 @@ class GeminiChatWidget(QWidget):
 class AIChatWorkspace(QWidget):
     """Browser-like workspace: one isolated AI chat tab per game window."""
 
+    remote_message_requested = pyqtSignal(int, str, object)
+
     def __init__(self, parent=None, *, load_saved_key=None, save_key=None, clear_saved_key=None,
                  load_saved_model=None, save_model=None, load_saved_provider=None, save_provider=None,
                  load_auto_messages_for_target=None, save_auto_messages_for_target=None,
@@ -2721,7 +2766,21 @@ class AIChatWorkspace(QWidget):
         self._create_ai_process_controller = create_ai_process_controller
         self._assigned: dict[int, GeminiChatWidget] = {}
         self._known_targets: dict[int, object] = {}
-        self._remote_manager = RemoteServerLifecycleManager(self)
+        self.remote_message_requested.connect(
+            self._accept_remote_message,
+            Qt.ConnectionType.QueuedConnection,
+        )
+        self._remote_manager = RemoteServerLifecycleManager(
+            self,
+            host="0.0.0.0",
+            port=8765,
+        )
+        self._remote_manager.set_remote_handlers(
+            on_message=self._submit_remote_message,
+            get_history=self._get_remote_chat_history,
+            capture_frame=self._capture_remote_frame,
+            get_game_state=self._get_remote_game_state,
+        )
         self._remote_status_dialog: RemoteServerStatusDialog | None = None
         self._remote_lifecycle_dialog: RemoteLifecycleDialog | None = None
         self._remote_manager.state_changed.connect(
@@ -3029,6 +3088,57 @@ class AIChatWorkspace(QWidget):
             if chat._selected_game_target is not None
         ]
         self._remote_manager.set_targets(targets)
+
+    def _submit_remote_message(self, hwnd: int, text: str) -> bool:
+        completed = threading.Event()
+        result: dict[str, bool] = {}
+        self.remote_message_requested.emit(int(hwnd), str(text), (completed, result))
+        if not completed.wait(10.0):
+            return False
+        return result.get("accepted", False)
+
+    def _accept_remote_message(self, hwnd: int, text: str, reply: object) -> None:
+        completed, result = reply
+        chat = self._assigned.get(int(hwnd))
+        result["accepted"] = bool(chat and chat.send_remote_message(text))
+        completed.set()
+
+    def _get_remote_chat_history(
+        self,
+        hwnd: int,
+        offset: int,
+        limit: int,
+    ) -> tuple[list[dict[str, str]], bool]:
+        chat = self._assigned.get(int(hwnd))
+        if chat is None:
+            raise RuntimeError("No chat tab is assigned to this game window.")
+        return chat.remote_chat_history(offset=offset, limit=limit)
+
+    def _get_remote_game_state(self, hwnd: int) -> dict[str, object] | None:
+        chat = self._assigned.get(int(hwnd))
+        if chat is None or chat._scenario_tool_client is None:
+            return {"hwnd": int(hwnd), "state": None, "error": "game_state_unavailable"}
+        try:
+            return chat._scenario_tool_client.call_tool("get_selected_game_state", {})
+        except Exception as error:
+            return {"hwnd": int(hwnd), "state": None, "error": str(error)}
+
+    @staticmethod
+    def _capture_remote_frame(hwnd: int) -> bytes | None:
+        import cv2
+
+        from src.logic.system_executor.window_capture import WindowCapture
+
+        image = WindowCapture(int(hwnd), debug_output=False).capture()
+        if image is None:
+            return None
+        height, width = image.shape[:2]
+        max_width = 1280
+        if width > max_width:
+            scale = max_width / width
+            image = cv2.resize(image, (max_width, int(height * scale)))
+        ok, encoded = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, 75])
+        return encoded.tobytes() if ok else None
 
     def _open_remote_status(self) -> None:
         dialog = self._remote_status_dialog

@@ -162,11 +162,18 @@ class RemoteServerStatusDialog(QDialog):
         self.sessions_table.setRowCount(len(snapshot.sessions))
         for row, session in enumerate(snapshot.sessions):
             self.sessions_table.setItem(row, 0, QTableWidgetItem(session.device_name))
-            self.sessions_table.setItem(row, 1, QTableWidgetItem(session.target.window_title))
+            target = session.target
+            self.sessions_table.setItem(
+                row,
+                1,
+                QTableWidgetItem(target.window_title if target is not None else "Selecting window"),
+            )
             self.sessions_table.setItem(
                 row,
                 2,
-                QTableWidgetItem(f"{session.target.pid} / {session.target.hwnd}"),
+                QTableWidgetItem(
+                    f"{target.pid} / {target.hwnd}" if target is not None else "—"
+                ),
             )
             enabled_count = sum(1 for enabled in session.permissions.values() if enabled)
             self.sessions_table.setItem(
