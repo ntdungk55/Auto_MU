@@ -62,7 +62,7 @@ class RemoteTarget:
 class RemoteSession:
     session_id: str
     device_name: str
-    target: RemoteTarget
+    target: RemoteTarget | None
     connected_at: str
     permissions: dict[str, bool] = field(default_factory=lambda: dict(DEFAULT_PERMISSIONS))
 
@@ -70,7 +70,7 @@ class RemoteSession:
         return {
             "session_id": self.session_id,
             "device_name": self.device_name,
-            "target": self.target.to_dict(),
+            "target": self.target.to_dict() if self.target is not None else None,
             "connected_at": self.connected_at,
             "permissions": dict(self.permissions),
         }

@@ -194,6 +194,15 @@ Khi không còn game window nào được chọn trong lúc server đang chạy,
 | Remote disconnect          | Cleanup session, giữ server nếu còn target khác      |
 | App shutdown               | Stop server, socket, worker và session theo thứ tự   |
 
+## 3.7. Hợp đồng LAN và realtime stream
+
+- Server bind trên wildcard LAN address nhưng endpoint hiển thị cho client phải là IPv4 LAN có thể truy cập, không được quảng bá `0.0.0.0`.
+- HTTP và WebSocket dùng chung port `8765`.
+- Stream mặc định tối đa 2 FPS; mỗi frame phải có sequence/timestamp và frame cũ không được xếp hàng vô hạn.
+- Session API, frame API, messages API và WebSocket phải kiểm tra session authorization.
+- Target identity phải đối chiếu `HWND`, `PID` và `creation_time` khi client bind target.
+- Khi target bị bỏ chọn hoặc stale, server phải revoke session và gửi trạng thái `session_revoked` cho stream đang mở.
+
 ## 4. PHÁC THẢO UI
 
 **Khung tóm tắt dùng chung ở trên cùng AI Chat workspace:**

@@ -170,6 +170,16 @@ ai/tools/
 | Tool timeout          | Hiển thị timeout, cho phép cancel                 |
 | Server closed         | Đóng session và hiển thị trạng thái disconnected  |
 
+## 3.7. Hợp đồng WebSocket
+
+- Sau `POST /handshake` và `POST /sessions/{session_id}/target`, Android mở `ws://<LAN_IP>:8765/sessions/{session_id}/stream`.
+- WebSocket gửi header `Authorization: Bearer {session_id}`.
+- Mỗi frame ảnh gồm một JSON metadata `type=frame`, `sequence`, `timestamp`, `mime=image/jpeg`, `size`, sau đó là một binary JPEG frame.
+- State gồm JSON `type=game_state`, `sequence`, `timestamp`, `target_hwnd`, `data`.
+- Android phải bỏ frame cũ khi sequence thấp hơn frame mới nhất.
+- Android phải xử lý `targets_changed`, `session_revoked`, `target_unavailable`, `permission_denied` và WebSocket close.
+- Chat hiện dùng HTTP `/sessions/{session_id}/messages`; realtime chat event chỉ được coi là hoàn thành khi server bổ sung message event trên WebSocket.
+
 ## 4. PHÁC THẢO UI
 
 ```text

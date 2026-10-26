@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+from typing import Callable
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
@@ -27,6 +28,24 @@ class RemoteServerLifecycleManager(QObject):
         self._server: RemoteHttpServer | None = None
         self._operation_cancel: threading.Event | None = None
         self._operation_thread: threading.Thread | None = None
+        self._on_remote_message = None
+        self._get_chat_history = None
+        self._capture_frame = None
+        self._get_game_state = None
+
+    def set_remote_handlers(
+        self,
+        *,
+        on_message: Callable[[int, str], bool] | None = None,
+        get_history: Callable[[int, int, int], tuple[list[dict[str, str]], bool]] | None = None,
+        capture_frame: Callable[[int], bytes | None] | None = None,
+        get_game_state: Callable[[int], dict[str, object] | None] | None = None,
+    ) -> None:
+        with self._lock:
+            self._on_remote_message = on_message
+            self._get_chat_history = get_history
+            self._capture_frame = capture_frame
+            self._get_game_state = get_game_state
 
     @property
     def state(self) -> RemoteServerState:
@@ -141,6 +160,10 @@ class RemoteServerLifecycleManager(QObject):
             credentials,
             targets,
             on_sessions_changed=self._publish_snapshot,
+            on_remote_message=self._on_remote_message,
+            get_chat_history=self._get_chat_history,
+            capture_frame=self._capture_frame,
+            get_game_state=self._get_game_state,
         )
         try:
             # Keep a brief cancellable phase before binding the socket so the UI's
@@ -239,4 +262,3 @@ class RemoteServerLifecycleManager(QObject):
         )
         self.snapshot_changed.emit(snapshot)
         self.state_changed.emit(snapshot.state.value)
-

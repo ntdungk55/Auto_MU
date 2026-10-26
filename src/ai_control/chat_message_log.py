@@ -78,6 +78,19 @@ class ChatMessageLog:
         start = max(0, end - max(1, int(limit)))
         return turns[start:end], start > 0
 
+    def load_message_page(
+        self,
+        character_key: str,
+        offset: int = 0,
+        limit: int = 10,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Load a bounded chronological page of messages, newest page first."""
+        with self._lock:
+            records = self._read_character(character_key)
+        end = max(0, len(records) - max(0, int(offset)))
+        start = max(0, end - max(1, int(limit)))
+        return records[start:end], start > 0
+
     def _read_character(self, character_key: str) -> list[dict[str, Any]]:
         directory = self.root / self._safe_key(character_key)
         if not directory.exists():
